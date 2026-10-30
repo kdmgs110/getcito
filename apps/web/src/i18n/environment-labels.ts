@@ -1,12 +1,36 @@
 import type { MissingEnvVar } from "@workspace/config/env";
 import type { DeploymentMode } from "@workspace/config/types";
-import { APP_LANGUAGE, createTranslator, type AppLanguage } from "@workspace/ui/lib/i18n";
+import { APP_LANGUAGE, type AppLanguage, createTranslator } from "@workspace/ui/lib/i18n";
 
 /** Display translations only: environment names and configuration values stay unchanged. */
 export const environmentMessages = {
 	DATABASE_URL: {
 		en: "PostgreSQL connection string.",
 		ja: "PostgreSQLの接続文字列です。",
+	},
+	DATABASE_SSL_MODE: {
+		en: "Explicit PostgreSQL TLS policy: disable, verify-full, or no-verify; omitted preserves URL behavior.",
+		ja: "PostgreSQLのTLS方針です。disable、verify-full、no-verifyを指定でき、省略時は接続URLの設定を使用します。",
+	},
+	DB_POOL_MAX: {
+		en: "Application PostgreSQL pool limit per web or worker process (default 20).",
+		ja: "Webまたはワーカープロセスごとのアプリ用PostgreSQL接続数の上限です（既定値20）。",
+	},
+	PG_BOSS_POOL_MAX: {
+		en: "pg-boss PostgreSQL pool limit per web or worker process (default 10).",
+		ja: "Webまたはワーカープロセスごとのpg-boss用PostgreSQL接続数の上限です（既定値10）。",
+	},
+	WORKER_PROMPT_CONCURRENCY: {
+		en: "Concurrent prompt jobs per worker process (default 10).",
+		ja: "ワーカープロセスごとに同時実行するプロンプト処理ジョブ数です（既定値10）。",
+	},
+	WORKER_REPORT_CONCURRENCY: {
+		en: "Concurrent report jobs per worker process (default 2).",
+		ja: "ワーカープロセスごとに同時実行するレポート生成ジョブ数です（既定値2）。",
+	},
+	WORKER_ANALYSIS_CONCURRENCY: {
+		en: "Concurrent brand analysis jobs per worker process (default 2).",
+		ja: "ワーカープロセスごとに同時実行するブランド分析ジョブ数です（既定値2）。",
 	},
 	APP_URL: {
 		en: "Public base URL of the web app (written by `Getcito init`).",

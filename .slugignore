@@ -1,0 +1,18 @@
+# Keep proof artifacts, development tooling and local secrets out of the slug.
+/.git
+/.github
+/.agents
+/.codex
+/e2e
+/docker
+/.turbo
+**/*.test.ts
+**/*.test.tsx
+**/*.test.mjs
+**/*.node-test.mjs
+**/*.stories.tsx
+**/.env
+**/.env.*
+**/playwright-report
+**/test-results
+**/storybook-static

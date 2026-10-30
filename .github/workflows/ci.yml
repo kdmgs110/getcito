@@ -58,6 +58,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - name: Test production migration runner
+        run: node --test packages/lib/scripts/migrate.node-test.mjs
       - name: Lint traffic analysis
         working-directory: apps/web
         run: pnpm exec biome lint src/components/traffic src/server/traffic*.ts src/routes/api/analytics 'src/routes/_authed/app/$brand/traffic.tsx' src/i18n/messages/traffic.ts
@@ -72,7 +74,7 @@ jobs:
       - name: Lint brand provisioning
         run: pnpm exec biome lint packages/lib/src/db/provisioning*.ts
       - run: pnpm build
-      - run: pnpm --filter @workspace/lib exec drizzle-kit migrate
+      - run: node packages/lib/scripts/migrate.mjs
       - run: pnpm --filter e2e seed
       - run: pnpm --filter e2e exec playwright install --with-deps chromium
       - name: Start application

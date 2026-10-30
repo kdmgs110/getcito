@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "heroku-postbuild": "NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @workspace/web build",
     "lint": "turbo lint",
     "test": "turbo test",
     "format": "biome format --write .",

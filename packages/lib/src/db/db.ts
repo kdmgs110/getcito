@@ -1,3 +1,4 @@
+import { databaseConnection, positiveIntegerEnv } from "@workspace/config/runtime";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema";
@@ -10,6 +11,6 @@ import * as schema from "./schema";
  * both together, and keep the total across every web and worker process under
  * the server's `max_connections`.
  */
-const POOL_MAX = 20;
+const POOL_MAX = positiveIntegerEnv("DB_POOL_MAX", 20);
 
-export const db = drizzle(new Pool({ connectionString: process.env.DATABASE_URL, max: POOL_MAX }), { schema });
+export const db = drizzle(new Pool({ ...databaseConnection(), max: POOL_MAX }), { schema });
