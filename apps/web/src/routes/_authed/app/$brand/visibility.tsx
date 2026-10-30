@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 /**
  * /app/$brand/visibility - Visibility charts page
  *
@@ -23,8 +24,8 @@ export const Route = createFileRoute("/_authed/app/$brand/visibility")({
 		const brandName = getBrandName(matches);
 		return {
 			meta: [
-				{ title: buildTitle("Visibility", { appName, brandName }) },
-				{ name: "description", content: "Track how LLMs respond to prompts about your brand." },
+				{ title: buildTitle(t("dashboard.visibility"), { appName, brandName }) },
+				{ name: "description", content: t("dashboard.visibilityDescription") },
 			],
 		};
 	},
@@ -36,18 +37,18 @@ function VisibilityPage() {
 
 	const infoContent = (
 		<>
-			Track how different LLMs respond to prompts related to your brand, products, and{" "}
+			{t("dashboard.visibilityInfoPrefix")}
 			<Link to="/app/$brand/settings/competitors" params={{ brand: brandId }} className="underline">
-				competitors
+				{t("dashboard.competitorsInfoLink")}
 			</Link>
-			.
+			{t("dashboard.visibilityInfoSuffix")}
 		</>
 	);
 
 	return (
 		<PromptsDisplay
-			pageTitle="Visibility"
-			pageDescription="See how LLMs are evaluating prompts related to your brand."
+			pageTitle={t("dashboard.visibility")}
+			pageDescription={t("dashboard.seeHowLlmsAreEvaluatingPromptsRelatedTo")}
 			pageInfoContent={infoContent}
 			editLink={`/app/${brandId}/settings/prompts`}
 		/>

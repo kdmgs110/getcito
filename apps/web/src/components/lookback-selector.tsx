@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useSearch } from "@tanstack/react-router";
 import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/components/popover";
 import { CalendarDays } from "lucide-react";
@@ -10,17 +11,17 @@ import { getDefaultLookbackPeriod, type LookbackPeriod, parseCustomLookback } fr
 function getLookbackLabel(lookback: LookbackPeriod): string {
 	switch (lookback) {
 		case "1w":
-			return "1w";
+			return t("core.weekShort");
 		case "1m":
-			return "1mo";
+			return t("core.monthShort");
 		case "3m":
-			return "3mo";
+			return t("core.threeMonthsShort");
 		case "6m":
-			return "6mo";
+			return t("core.sixMonthsShort");
 		case "1y":
-			return "1yr";
+			return t("core.yearShort");
 		default:
-			return "all";
+			return t("core.allShort");
 	}
 }
 
@@ -69,13 +70,15 @@ export function LookbackSelector({ defaultPeriod, onLookbackChange }: LookbackSe
 				<PopoverTrigger asChild>
 					<button
 						type="button"
-						title={customRange ? formatCustomRangeLabel(customRange.from, customRange.to) : "Pick a custom date range"}
+						title={
+							customRange ? formatCustomRangeLabel(customRange.from, customRange.to) : t("core.pickACustomDateRange")
+						}
 						className={`flex items-center gap-1 px-3 py-1 text-sm rounded cursor-pointer ${
 							customRange ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
 						}`}
 					>
 						<CalendarDays className="size-3.5" />
-						{customRange ? formatCustomRangeLabel(customRange.from, customRange.to) : "custom"}
+						{customRange ? formatCustomRangeLabel(customRange.from, customRange.to) : t("core.customShort")}
 					</button>
 				</PopoverTrigger>
 				<PopoverContent align="end" className="w-auto p-0">

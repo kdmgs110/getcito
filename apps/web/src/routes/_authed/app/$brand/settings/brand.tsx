@@ -1,3 +1,5 @@
+import { displayMarket, displayLanguage, settingsError } from "@/i18n/settings-labels";
+import { t } from "@/i18n";
 /**
  * /app/$brand/settings/brand - Brand settings page
  *
@@ -40,8 +42,8 @@ export const Route = createFileRoute("/_authed/app/$brand/settings/brand")({
 		const brandName = getBrandName(matches);
 		return {
 			meta: [
-				{ title: buildTitle("Brand Settings", { appName, brandName }) },
-				{ name: "description", content: "Manage your brand name and website." },
+				{ title: buildTitle(t("settings.brandSettings"), { appName, brandName }) },
+				{ name: "description", content: t("settings.manageYourBrandNameAndWebsite") },
 			],
 		};
 	},
@@ -88,7 +90,7 @@ function BrandSettingsPage() {
 
 	const validateDomain = useCallback((val: string): true | string => {
 		const cleaned = cleanAndValidateDomain(val);
-		if (!cleaned) return `"${val}" is not a valid domain`;
+		if (!cleaned) return t("settings.invalidDomain", { domain: val });
 		return true;
 	}, []);
 	const handleAliasesChange = useCallback((values: string[]) => setAliasesOverride(values), []);
@@ -113,8 +115,8 @@ function BrandSettingsPage() {
 		return (
 			<div className="space-y-6">
 				<div>
-					<h1 className="text-3xl font-bold">Brand</h1>
-					<p className="text-muted-foreground">Loading...</p>
+					<h1 className="text-3xl font-bold">{t("settings.brand")}</h1>
+					<p className="text-muted-foreground">{t("settings.loading")}</p>
 				</div>
 			</div>
 		);
@@ -124,8 +126,8 @@ function BrandSettingsPage() {
 		return (
 			<div className="space-y-6">
 				<div>
-					<h1 className="text-3xl font-bold">Brand</h1>
-					<p className="text-destructive">Brand not found</p>
+					<h1 className="text-3xl font-bold">{t("settings.brand")}</h1>
+					<p className="text-destructive">{t("settings.brandNotFound")}</p>
 				</div>
 			</div>
 		);
@@ -157,23 +159,19 @@ function BrandSettingsPage() {
 			queryClient.invalidateQueries({ queryKey: citationKeys.all });
 			queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
 
-			setSuccess("Brand details updated successfully!");
+			setSuccess(t("settings.brandDetailsUpdatedSuccessfully"));
 			// Saved values are now the server's; drop the local edits.
 			clearOverrides();
 			await revalidate();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "An error occurred");
+			setError(settingsError(err, t("settings.anErrorOccurred")));
 		} finally {
 			setIsSubmitting(false);
 		}
 	};
 
 	const handleDelete = async () => {
-		if (
-			!confirm(
-				`Are you sure you want to permanently delete "${brand.name}" and all of its data? This cannot be undone.`,
-			)
-		) {
+		if (!confirm(t("settings.deleteConfirmation", { brand: brand.name }))) {
 			return;
 		}
 
@@ -185,7 +183,7 @@ function BrandSettingsPage() {
 			queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
 			await navigate({ to: "/app" });
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to delete brand");
+			setError(settingsError(err, t("settings.failedToDeleteBrand")));
 			setIsDeleting(false);
 		}
 	};
@@ -195,29 +193,29 @@ function BrandSettingsPage() {
 			<div className="flex items-center gap-4">
 				{brand.website && <WebLogo domain={brand.website} size={48} />}
 				<div>
-					<h1 className="text-3xl font-bold">Brand</h1>
-					<p className="text-muted-foreground">Manage your brand name, website, and details</p>
+					<h1 className="text-3xl font-bold">{t("settings.brand")}</h1>
+					<p className="text-muted-foreground">{t("settings.manageYourBrandNameWebsiteAndDetails")}</p>
 				</div>
 			</div>
 
 			<form action={handleSubmit} className="space-y-6">
 				<div className="space-y-4">
 					<div className="space-y-2">
-						<Label htmlFor="name">Brand Name</Label>
+						<Label htmlFor="name">{t("settings.brandName2")}</Label>
 						<Input
 							id="name"
 							name="name"
 							type="text"
-							placeholder="Brand Name"
+							placeholder={t("settings.brandName2")}
 							defaultValue={brand.name}
 							required
 							disabled={isSubmitting}
 						/>
-						<p className="text-xs text-muted-foreground">Enter your brand&apos;s name</p>
+						<p className="text-xs text-muted-foreground">{t("settings.enterYourBrandSName")}</p>
 					</div>
 
 					<div className="space-y-2">
-						<Label htmlFor="website">Website</Label>
+						<Label htmlFor="website">{t("settings.website")}</Label>
 						<Input
 							id="website"
 							name="website"
@@ -227,80 +225,80 @@ function BrandSettingsPage() {
 							required
 							disabled={isSubmitting}
 						/>
-						<p className="text-xs text-muted-foreground">Your brand&apos;s primary website</p>
+						<p className="text-xs text-muted-foreground">{t("settings.yourBrandSPrimaryWebsite")}</p>
 					</div>
 
 					<div className="space-y-2">
-						<Label htmlFor="shortDescription">Short Description</Label>
+						<Label htmlFor="shortDescription">{t("settings.shortDescription")}</Label>
 						<Textarea
 							id="shortDescription"
 							name="shortDescription"
-							placeholder="E.g. A fast-growing AI startup focused on search..."
+							placeholder={t("settings.eGAFastGrowingAiStartupFocusedOn")}
 							value={shortDescription}
 							onChange={(e) => setDescriptionOverride(e.target.value)}
 							disabled={isSubmitting}
 							className="min-h-[100px]"
 						/>
-						<p className="text-xs text-muted-foreground">Briefly describe what your brand does.</p>
+						<p className="text-xs text-muted-foreground">{t("settings.brieflyDescribeWhatYourBrandDoes")}</p>
 					</div>
 
 					<div className="space-y-2">
-						<Label htmlFor="targetMarket">Target Market</Label>
+						<Label htmlFor="targetMarket">{t("settings.targetMarket")}</Label>
 						<Select value={targetMarket} onValueChange={handleTargetMarketChange} disabled={isSubmitting}>
 							<SelectTrigger id="targetMarket">
-								<SelectValue placeholder="Select target market (e.g. United States)" />
+								<SelectValue placeholder={t("settings.selectTargetMarketEGUnitedStates")} />
 							</SelectTrigger>
 							<SelectContent>
 								<SelectGroup>
 									{TARGET_MARKETS.map((location) => (
 										<SelectItem key={location} value={location}>
-											{location}
+											{displayMarket(location)}
 										</SelectItem>
 									))}
 								</SelectGroup>
 							</SelectContent>
 						</Select>
-						<p className="text-xs text-muted-foreground">The location you want the LLM scraper to target.</p>
+						<p className="text-xs text-muted-foreground">{t("settings.theLocationYouWantTheLlmScraperToTarget")}</p>
 					</div>
 
 					<div className="space-y-2">
-						<Label htmlFor="targetLanguage">Target Language</Label>
+						<Label htmlFor="targetLanguage">{t("settings.targetLanguage")}</Label>
 						<Select value={targetLanguage} onValueChange={setLanguageOverride} disabled={isSubmitting || !targetMarket}>
 							<SelectTrigger id="targetLanguage">
-								<SelectValue placeholder={targetMarket ? "Select target language" : "Select a market first"} />
+								<SelectValue
+									placeholder={targetMarket ? t("settings.selectTargetLanguage") : t("settings.selectAMarketFirst")}
+								/>
 							</SelectTrigger>
 							<SelectContent>
 								<SelectGroup>
 									{availableLanguages.map((lang) => (
 										<SelectItem key={lang.name} value={lang.name}>
-											{lang.name}
+											{displayLanguage(lang.code, lang.name)}
 										</SelectItem>
 									))}
 								</SelectGroup>
 							</SelectContent>
 						</Select>
-						<p className="text-xs text-muted-foreground">The language you want the LLM scraper to use.</p>
+						<p className="text-xs text-muted-foreground">{t("settings.theLanguageYouWantTheLlmScraperToUse")}</p>
 					</div>
 
 					<div className="space-y-2">
 						<Label className="flex items-center gap-1.5">
-							Additional Domains
+							{t("settings.additionalDomains")}
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
 								</TooltipTrigger>
 								<TooltipContent className="max-w-xs text-xs font-normal">
-									Other domains your brand owns (e.g. blog.example.com, shop.example.com). Citations from these domains
-									will be counted as your brand&apos;s citations. <strong>Updates retroactively</strong> &mdash;
-									existing citations will be reclassified immediately.
+									{t("settings.additionalDomainsHelp")}
 								</TooltipContent>
 							</Tooltip>
 						</Label>
 						<TagsInput
 							value={additionalDomains}
 							onValueChange={handleDomainsChange}
-							placeholder="Add domain..."
-							searchPlaceholder="Add domain..."
+							placeholder={t("settings.addDomain")}
+							searchPlaceholder={t("settings.addDomain")}
 							maxItems={10}
 							normalizeValue={(raw) => cleanAndValidateDomain(raw) ?? raw.trim()}
 							onValidate={validateDomain}
@@ -309,23 +307,21 @@ function BrandSettingsPage() {
 
 					<div className="space-y-2">
 						<Label className="flex items-center gap-1.5">
-							Brand Aliases
+							{t("settings.brandAliases")}
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
 								</TooltipTrigger>
 								<TooltipContent className="max-w-xs text-xs font-normal">
-									Alternative names for your brand (sub-brands, product lines, abbreviations). Used for mention
-									detection in <strong>future</strong> prompt runs only &mdash; does not apply retroactively to past
-									results.
+									{t("settings.brandAliasesHelp")}
 								</TooltipContent>
 							</Tooltip>
 						</Label>
 						<TagsInput
 							value={aliases}
 							onValueChange={handleAliasesChange}
-							placeholder="Add alias..."
-							searchPlaceholder="Add alias..."
+							placeholder={t("settings.addAlias")}
+							searchPlaceholder={t("settings.addAlias")}
 							maxItems={10}
 						/>
 					</div>
@@ -336,20 +332,19 @@ function BrandSettingsPage() {
 
 				<div className="flex gap-2">
 					<Button type="submit" disabled={isSubmitting || isDeleting || isReadOnly} className="cursor-pointer">
-						{isSubmitting ? "Saving..." : "Save Changes"}
+						{isSubmitting ? t("settings.saving") : t("settings.saveChanges")}
 					</Button>
 				</div>
 			</form>
 
 			{!isReadOnly && (
 				<div className="mt-12 pt-6 border-t border-border">
-					<h3 className="text-lg font-medium text-destructive mb-2">Danger Zone</h3>
+					<h3 className="text-lg font-medium text-destructive mb-2">{t("settings.dangerZone")}</h3>
 					<p className="text-sm text-muted-foreground mb-4">
-						Permanently delete this brand and all of its associated data, including prompts and run history. This action
-						cannot be undone.
+						{t("settings.permanentlyDeleteThisBrandAndAllOfItsAssociated")}
 					</p>
 					<Button variant="destructive" onClick={handleDelete} disabled={isSubmitting || isDeleting}>
-						{isDeleting ? "Deleting..." : "Delete Brand"}
+						{isDeleting ? t("settings.deleting") : t("settings.deleteBrand")}
 					</Button>
 				</div>
 			)}

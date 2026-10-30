@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 /**
  * Donut of share of voice: the brand plus its top competitors, with the long
  * tail bucketed into "Others". Sits beside the headline share number.
@@ -30,7 +31,7 @@ export function ShareOfVoiceDonut({ entries, topN = 6 }: { entries: ShareOfVoice
 			othersValue += e.mentions;
 		}
 	}
-	if (othersValue > 0) slices.push({ name: "Others", value: othersValue, color: OTHERS_COLOR });
+	if (othersValue > 0) slices.push({ name: t("core.others"), value: othersValue, color: OTHERS_COLOR });
 
 	const total = slices.reduce((s, x) => s + x.value, 0);
 	if (total === 0) return null;
@@ -38,7 +39,15 @@ export function ShareOfVoiceDonut({ entries, topN = 6 }: { entries: ShareOfVoice
 	return (
 		<ChartContainer config={{}} className="aspect-square h-[180px] w-[180px]">
 			<PieChart>
-				<Pie data={slices} dataKey="value" nameKey="name" innerRadius={48} outerRadius={84} paddingAngle={1} strokeWidth={1}>
+				<Pie
+					data={slices}
+					dataKey="value"
+					nameKey="name"
+					innerRadius={48}
+					outerRadius={84}
+					paddingAngle={1}
+					strokeWidth={1}
+				>
 					{slices.map((s) => (
 						<Cell key={s.name} fill={s.color} />
 					))}

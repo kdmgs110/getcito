@@ -1,3 +1,5 @@
+import { settingsError } from "@/i18n/settings-labels";
+import { t } from "@/i18n";
 /**
  * Moves a brand's waiting prompts to the front of the `process-prompt` queue.
  *
@@ -38,7 +40,7 @@ export function BrandPriorityButton({
 				onUpdate?.();
 			}, 1000);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to update priority");
+			setError(settingsError(err, t("settings.failedToUpdatePriority")));
 		} finally {
 			setIsUpdating(false);
 		}
@@ -54,8 +56,8 @@ export function BrandPriorityButton({
 				className="cursor-pointer"
 				title={
 					demote
-						? "Return this brand's queued prompts to normal priority"
-						: "Run this brand's prompts before the rest of the queue"
+						? t("settings.returnThisBrandSQueuedPromptsToNormalPriority")
+						: t("settings.runThisBrandSPromptsBeforeTheRestOf")
 				}
 			>
 				{isUpdating ? (
@@ -67,7 +69,9 @@ export function BrandPriorityButton({
 				) : (
 					<ArrowUp className="h-3 w-3" />
 				)}
-				<span className="ml-1">{done ? "Updated" : demote ? "Normal" : "Run first"}</span>
+				<span className="ml-1">
+					{done ? t("settings.updated") : demote ? t("settings.normal") : t("settings.runFirst")}
+				</span>
 			</Button>
 			{error && <span className="text-xs text-red-500">{error}</span>}
 		</div>

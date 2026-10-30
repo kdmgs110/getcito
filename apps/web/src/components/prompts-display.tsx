@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useMemo } from "react";
 import { Card, CardContent, CardFooter, CardHeader } from "@workspace/ui/components/card";
 import { Separator } from "@workspace/ui/components/separator";
@@ -110,24 +111,24 @@ function PromptsContent({ brandId, editLink }: { brandId: string | undefined; ed
 			errorState={
 				<Card className="p-6">
 					<div className="text-center text-muted-foreground">
-						<p className="mb-2">Failed to load prompts data</p>
-						<p className="text-sm">Try refreshing the page</p>
+						<p className="mb-2">{t("settings.failedToLoadPromptsData")}</p>
+						<p className="text-sm">{t("settings.tryRefreshingThePage")}</p>
 					</div>
 				</Card>
 			}
 			totalCount={promptsSummary?.prompts?.length}
 			filteredCount={sortedPrompts.length}
-			noMatchesTitle="No prompts match your filters."
-			noMatchesDescription="Try adjusting your search or tag filters."
+			noMatchesTitle={t("settings.noPromptsMatchYourFilters")}
+			noMatchesDescription={t("settings.tryAdjustingYourSearchOrTagFilters")}
 			emptyState={
 				<div className="border-2 border-dashed border-muted rounded-lg min-h-48 flex items-center justify-center">
 					<div className="text-center py-8 text-muted-foreground">
 						<Inbox className="h-12 w-12 mx-auto mb-4 opacity-50" />
-						<p className="mb-4">No prompts yet.</p>
+						<p className="mb-4">{t("settings.noPromptsYet")}</p>
 						<Button asChild size="sm" className="h-7 flex cursor-pointer">
 							<Link to={editLink}>
 								<IconEditCircle />
-								<span>Edit</span>
+								<span>{t("settings.edit")}</span>
 							</Link>
 						</Button>
 					</div>
@@ -220,8 +221,8 @@ function ChartSection({
 function ContentLoadingSkeleton() {
 	return (
 		<div className="space-y-6">
-			{[...Array(3)].map((_, i) => (
-				<Card key={i} className="py-3 gap-3">
+			{["first", "second", "third"].map((key) => (
+				<Card key={key} className="py-3 gap-3">
 					<CardHeader className="flex justify-between items-center px-3">
 						<Skeleton className="h-4 w-48" />
 						<Skeleton className="h-5 w-24 rounded-full" />

@@ -1,3 +1,5 @@
+import { t } from "@/i18n";
+import { describeEnvironmentRequirement, environmentSetupHint } from "@/i18n/environment-labels";
 import type { DeploymentMode } from "@workspace/config/types";
 import type { MissingEnvVar } from "@workspace/config/env";
 import FullPageCard from "@/components/full-page-card";
@@ -8,19 +10,14 @@ interface MissingEnvPageProps {
 }
 
 export default function MissingEnvPage({ mode, missing }: MissingEnvPageProps) {
-	const sortedMissing = [...missing].sort((a, b) =>
-		a.label.localeCompare(b.label),
-	);
+	const sortedMissing = [...missing].sort((a, b) => a.label.localeCompare(b.label));
 
-	const localHint =
-		mode === "local"
-			? "Set these via the CLI."
-			: "Set these in the deployment environment, then redeploy or restart.";
+	const localHint = environmentSetupHint(mode);
 
 	return (
 		<FullPageCard
-			title="Missing environment configuration"
-			subtitle={`Deployment mode: ${mode}`}
+			title={t("core.missingEnvironmentConfiguration")}
+			subtitle={t("core.deploymentMode", { mode })}
 			className="max-w-2xl"
 		>
 			<div className="space-y-4 text-sm">
@@ -28,14 +25,8 @@ export default function MissingEnvPage({ mode, missing }: MissingEnvPageProps) {
 				<ul className="space-y-3 rounded-md border bg-background p-4">
 					{sortedMissing.map((item) => (
 						<li key={item.id} className="flex flex-col gap-1">
-							<span className="font-mono text-xs text-foreground">
-								{item.label}
-							</span>
-							{item.description ? (
-								<span className="text-muted-foreground">
-									{item.description}
-								</span>
-							) : null}
+							<span className="font-mono text-xs text-foreground">{item.label}</span>
+							<span className="text-muted-foreground">{describeEnvironmentRequirement(item)}</span>
 						</li>
 					))}
 				</ul>

@@ -1,5 +1,7 @@
 "use client";
 
+import { uiT } from "@workspace/ui/lib/i18n";
+
 import * as React from "react";
 import { Check, Plus, X as RemoveIcon } from "lucide-react";
 
@@ -42,9 +44,9 @@ export function TagsInput({
   value,
   onValueChange,
   options = [],
-  placeholder = "Select...",
-  searchPlaceholder = "Search...",
-  emptyText = "No results.",
+  placeholder = uiT("select"),
+  searchPlaceholder = uiT("search"),
+  emptyText = uiT("noResults"),
   allowCustomValues = true,
   normalizeValue,
   onValidate,
@@ -172,12 +174,12 @@ export function TagsInput({
               ) : (
                 value.map((v) => (
                   <Badge key={v} variant="secondary" className={cn("gap-1", canRemove && "pr-1")}>
-                    <span className="max-w-[14rem] truncate">{v}</span>
+                    <span className="max-w-[14rem] truncate">{options.find((option) => option.value === v)?.label ?? v}</span>
                     {canRemove && (
                       <button
                         type="button"
                         tabIndex={-1}
-                        aria-label={`Remove ${v}`}
+                        aria-label={uiT("remove", { value: v })}
                         onClick={(e) => {
                           e.stopPropagation();
                           remove(v);
@@ -202,7 +204,7 @@ export function TagsInput({
                 setQuery(v);
                 if (validationError) setValidationError("");
               }}
-              placeholder={atMax ? "Maximum reached" : searchPlaceholder}
+              placeholder={atMax ? uiT("maximumReached") : searchPlaceholder}
               disabled={disabled || atMax}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && showCreate) {
@@ -229,7 +231,7 @@ export function TagsInput({
               )}
               {showHint && (
                 <div className="px-3 py-3 text-center text-xs text-muted-foreground">
-                  Type to add a value
+                  {uiT("addHint")}
                 </div>
               )}
               {(showCreate || filteredOptions.length > 0) && (
@@ -238,7 +240,7 @@ export function TagsInput({
                     <CommandItem value={`__create__:${candidate}`} onSelect={handleCreate}>
                       <Plus className="size-4 opacity-60" />
                       <span className="truncate">
-                        Add <span className="font-medium">&ldquo;{candidate}&rdquo;</span>
+                        {uiT("add", { value: candidate })}
                       </span>
                     </CommandItem>
                   )}

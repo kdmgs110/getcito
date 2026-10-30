@@ -1,3 +1,5 @@
+import { settingsError } from "@/i18n/settings-labels";
+import { t } from "@/i18n";
 import { useState, useRef, useCallback } from "react";
 import { Button } from "@workspace/ui/components/button";
 import { Save } from "lucide-react";
@@ -29,7 +31,14 @@ interface PromptsEditorProps {
 	pageDescription: string;
 }
 
-export function PromptsEditor({ initialPrompts, brandId, brandName, brandWebsite, pageTitle, pageDescription }: PromptsEditorProps) {
+export function PromptsEditor({
+	initialPrompts,
+	brandId,
+	brandName,
+	brandWebsite,
+	pageTitle,
+	pageDescription,
+}: PromptsEditorProps) {
 	const [prompts, setPrompts] = useState<EditablePrompt[]>(() =>
 		initialPrompts.map((p) => ({
 			id: p.id,
@@ -84,7 +93,7 @@ export function PromptsEditor({ initialPrompts, brandId, brandName, brandWebsite
 			navigate({ to: `/app/${brandId}/visibility` });
 		} catch (error) {
 			console.error("Error saving prompts:", error);
-			alert(`Failed to save prompts: ${error instanceof Error ? error.message : "Unknown error"}`);
+			alert(settingsError(error, t("settings.failedToSave")));
 		} finally {
 			setIsLoading(false);
 			saveInProgress.current = false;
@@ -108,11 +117,7 @@ export function PromptsEditor({ initialPrompts, brandId, brandName, brandWebsite
 				</div>
 			</div>
 
-			<PromptsListEditor 
-				prompts={prompts} 
-				onChange={setPrompts} 
-				computeSystemTags={handleComputeSystemTags} 
-			/>
+			<PromptsListEditor prompts={prompts} onChange={setPrompts} computeSystemTags={handleComputeSystemTags} />
 
 			<div className="flex gap-2 items-center">
 				<Button
@@ -122,11 +127,11 @@ export function PromptsEditor({ initialPrompts, brandId, brandName, brandWebsite
 					className="flex items-center gap-2 cursor-pointer"
 				>
 					{isLoading ? (
-						<>Saving...</>
+						t("settings.saving")
 					) : (
 						<>
 							<Save className="h-4 w-4" />
-							Save Prompts
+							{t("settings.savePrompts")}
 						</>
 					)}
 				</Button>

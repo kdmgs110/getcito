@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Separator } from "@workspace/ui/components/separator";
@@ -49,11 +50,7 @@ interface PromptChartPrintProps {
  * Compute SoV for each entity (brand + competitors) from prompt runs.
  * Returns data shaped for BaseChartPrint: one data point with entity IDs as keys.
  */
-function computeSoVChartData(
-	runs: PromptRunData[],
-	brand: Brand,
-	competitors: Competitor[],
-): ChartDataPoint[] | null {
+function computeSoVChartData(runs: PromptRunData[], brand: Brand, competitors: Competitor[]): ChartDataPoint[] | null {
 	if (runs.length === 0) return null;
 
 	// Count mentions
@@ -112,7 +109,9 @@ export function PromptChartPrint({
 	const sovChartData = isReportContext ? computeSoVChartData(promptSpecificRuns, brand, competitors) : null;
 
 	// Dashboard mode: time-series visibility
-	const chartData = isReportContext ? (sovChartData ?? []) : calculateVisibilityPercentages(promptSpecificRuns, brand, competitors, lookback);
+	const chartData = isReportContext
+		? (sovChartData ?? [])
+		: calculateVisibilityPercentages(promptSpecificRuns, brand, competitors, lookback);
 
 	// Select top competitors by visibility, filling with alphabetical order if needed
 	const selectedCompetitors = selectCompetitorsToDisplay(competitors, chartData, 5);
@@ -131,18 +130,20 @@ export function PromptChartPrint({
 
 	// Badge value: SoV for reports, visibility for dashboard
 	const badgeValue = isReportContext
-		? (sovChartData ? (sovChartData[0][brand.id] as number) : null)
+		? sovChartData
+			? (sovChartData[0][brand.id] as number)
+			: null
 		: (() => {
-			const lastDataPoint = chartData.filter((point) => brand && point[brand.id] !== null).pop();
-			return lastDataPoint && brand ? (lastDataPoint[brand.id] as number) : null;
-		})();
+				const lastDataPoint = chartData.filter((point) => brand && point[brand.id] !== null).pop();
+				return lastDataPoint && brand ? (lastDataPoint[brand.id] as number) : null;
+			})();
 
-	const badgeLabel = isReportContext ? "SoV" : "Visibility";
+	const badgeLabel = isReportContext ? t("reports.sov") : t("reports.visibility");
 
 	if (hasNoRuns) {
 		const message = hasEverBeenEvaluated
-			? "No data in selected time range"
-			: "Evaluating for the first time...";
+			? t("reports.noDataInSelectedTimeRange")
+			: t("reports.evaluatingForTheFirstTime");
 
 		return (
 			<Card ref={chartRef} className="py-3 gap-3 print:shadow-none print:border">
@@ -174,10 +175,10 @@ export function PromptChartPrint({
 					<div className="h-[250px] flex items-center justify-center">
 						<div className="flex flex-col items-center text-center max-w-xs">
 							<p className="text-sm font-medium text-muted-foreground print:text-xs">
-								No brands found in responses
+								{t("reports.noBrandsFoundInResponses")}
 							</p>
 							<p className="text-xs text-muted-foreground/70 mt-1 print:text-[10px]">
-								Your brand and competitors weren't mentioned in the evaluated responses for this prompt.
+								{t("reports.yourBrandAndCompetitorsWerenTMentionedInTheEvaluatedResponsesFor")}
 							</p>
 						</div>
 					</div>
@@ -187,31 +188,32 @@ export function PromptChartPrint({
 		);
 	}
 
-	const badgeClasses = isReportContext && badgeValue !== null
-		? getSoVBadgeClasses(badgeValue)
-		: badgeValue !== null
-			? { variant: getBadgeVariant(badgeValue) as "default" | "secondary" | "destructive", className: getBadgeClassName(badgeValue) }
-			: null;
+	const badgeClasses =
+		isReportContext && badgeValue !== null
+			? getSoVBadgeClasses(badgeValue)
+			: badgeValue !== null
+				? {
+						variant: getBadgeVariant(badgeValue) as "default" | "secondary" | "destructive",
+						className: getBadgeClassName(badgeValue),
+					}
+				: null;
 
 	return (
-	<Card ref={chartRef} className="py-3 gap-3 print:shadow-none print:border print:break-inside-avoid">
-		<CardHeader className="flex justify-between items-center px-3">
-			<CardTitle className="text-sm print:text-xs">{promptName}</CardTitle>
-			<div className="flex items-center gap-2">
-				{badgeClasses && badgeValue !== null && (
-					<Badge
-						variant={badgeClasses.variant}
-						className={`${badgeClasses.className} print:text-xs`}
-					>
-						{badgeValue}% {badgeLabel}
-					</Badge>
-				)}
-			</div>
-		</CardHeader>
-		<Separator className="py-0 my-0" />
-		<CardContent className="p-0">
-			<BaseChartPrint data={chartData} brand={brand} competitors={selectedCompetitors} />
-		</CardContent>
+		<Card ref={chartRef} className="py-3 gap-3 print:shadow-none print:border print:break-inside-avoid">
+			<CardHeader className="flex justify-between items-center px-3">
+				<CardTitle className="text-sm print:text-xs">{promptName}</CardTitle>
+				<div className="flex items-center gap-2">
+					{badgeClasses && badgeValue !== null && (
+						<Badge variant={badgeClasses.variant} className={`${badgeClasses.className} print:text-xs`}>
+							{badgeValue}% {badgeLabel}
+						</Badge>
+					)}
+				</div>
+			</CardHeader>
+			<Separator className="py-0 my-0" />
+			<CardContent className="p-0">
+				<BaseChartPrint data={chartData} brand={brand} competitors={selectedCompetitors} />
+			</CardContent>
 			<ChartDownloadFooter onDownload={handleDownload} isDownloading={isDownloading} />
 		</Card>
 	);

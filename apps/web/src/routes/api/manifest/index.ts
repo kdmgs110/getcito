@@ -8,13 +8,10 @@
  * Branding values (name, theme color, etc.) are read from server config
  * so they stay in sync with the rest of the app.
  */
+import { APP_LANGUAGE, t } from "@/i18n";
 import { createFileRoute } from "@tanstack/react-router";
 import { getDeployment } from "@/lib/config/server";
-import {
-	DEFAULT_APP_ICON,
-	Getcito_THEME_COLOR,
-	Getcito_BACKGROUND_COLOR,
-} from "@workspace/config/constants";
+import { DEFAULT_APP_ICON, Getcito_THEME_COLOR, Getcito_BACKGROUND_COLOR } from "@workspace/config/constants";
 
 interface ManifestIcon {
 	src: string;
@@ -82,7 +79,8 @@ function buildManifest(): object {
 
 	return {
 		short_name: branding.name,
-		name: `${branding.name} - AI Search Optimization`,
+		lang: APP_LANGUAGE,
+		name: `${branding.name} - ${t("core.tagline")}`,
 		icons,
 		start_url: ".",
 		display: "standalone",
@@ -106,4 +104,3 @@ export const Route = createFileRoute("/api/manifest/")({
 		},
 	},
 });
-

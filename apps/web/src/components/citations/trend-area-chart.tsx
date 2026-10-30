@@ -2,11 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/componen
 import { Tooltip, TooltipTrigger, TooltipContent } from "@workspace/ui/components/tooltip";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import {
-	type ChartConfig,
-	ChartContainer,
-	ChartTooltip,
-} from "@workspace/ui/components/chart";
+import { type ChartConfig, ChartContainer, ChartTooltip } from "@workspace/ui/components/chart";
 import { formatDateStr } from "@/lib/app-locale";
 
 export function TrendAreaChart({
@@ -25,8 +21,12 @@ export function TrendAreaChart({
 	// Callers pass exactly the keys that appear (same lists the tab filters use).
 	const present = keys;
 	// Display order: largest band first, "other" always last.
-	const totals = new Map(present.map((k) => [k, data.reduce((s, d) => s + (typeof d[k] === "number" ? (d[k] as number) : 0), 0)]));
-	const ordered = [...present].sort((a, b) => (a === "other" ? 1 : b === "other" ? -1 : (totals.get(b) ?? 0) - (totals.get(a) ?? 0)));
+	const totals = new Map(
+		present.map((k) => [k, data.reduce((s, d) => s + (typeof d[k] === "number" ? (d[k] as number) : 0), 0)]),
+	);
+	const ordered = [...present].sort((a, b) =>
+		a === "other" ? 1 : b === "other" ? -1 : (totals.get(b) ?? 0) - (totals.get(a) ?? 0),
+	);
 	const config: ChartConfig = Object.fromEntries(
 		ordered.map((k) => [k, { label: meta[k]?.label ?? k, color: meta[k]?.color ?? "#9ca3af" }]),
 	);
@@ -56,7 +56,15 @@ export function TrendAreaChart({
 							tick={{ fontSize: 11 }}
 							tickFormatter={(value) => formatDateStr(String(value), { month: "short", day: "numeric" })}
 						/>
-						<YAxis tickLine={false} axisLine={false} tickMargin={8} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 11 }} tickFormatter={(value) => `${value}%`} />
+						<YAxis
+							tickLine={false}
+							axisLine={false}
+							tickMargin={8}
+							domain={[0, 100]}
+							ticks={[0, 25, 50, 75, 100]}
+							tick={{ fontSize: 11 }}
+							tickFormatter={(value) => `${value}%`}
+						/>
 						<ChartTooltip
 							isAnimationActive={false}
 							cursor={false}
@@ -73,7 +81,10 @@ export function TrendAreaChart({
 										<div className="grid gap-1">
 											{rows.map((r) => (
 												<div key={r.k} className="flex items-center gap-2">
-													<span className="shrink-0 rounded-[2px] h-2.5 w-2.5" style={{ backgroundColor: meta[r.k]?.color ?? "#9ca3af" }} />
+													<span
+														className="shrink-0 rounded-[2px] h-2.5 w-2.5"
+														style={{ backgroundColor: meta[r.k]?.color ?? "#9ca3af" }}
+													/>
 													<span className="text-muted-foreground">{meta[r.k]?.label ?? r.k}</span>
 													<span className="ml-auto font-mono tabular-nums">{r.value}%</span>
 												</div>
@@ -86,7 +97,16 @@ export function TrendAreaChart({
 						{/* Render bottom-up (reverse of display order) so the largest band sits
 						    on top and Other at the bottom; tooltip lists in the same order. */}
 						{[...ordered].reverse().map((k) => (
-							<Area key={k} dataKey={k} type="monotone" stackId="1" stroke={`var(--color-${k})`} fill={`var(--color-${k})`} fillOpacity={0.8} strokeWidth={0} />
+							<Area
+								key={k}
+								dataKey={k}
+								type="monotone"
+								stackId="1"
+								stroke={`var(--color-${k})`}
+								fill={`var(--color-${k})`}
+								fillOpacity={0.8}
+								strokeWidth={0}
+							/>
 						))}
 					</AreaChart>
 				</ChartContainer>

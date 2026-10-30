@@ -1,5 +1,8 @@
 "use client";
 
+import { createTranslator } from "@workspace/ui/lib/i18n";
+const t = createTranslator({ optimizeWith: { en: "Optimize with {name}", ja: "{name}で最適化" }, optimizeFor: { en: "Optimize for {name}", ja: "{name}向けに最適化" } });
+
 import { useState } from "react";
 import { IconExternalLink, IconChevronDown, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@workspace/ui/components/button";
@@ -121,7 +124,7 @@ export function OptimizeButton({
 				disabled={loading}
 			>
 				{loading && <IconLoader2 size={12} className="size-3 mr-0.5 animate-spin" />}
-				Optimize with {parentName}
+				{t("optimizeWith", { name: parentName })}
 				<IconExternalLink size={12} className="size-3 ml-0.5" />
 			</Button>
 		);
@@ -132,7 +135,7 @@ export function OptimizeButton({
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
 				<Button size="sm" className="text-xs cursor-pointer p-0 m-0 h-6">
-					Optimize with {parentName}
+					{t("optimizeWith", { name: parentName })}
 					<IconChevronDown size={12} className="size-3 ml-0.5" />
 				</Button>
 			</DropdownMenuTrigger>
@@ -143,7 +146,7 @@ export function OptimizeButton({
 					return (
 						<div key={model}>
 							{index > 0 && <DropdownMenuSeparator />}
-							<DropdownMenuLabel>Optimize for {modelName}</DropdownMenuLabel>
+							<DropdownMenuLabel>{t("optimizeFor", { name: modelName })}</DropdownMenuLabel>
 							<DropdownMenuItem 
 								className="cursor-pointer"
 								onClick={(e) => handleOptimizeClick(e, model)}

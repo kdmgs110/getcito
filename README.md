@@ -250,7 +250,7 @@ Required-column legend: **local** = required in local mode · **wl** = required 
 | `VITE_APP_URL` | client | wl | Client-visible app URL. |
 | `VITE_DEPLOYMENT_MODE` | client | optional | Client-visible copy of `DEPLOYMENT_MODE`. |
 | `VITE_APP_TIMEZONE` | client | optional | IANA timezone used across charts and dates. Falls back to the runtime timezone; `Asia/Kolkata` is an example deployment value. |
-| `VITE_APP_LOCALE` | client | optional | BCP 47 locale used for date/number formatting. Falls back to the runtime locale; `en-IN` is an example deployment value. |
+| `VITE_APP_LOCALE` | client | optional | BCP 47 locale for date/number formatting and UI language. Defaults to `ja-JP`; `ja`/`ja-*` selects Japanese, other locales select English. Set `en-US` for English. Rebuild after changing this value. |
 | `ONBOARDING_LLM_TARGET` | server | optional | Explicit `model:provider` used for structured onboarding research. |
 | `DISABLE_TELEMETRY` | server | optional | Set to any value to disable telemetry. |
 | `ENVIRONMENT` | server | optional | Environment name reported to Sentry. |

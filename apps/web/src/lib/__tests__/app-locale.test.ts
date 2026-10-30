@@ -16,13 +16,13 @@ describe("app locale configuration", () => {
 		expect(APP_LOCALE).toBe("fr-FR");
 	});
 
-	it("falls back to the runtime locale and timezone when configuration is blank", async () => {
+	it("defaults to Japanese and the runtime timezone when configuration is blank", async () => {
 		vi.stubEnv("VITE_APP_TIMEZONE", "");
 		vi.stubEnv("VITE_APP_LOCALE", "");
 
 		const { APP_LOCALE, APP_TIMEZONE } = await import("@/lib/app-locale");
 
 		expect(APP_TIMEZONE).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
-		expect(APP_LOCALE).toBeUndefined();
+		expect(APP_LOCALE).toBe("ja-JP");
 	});
 });

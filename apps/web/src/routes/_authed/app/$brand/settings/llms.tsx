@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 /**
  * /app/$brand/settings/llms - LLM configuration page
  *
@@ -21,8 +22,8 @@ export const Route = createFileRoute("/_authed/app/$brand/settings/llms")({
 		const brandName = getBrandName(matches);
 		return {
 			meta: [
-				{ title: buildTitle("LLMs", { appName, brandName }) },
-				{ name: "description", content: "View tracked AI models and configuration." },
+				{ title: buildTitle(t("settings.llms"), { appName, brandName }) },
+				{ name: "description", content: t("settings.viewTrackedAiModelsAndConfiguration") },
 			],
 		};
 	},
@@ -36,11 +37,8 @@ function LlmsSettingsPage() {
 	return (
 		<div className="space-y-6 max-w-6xl">
 			<div>
-				<h1 className="text-3xl font-bold">LLMs</h1>
-				<p className="text-muted-foreground">
-					Your prompts are evaluated against these AI models to track how your brand appears across different types of AI
-					search.
-				</p>
+				<h1 className="text-3xl font-bold">{t("settings.llms")}</h1>
+				<p className="text-muted-foreground">{t("settings.yourPromptsAreEvaluatedAgainstTheseAiModelsTo")}</p>
 			</div>
 
 			{isLoading && !brand ? (
@@ -60,36 +58,37 @@ function LlmsSettingsPage() {
 				</div>
 			) : configs.length === 0 ? (
 				<Card>
-					<CardContent className="pt-6 text-sm text-muted-foreground">
-						No models are configured for this brand. Set <code className="font-mono text-xs">SCRAPE_TARGETS</code> at the
-						deployment level, or adjust this brand&apos;s <code className="font-mono text-xs">enabledModels</code>.
-					</CardContent>
+					<CardContent className="pt-6 text-sm text-muted-foreground">{t("settings.modelsMissing")}</CardContent>
 				</Card>
 			) : (
 				<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 					{configs.map((config) => (
 						<Card key={config.model} className="h-full">
-							<CardHeader className="py-2 border-b">
-								{iconForModel(config.model, "h-6 w-6")}
-							</CardHeader>
+							<CardHeader className="py-2 border-b">{iconForModel(config.model, "h-6 w-6")}</CardHeader>
 							<CardContent className="pt-2">
 								<div className="divide-y text-sm">
-									<ConfigRow label="Model" tooltip="Which AI model this card covers.">
+									<ConfigRow label={t("settings.model")} tooltip={t("settings.whichAiModelThisCardCovers")}>
 										<span className="font-mono text-xs text-foreground">{config.model}</span>
 									</ConfigRow>
-									<ConfigRow label="Provider" tooltip="How this deployment reaches the model — direct API, a scraping proxy, etc.">
+									<ConfigRow
+										label={t("settings.provider")}
+										tooltip={t("settings.howThisDeploymentReachesTheModelDirectApiA")}
+									>
 										<span className="font-mono text-xs text-foreground">{config.provider}</span>
 									</ConfigRow>
-									<ConfigRow label="Version" tooltip="Exact upstream model version requested from the provider.">
+									<ConfigRow
+										label={t("settings.version")}
+										tooltip={t("settings.exactUpstreamModelVersionRequestedFromTheProvider")}
+									>
 										<span className="font-mono text-xs text-foreground">{config.version ?? "—"}</span>
 									</ConfigRow>
-									<ConfigRow label="Web search" tooltip="Is web search used to answer prompts?">
+									<ConfigRow label={t("settings.webSearch")} tooltip={t("settings.isWebSearchUsedToAnswerPrompts")}>
 										{config.webSearch ? (
 											<IconCircleCheck className="h-4 w-4 text-emerald-600" />
 										) : (
 											<IconCircleX className="h-4 w-4 text-muted-foreground" />
 										)}
-										<span className="sr-only">{config.webSearch ? "Enabled" : "Disabled"}</span>
+										<span className="sr-only">{config.webSearch ? t("settings.enabled") : t("settings.disabled")}</span>
 									</ConfigRow>
 								</div>
 							</CardContent>
@@ -101,15 +100,7 @@ function LlmsSettingsPage() {
 	);
 }
 
-function ConfigRow({
-	label,
-	tooltip,
-	children,
-}: {
-	label: string;
-	tooltip?: string;
-	children: React.ReactNode;
-}) {
+function ConfigRow({ label, tooltip, children }: { label: string; tooltip?: string; children: React.ReactNode }) {
 	return (
 		<div className="flex items-center justify-between py-2">
 			<div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">

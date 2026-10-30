@@ -1,3 +1,5 @@
+import { APP_LANGUAGE, t } from "@/i18n";
+import { reportStatusLabel } from "@/i18n/report-status";
 /**
  * /reports - Reports list page
  *
@@ -26,28 +28,30 @@ import { requireAuthSession, isAdmin, hasReportAccess } from "@/lib/auth/helpers
 import { getReportsFn, createReportFn, deleteReportFn } from "@/server/reports";
 import { useBrands } from "@/hooks/use-brands";
 
-const checkReportAccess = createServerFn({ method: "GET" }).handler(async (): Promise<{
-	hasAccess: boolean;
-	isAdmin: boolean;
-	hasReportAccess: boolean;
-}> => {
-	const session = await requireAuthSession();
-	const admin = isAdmin(session);
-	const reportAccess = hasReportAccess(session);
-	return {
-		hasAccess: admin || reportAccess,
-		isAdmin: admin,
-		hasReportAccess: reportAccess,
-	};
-});
+const checkReportAccess = createServerFn({ method: "GET" }).handler(
+	async (): Promise<{
+		hasAccess: boolean;
+		isAdmin: boolean;
+		hasReportAccess: boolean;
+	}> => {
+		const session = await requireAuthSession();
+		const admin = isAdmin(session);
+		const reportAccess = hasReportAccess(session);
+		return {
+			hasAccess: admin || reportAccess,
+			isAdmin: admin,
+			hasReportAccess: reportAccess,
+		};
+	},
+);
 
 export const Route = createFileRoute("/_authed/reports/")({
 	head: ({ match }) => {
 		const appName = getAppName(match);
 		return {
 			meta: [
-				{ title: `Reports · ${appName}` },
-				{ name: "description", content: "Generate and view one-time brand reports." },
+				{ title: `${t("reports.reports")} · ${appName}` },
+				{ name: "description", content: t("reports.generateAndViewOneTimeBrandReports") },
 			],
 		};
 	},
@@ -92,13 +96,22 @@ function ReportsPage() {
 		mutationFn: (data: typeof formData) => createReportFn({ data }),
 		onSuccess: (_data, variables) => {
 			trackEvent("report_created", { has_manual_prompts: Boolean(variables.manualPrompts) });
-			setSuccess("Report request submitted successfully!");
-			setFormData({ brandId: "", brandName: "", brandWebsite: "", manualPrompts: "", manualCompetitors: "", useExistingData: false });
+			setSuccess(t("reports.reportRequestSubmittedSuccessfully"));
+			setFormData({
+				brandId: "",
+				brandName: "",
+				brandWebsite: "",
+				manualPrompts: "",
+				manualCompetitors: "",
+				useExistingData: false,
+			});
 			setSelectedBrandId("custom");
 			queryClient.invalidateQueries({ queryKey: ["reports"] });
 		},
 		onError: (err: Error) => {
-			setSubmitError(err.message || "An error occurred");
+			setSubmitError(
+				APP_LANGUAGE === "en" ? err.message || t("reports.anErrorOccurred") : t("reports.anErrorOccurred"),
+			);
 		},
 	});
 
@@ -148,36 +161,51 @@ function ReportsPage() {
 						<div className="flex flex-col gap-4 p-4 md:gap-6 md:p-6">
 							<div className="space-y-8">
 								<div className="space-y-2">
-									<h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-									<p className="text-muted-foreground">Generate one-time brand reports.</p>
+									<h1 className="text-3xl font-bold tracking-tight">{t("reports.reports")}</h1>
+									<p className="text-muted-foreground">{t("reports.generateOneTimeBrandReports")}</p>
 								</div>
 								<div className="space-y-6 max-w-4xl">
 									{/* Report Creation Form */}
 									<div className="space-y-4">
-										<h2 className="text-2xl font-semibold">Create New Report</h2>
+										<h2 className="text-2xl font-semibold">{t("reports.createNewReport")}</h2>
 
 										<form onSubmit={handleSubmit} className="space-y-4">
 											<div className="space-y-2">
-												<Label>Pre-fill from existing brand</Label>
-												<Select 
-													value={selectedBrandId} 
+												<Label>{t("reports.preFillFromExistingBrand")}</Label>
+												<Select
+													value={selectedBrandId}
 													onValueChange={(val) => {
 														setSelectedBrandId(val);
 														if (val === "custom") {
-															setFormData({ brandId: "", brandName: "", brandWebsite: "", manualPrompts: "", manualCompetitors: "", useExistingData: false });
+															setFormData({
+																brandId: "",
+																brandName: "",
+																brandWebsite: "",
+																manualPrompts: "",
+																manualCompetitors: "",
+																useExistingData: false,
+															});
 														} else {
-															const brand = brands?.find(b => b.id === val);
+															const brand = brands?.find((b) => b.id === val);
 															if (brand) {
-																const activePrompts = brand.prompts?.filter(p => p.enabled).map(p => p.value).join("\n") || "";
-																const existingCompetitors = brand.competitors?.filter(c => c.domains && c.domains.length > 0).map(c => `${c.name}, ${c.domains[0]}`).join("\n") || "";
-																
+																const activePrompts =
+																	brand.prompts
+																		?.filter((p) => p.enabled)
+																		.map((p) => p.value)
+																		.join("\n") || "";
+																const existingCompetitors =
+																	brand.competitors
+																		?.filter((c) => c.domains && c.domains.length > 0)
+																		.map((c) => `${c.name}, ${c.domains[0]}`)
+																		.join("\n") || "";
+
 																setFormData({
 																	brandId: brand.id,
 																	brandName: brand.name,
 																	brandWebsite: brand.website || "",
 																	manualPrompts: activePrompts,
 																	manualCompetitors: existingCompetitors,
-																	useExistingData: true
+																	useExistingData: true,
 																});
 															}
 														}
@@ -185,11 +213,11 @@ function ReportsPage() {
 													disabled={createMutation.isPending || brandsLoading}
 												>
 													<SelectTrigger>
-														<SelectValue placeholder="Custom / New Prospect" />
+														<SelectValue placeholder={t("reports.customNewProspect")} />
 													</SelectTrigger>
 													<SelectContent>
-														<SelectItem value="custom">-- Custom / New Prospect --</SelectItem>
-														{brands?.map(brand => (
+														<SelectItem value="custom">{t("reports.customNewProspect")}</SelectItem>
+														{brands?.map((brand) => (
 															<SelectItem key={brand.id} value={brand.id}>
 																{brand.name}
 															</SelectItem>
@@ -200,29 +228,25 @@ function ReportsPage() {
 
 											<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 												<div className="space-y-2">
-													<Label htmlFor="brandName">Brand Name</Label>
+													<Label htmlFor="brandName">{t("reports.brandName")}</Label>
 													<Input
 														id="brandName"
 														type="text"
-														placeholder="Enter brand name"
+														placeholder={t("reports.enterBrandName")}
 														value={formData.brandName}
-														onChange={(e) =>
-															setFormData({ ...formData, brandName: e.target.value })
-														}
+														onChange={(e) => setFormData({ ...formData, brandName: e.target.value })}
 														required
 														disabled={createMutation.isPending}
 													/>
 												</div>
 												<div className="space-y-2">
-													<Label htmlFor="brandWebsite">Brand Website</Label>
+													<Label htmlFor="brandWebsite">{t("reports.brandWebsite")}</Label>
 													<Input
 														id="brandWebsite"
 														type="url"
 														placeholder="https://example.com"
 														value={formData.brandWebsite}
-														onChange={(e) =>
-															setFormData({ ...formData, brandWebsite: e.target.value })
-														}
+														onChange={(e) => setFormData({ ...formData, brandWebsite: e.target.value })}
 														required
 														disabled={createMutation.isPending}
 													/>
@@ -232,83 +256,65 @@ function ReportsPage() {
 											<div className="space-y-2">
 												<div className="flex items-center justify-between">
 													<Label htmlFor="manualPrompts">
-														Manual Prompts{" "}
-														<span className="text-muted-foreground font-normal">(Optional)</span>
+														{t("reports.manualPrompts")}{" "}
+														<span className="text-muted-foreground font-normal">{t("reports.optional")}</span>
 													</Label>
 													{formData.manualPrompts && (
-														<Button 
-															type="button" 
-															variant="outline" 
+														<Button
+															type="button"
+															variant="outline"
 															size="sm"
 															className="h-7 text-xs"
 															onClick={() => setFormData({ ...formData, manualPrompts: "" })}
 														>
-															Clear & Use AI Generation
+															{t("reports.clearUseAiGeneration")}
 														</Button>
 													)}
 												</div>
 												<Textarea
 													id="manualPrompts"
-													placeholder="Enter one prompt per line, up to 50"
+													placeholder={t("reports.enterOnePromptPerLineUpTo50")}
 													value={formData.manualPrompts}
-													onChange={(e) =>
-														setFormData({ ...formData, manualPrompts: e.target.value })
-													}
+													onChange={(e) => setFormData({ ...formData, manualPrompts: e.target.value })}
 													disabled={createMutation.isPending}
 													rows={6}
 													className="font-mono text-sm"
 												/>
 												<p className="text-xs text-muted-foreground">
-													{formData.manualPrompts.trim() ? (
-														<>
-															<strong>Note:</strong> Prompts will NOT be auto-generated.
-															Using your{" "}
-															{
-																formData.manualPrompts
+													{formData.manualPrompts.trim()
+														? t("reports.manualPromptsCount", {
+																count: formData.manualPrompts
 																	.trim()
 																	.split("\n")
-																	.filter((line) => line.trim()).length
-															}{" "}
-															manual prompt
-															{formData.manualPrompts
-																.trim()
-																.split("\n")
-																.filter((line) => line.trim()).length !== 1
-																? "s"
-																: ""}
-															.
-														</>
-													) : (
-														"Leave empty to auto-generate prompts based on website analysis, competitors, and keywords."
-													)}
+																	.filter((line) => line.trim()).length,
+															})
+														: t("reports.leaveEmptyToAutoGeneratePromptsBasedOnWebsiteAnalysisCompetitorsAnd")}
 												</p>
 											</div>
 
 											<div className="space-y-2">
 												<div className="flex items-center justify-between">
 													<Label htmlFor="manualCompetitors">
-														Manual Competitors{" "}
-														<span className="text-muted-foreground font-normal">(Optional)</span>
+														{t("reports.manualCompetitors")}{" "}
+														<span className="text-muted-foreground font-normal">{t("reports.optional")}</span>
 													</Label>
 													{formData.manualCompetitors && (
-														<Button 
-															type="button" 
-															variant="outline" 
+														<Button
+															type="button"
+															variant="outline"
 															size="sm"
 															className="h-7 text-xs"
 															onClick={() => setFormData({ ...formData, manualCompetitors: "" })}
 														>
-															Clear
+															{t("reports.clear")}
 														</Button>
 													)}
 												</div>
 												<Textarea
 													id="manualCompetitors"
-													placeholder={`Example:\nAcme Corp, acme.com\nGlobex, globex.com`}
+													placeholder={t("reports.competitorExample")}
 													value={formData.manualCompetitors}
-													onChange={(e) =>
-														setFormData({ ...formData, manualCompetitors: e.target.value })
-													}
+													onChange={(e) => setFormData({ ...formData, manualCompetitors: e.target.value })}
 													disabled={createMutation.isPending || formData.useExistingData}
 													rows={3}
 													className="font-mono text-sm"
@@ -316,77 +322,60 @@ function ReportsPage() {
 												<p className="text-xs text-muted-foreground">
 													{formData.manualCompetitors.trim() ? (
 														<>
-															Adding{" "}
-															{
-																formData.manualCompetitors
+															{t("reports.manualCompetitorsCount", {
+																count: formData.manualCompetitors
 																	.trim()
 																	.split("\n")
-																	.filter((line) => line.trim()).length
-															}{" "}
-															manual competitor
-															{formData.manualCompetitors
-																.trim()
-																.split("\n")
-																.filter((line) => line.trim()).length !== 1
-																? "s"
-																: ""}
-															. {formData.brandId ? "These will be combined with any existing database competitors." : "These will replace AI generation."}
+																	.filter((line) => line.trim()).length,
+															})}{" "}
+															{formData.brandId
+																? t("reports.theseWillBeCombinedWithAnyExistingDatabaseCompetitors")
+																: t("reports.theseWillReplaceAiGeneration")}
 														</>
 													) : (
-														"Format: 'Name, domain.com' (one per line). Leave empty to use AI/database competitors."
+														t("reports.formatNameDomainComOnePerLineLeaveEmptyToUseAi")
 													)}
 												</p>
 											</div>
-											
+
 											{formData.brandId && (
 												<div className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow-sm">
 													<Checkbox
 														id="useExistingData"
 														checked={formData.useExistingData}
-														onCheckedChange={(checked) =>
-															setFormData({ ...formData, useExistingData: !!checked })
-														}
+														onCheckedChange={(checked) => setFormData({ ...formData, useExistingData: !!checked })}
 													/>
 													<div className="space-y-1 leading-none">
 														<Label htmlFor="useExistingData" className="cursor-pointer">
-															Use existing database evaluations
+															{t("reports.useExistingDatabaseEvaluations")}
 														</Label>
 														<p className="text-sm text-muted-foreground">
-															Skip AI prompt testing and compile the report instantly using the latest existing data for this brand. 
-															This is free and does not use LLM tokens.
+															{t("reports.skipAiPromptTestingAndCompileTheReportInstantlyUsingTheLatest")}
 														</p>
 													</div>
 												</div>
 											)}
 
-											{submitError && (
-												<p className="text-sm text-destructive">{submitError}</p>
-											)}
+											{submitError && <p className="text-sm text-destructive">{submitError}</p>}
 											{success && <p className="text-sm text-green-600">{success}</p>}
 
-											<Button
-												type="submit"
-												disabled={createMutation.isPending}
-												className="cursor-pointer"
-											>
-												{createMutation.isPending
-													? "Creating Report..."
-													: "Create Report"}
+											<Button type="submit" disabled={createMutation.isPending} className="cursor-pointer">
+												{createMutation.isPending ? t("reports.creatingReport") : t("reports.createReport")}
 											</Button>
 										</form>
 									</div>
 
 									{/* Reports List */}
 									<div className="space-y-4">
-										<h2 className="text-2xl font-semibold">Report History</h2>
+										<h2 className="text-2xl font-semibold">{t("reports.reportHistory")}</h2>
 
 										{error && (
 											<Card>
 												<CardContent className="py-8 text-center">
 													<p className="text-destructive">
-														{error instanceof Error
+														{APP_LANGUAGE === "en" && error instanceof Error
 															? error.message
-															: "Failed to load reports"}
+															: t("reports.failedToLoadReports")}
 													</p>
 												</CardContent>
 											</Card>
@@ -396,33 +385,26 @@ function ReportsPage() {
 											<div className="flex items-center justify-center py-8">
 												<div className="flex items-center space-x-2">
 													<div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-													<span>Loading reports...</span>
+													<span>{t("reports.loadingReports")}</span>
 												</div>
 											</div>
 										) : !error && reports.length === 0 ? (
 											<Card>
 												<CardContent className="py-8 text-center">
-													<p className="text-muted-foreground">No reports found.</p>
+													<p className="text-muted-foreground">{t("reports.noReportsFound")}</p>
 												</CardContent>
 											</Card>
 										) : (
 											!error && (
 												<div className="space-y-3">
 													{reports.map((report: any) => (
-														<div
-															key={report.id}
-															className="bg-gray-50 border border-gray-200 rounded-lg p-4"
-														>
+														<div key={report.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
 															<div className="flex items-center justify-between">
 																<div className="flex-1 min-w-0">
 																	<h3 className="font-semibold text-lg">
 																		{report.brandName}{" "}
 																		<span className="text-gray-600 font-normal">
-																			(
-																			{extractDomain(
-																				report.brandWebsite,
-																			)}
-																			)
+																			({extractDomain(report.brandWebsite)})
 																		</span>
 																	</h3>
 																</div>
@@ -435,35 +417,23 @@ function ReportsPage() {
 																			}}
 																			target="_blank"
 																		>
-																			<Button
-																				variant="default"
-																				size="sm"
-																				className="cursor-pointer h-6 px-2 text-xs"
-																			>
+																			<Button variant="default" size="sm" className="cursor-pointer h-6 px-2 text-xs">
 																				<ExternalLink className="size-3 mr-0.5" />
-																				View Report
+																				{t("reports.viewReport")}
 																			</Button>
 																		</Link>
 																	) : (
-																		<Badge
-																			variant={getStatusBadgeVariant(
-																				report.status,
-																			)}
-																			className="text-xs"
-																		>
-																			{report.status
-																				.charAt(0)
-																				.toUpperCase() +
-																				report.status.slice(1)}
+																		<Badge variant={getStatusBadgeVariant(report.status)} className="text-xs">
+																			{reportStatusLabel(report.status)}
 																		</Badge>
 																	)}
 																	<Button
 																		variant="outline"
 																		size="sm"
-																		title="Delete report"
+																		title={t("reports.deleteReport")}
 																		className="cursor-pointer h-6 w-6 p-0 text-destructive border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
 																		onClick={() => {
-																			if (window.confirm("Are you sure you want to delete this report?")) {
+																			if (window.confirm(t("reports.areYouSureYouWantToDeleteThisReport"))) {
 																				deleteMutation.mutate(report.id);
 																			}
 																		}}

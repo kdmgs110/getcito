@@ -1,3 +1,5 @@
+import { displayMarket, displayLanguage, settingsError } from "@/i18n/settings-labels";
+import { t } from "@/i18n";
 /**
  * /app/new - Create a new brand (local mode only).
  *
@@ -91,27 +93,31 @@ function NewBrandPage() {
 			await router.invalidate();
 			await navigate({ to: "/app/$brand", params: { brand: brandId } });
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "An error occurred");
+			setError(settingsError(err, t("settings.anErrorOccurred")));
 		} finally {
 			setIsLoading(false);
 		}
 	};
 
 	return (
-		<FullPageCard title="Create a new brand" subtitle="Set up a brand to start tracking" showBackButton>
+		<FullPageCard
+			title={t("settings.createANewBrand")}
+			subtitle={t("settings.setUpABrandToStartTracking")}
+			showBackButton
+		>
 			<form action={handleSubmit} className="space-y-4">
 				<div className="space-y-2">
-					<Label htmlFor="brandName">Brand name</Label>
+					<Label htmlFor="brandName">{t("settings.brandName")}</Label>
 					<Input id="brandName" name="brandName" type="text" placeholder="Acme" required disabled={isLoading} />
 				</div>
 
 				<div className="space-y-2">
-					<Label htmlFor="website">Website</Label>
+					<Label htmlFor="website">{t("settings.website")}</Label>
 					<Input id="website" name="website" type="text" placeholder="example.com" required disabled={isLoading} />
 				</div>
 
 				<div className="space-y-2">
-					<Label htmlFor="targetMarket">Target Market (Optional)</Label>
+					<Label htmlFor="targetMarket">{t("settings.targetMarketOptional")}</Label>
 					<Select
 						name="targetMarket"
 						value={targetMarket}
@@ -119,13 +125,13 @@ function NewBrandPage() {
 						disabled={isLoading}
 					>
 						<SelectTrigger id="targetMarket">
-							<SelectValue placeholder="Select target market (e.g. United States)" />
+							<SelectValue placeholder={t("settings.selectTargetMarketEGUnitedStates")} />
 						</SelectTrigger>
 						<SelectContent>
 							<SelectGroup>
 								{TARGET_MARKETS.map((location) => (
 									<SelectItem key={location} value={location}>
-										{location}
+										{displayMarket(location)}
 									</SelectItem>
 								))}
 							</SelectGroup>
@@ -134,7 +140,7 @@ function NewBrandPage() {
 				</div>
 
 				<div className="space-y-2">
-					<Label htmlFor="targetLanguage">Target Language (Optional)</Label>
+					<Label htmlFor="targetLanguage">{t("settings.targetLanguageOptional")}</Label>
 					<Select
 						name="targetLanguage"
 						value={targetLanguage}
@@ -142,13 +148,15 @@ function NewBrandPage() {
 						disabled={isLoading || !targetMarket}
 					>
 						<SelectTrigger id="targetLanguage">
-							<SelectValue placeholder={targetMarket ? "Select target language" : "Select a market first"} />
+							<SelectValue
+								placeholder={targetMarket ? t("settings.selectTargetLanguage") : t("settings.selectAMarketFirst")}
+							/>
 						</SelectTrigger>
 						<SelectContent>
 							<SelectGroup>
 								{availableLanguages.map((lang) => (
 									<SelectItem key={lang.name} value={lang.name}>
-										{lang.name}
+										{displayLanguage(lang.code, lang.name)}
 									</SelectItem>
 								))}
 							</SelectGroup>
@@ -159,7 +167,7 @@ function NewBrandPage() {
 				{error && <p className="text-sm text-destructive">{error}</p>}
 
 				<Button type="submit" className="w-full" disabled={isLoading}>
-					{isLoading ? "Creating..." : "Create brand"}
+					{isLoading ? t("settings.creating") : t("settings.createBrand")}
 				</Button>
 			</form>
 		</FullPageCard>

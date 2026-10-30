@@ -14,6 +14,7 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@/": `${path.resolve(dirname, "./src")}/`,
+			"@workspace/ui/": `${path.resolve(dirname, "../../packages/ui/src")}/`,
 		},
 	},
 	test: {

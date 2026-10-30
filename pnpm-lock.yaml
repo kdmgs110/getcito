@@ -55,6 +55,9 @@ importers:
       '@fontsource/geist-sans':
         specifier: ^5.2.5
         version: 5.2.5
+      '@fontsource/noto-sans-jp':
+        specifier: 5.2.8
+        version: 5.2.8
       '@fontsource/titan-one':
         specifier: ^5.2.8
         version: 5.2.8
@@ -1240,6 +1243,9 @@ packages:
 
   '@fontsource/geist-sans@5.2.5':
     resolution: {integrity: sha512-anllOHyJbElRs9fV15TeDRqAeb1IKm4bSknPl6ZMoyPTx1BBy7logudcUwpNjmQLkzn4Q0JGQLRCUKJYoyST6A==}
+
+  '@fontsource/noto-sans-jp@5.2.8':
+    resolution: {integrity: sha512-ngWXPtSV3XH8ZmNX9hnfeQ+x/3mCoaAOA3BVDcyS5jQdh4FYqKjf/S9tEUEYDPwGa2pULJVXTO2+oFg42gWvSw==}
 
   '@fontsource/titan-one@5.2.8':
     resolution: {integrity: sha512-8HTVAlzC/LiQNiGdFZXWBWPOz/b4rp6KL7V+4FnyYMJWsJtqFWNFJkySrYoTxULy43vCngT2x1HiUZIu8y4tDQ==}
@@ -6972,6 +6978,8 @@ snapshots:
   '@floating-ui/utils@0.2.11': {}
 
   '@fontsource/geist-sans@5.2.5': {}
+
+  '@fontsource/noto-sans-jp@5.2.8': {}
 
   '@fontsource/titan-one@5.2.8': {}
 

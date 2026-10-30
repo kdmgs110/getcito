@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 
 import { useMemo } from "react";
 import {
@@ -72,16 +73,24 @@ export function CitationsDisplay({
 		[citationData.categoryCounts],
 	);
 	const chartPageTypes = useMemo(() => {
-		const present = new Set((citationData.pageTypeDistribution ?? []).filter((d) => d.count > 0).map((d) => d.pageType));
+		const present = new Set(
+			(citationData.pageTypeDistribution ?? []).filter((d) => d.count > 0).map((d) => d.pageType),
+		);
 		return CITATION_PAGE_TYPES.filter((p) => present.has(p));
 	}, [citationData.pageTypeDistribution]);
 	const urlSourceTabs = useMemo<{ key: string; label: string }[]>(
-		() => [{ key: "all", label: "All Sources" }, ...chartSourceCategories.map((c) => ({ key: c as string, label: CATEGORY_CONFIG[c].label }))],
+		() => [
+			{ key: "all", label: t("dashboard.allSources") },
+			...chartSourceCategories.map((c) => ({ key: c as string, label: CATEGORY_CONFIG[c].label })),
+		],
 		[chartSourceCategories],
 	);
 	const domainSourceTabs = urlSourceTabs; // identical by construction (same chart-category list)
 	const urlPageTypeTabs = useMemo<{ key: string; label: string }[]>(
-		() => [{ key: "all", label: "All Page Types" }, ...chartPageTypes.map((p) => ({ key: p as string, label: PAGE_TYPE_CONFIG[p].label }))],
+		() => [
+			{ key: "all", label: t("dashboard.allPageTypes") },
+			...chartPageTypes.map((p) => ({ key: p as string, label: PAGE_TYPE_CONFIG[p].label })),
+		],
 		[chartPageTypes],
 	);
 
@@ -112,8 +121,8 @@ export function CitationsDisplay({
 			{/* Citation Categories over time */}
 			{citationData.citationTimeSeries && citationData.citationTimeSeries.length > 0 && (
 				<TrendAreaChart
-					title="Citation Categories"
-					tooltip="Share of citations by source category over time, as a percentage of all citations each day. Smoothed to account for staggered prompt schedules; Google AI Mode search/shopping are excluded (see the Google Shopping section)."
+					title={t("dashboard.citationCategories")}
+					tooltip={t("dashboard.citationCategoriesHelp")}
 					data={(citationData.citationTimeSeries ?? []) as unknown as Array<Record<string, number | string>>}
 					keys={chartSourceCategories}
 					meta={CATEGORY_META}
@@ -123,8 +132,8 @@ export function CitationsDisplay({
 			{/* Citation Page Types over time */}
 			{citationData.pageTypeTimeSeries && citationData.pageTypeTimeSeries.length > 0 && (
 				<TrendAreaChart
-					title="Citation Page Types"
-					tooltip="Share of citations by page type over time — what kind of page each citation points to, inferred from the URL and title."
+					title={t("dashboard.citationPageTypes")}
+					tooltip={t("dashboard.shareOfCitationsByPageTypeOverTime")}
 					data={(citationData.pageTypeTimeSeries ?? []) as unknown as Array<Record<string, number | string>>}
 					keys={chartPageTypes}
 					meta={PAGE_TYPE_META}
@@ -133,14 +142,11 @@ export function CitationsDisplay({
 
 			{/* Recent Changes + Content Gaps (side by side) */}
 			{(totalChanges > 0 || hasGaps) && (
-				<div className={totalChanges > 0 && hasGaps ? "grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch" : "contents"}>
+				<div
+					className={totalChanges > 0 && hasGaps ? "grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch" : "contents"}
+				>
 					{totalChanges > 0 && whatsChanged && <RecentChangesCard whatsChanged={whatsChanged} days={days} />}
-					{hasGaps && (
-						<ContentGapsCard
-							prompts={citationData.competitorOnlyPrompts!}
-							brandId={brandId!}
-						/>
-					)}
+					{hasGaps && <ContentGapsCard prompts={citationData.competitorOnlyPrompts!} brandId={brandId!} />}
 				</div>
 			)}
 

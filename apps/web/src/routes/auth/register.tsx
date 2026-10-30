@@ -1,3 +1,6 @@
+import { useHydrated } from "@/hooks/use-hydrated";
+import { authErrorMessage } from "@/i18n/settings-labels";
+import { t } from "@/i18n";
 /**
  * /auth/register - Account registration page
  *
@@ -34,6 +37,7 @@ function RegisterPage() {
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+	const hydrated = useHydrated();
 
 	if (!canRegister) {
 		window.location.href = "/auth/login";
@@ -53,20 +57,20 @@ function RegisterPage() {
 			});
 
 			if (result.error) {
-				setError(result.error.message ?? "Registration failed");
+				setError(authErrorMessage(result.error, t("settings.registrationFailed")));
 				setLoading(false);
 				return;
 			}
 
 			navigate({ to: returnTo ?? "/app" });
 		} catch {
-			setError("Something went wrong. Please try again.");
+			setError(t("settings.somethingWentWrongPleaseTryAgain"));
 			setLoading(false);
 		}
 	}
 
 	return (
-		<FullPageCard title="Create account" subtitle="Sign up to get started">
+		<FullPageCard title={t("settings.createAccount")} subtitle={t("settings.signUpToGetStarted")}>
 			<form onSubmit={handleSubmit} className="space-y-4 w-full">
 				{error && (
 					<Alert variant="destructive">
@@ -74,20 +78,21 @@ function RegisterPage() {
 					</Alert>
 				)}
 				<div className="space-y-2">
-					<Label htmlFor="name">Name</Label>
+					<Label htmlFor="name">{t("settings.name")}</Label>
 					<Input
 						id="name"
 						type="text"
-						placeholder="Your name"
+						placeholder={t("settings.yourName")}
 						value={name}
 						onChange={(e) => setName(e.target.value)}
 						required
+						disabled={!hydrated || loading}
 						autoComplete="name"
 						autoFocus
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor="email">Email</Label>
+					<Label htmlFor="email">{t("settings.email")}</Label>
 					<Input
 						id="email"
 						type="email"
@@ -95,35 +100,37 @@ function RegisterPage() {
 						value={email}
 						onChange={(e) => setEmail(e.target.value)}
 						required
+						disabled={!hydrated || loading}
 						autoComplete="email"
 					/>
 				</div>
 				<div className="space-y-2">
-					<Label htmlFor="password">Password</Label>
+					<Label htmlFor="password">{t("settings.password")}</Label>
 					<Input
 						id="password"
 						type="password"
-						placeholder="Create a password"
+						placeholder={t("settings.createAPassword")}
 						value={password}
 						onChange={(e) => setPassword(e.target.value)}
 						required
+						disabled={!hydrated || loading}
 						autoComplete="new-password"
 						minLength={6}
 					/>
 				</div>
-				<Button type="submit" className="w-full" disabled={loading}>
-					{loading ? "Creating account..." : "Create account"}
+				<Button type="submit" className="w-full" disabled={loading || !hydrated}>
+					{loading ? t("settings.creatingAccount") : t("settings.createAccount")}
 				</Button>
 			</form>
 			{hasUsers && (
 				<p className="text-center text-sm text-muted-foreground pt-4">
-					Already have an account?{" "}
+					{t("settings.alreadyHaveAnAccount")}{" "}
 					<Link
 						to="/auth/login"
 						search={returnTo ? { returnTo } : {}}
 						className="text-primary hover:underline font-medium"
 					>
-						Sign in
+						{t("settings.signIn")}
 					</Link>
 				</p>
 			)}

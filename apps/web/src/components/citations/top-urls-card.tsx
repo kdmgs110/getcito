@@ -1,3 +1,4 @@
+import { t, formatNumber } from "@/i18n";
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Separator } from "@workspace/ui/components/separator";
@@ -48,10 +49,9 @@ export function TopUrlsCard({
 		}
 		if (urlSearch) {
 			const q = urlSearch.toLowerCase();
-			result = result.filter((u) =>
-				u.url.toLowerCase().includes(q) ||
-				(u.title?.toLowerCase().includes(q)) ||
-				u.domain.toLowerCase().includes(q)
+			result = result.filter(
+				(u) =>
+					u.url.toLowerCase().includes(q) || u.title?.toLowerCase().includes(q) || u.domain.toLowerCase().includes(q),
 			);
 		}
 		return result.slice(0, maxUrls);
@@ -63,27 +63,38 @@ export function TopUrlsCard({
 				<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 					<div className="space-y-1 min-w-0">
 						<CardTitle className="flex items-center gap-1.5">
-							Top Cited URLs
+							{t("dashboard.topCitedUrls")}
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
 								</TooltipTrigger>
 								<TooltipContent className="max-w-xs text-sm font-normal">
-									<p className="mb-2">The specific pages most frequently cited by AI models. Filter by category to focus on brand, competitor, or other sources.</p>
-									<p><strong>Competitor</strong> domains are only those in your {brandId ? <Link to="/app/$brand/settings/competitors" params={{ brand: brandId }} className="underline">tracked competitors list</Link> : "tracked competitors list"}.</p>
+									<p className="mb-2">{t("dashboard.theSpecificPagesMostFrequentlyCitedByAi")}</p>
+									<p>
+										{t("dashboard.competitorDomainsPrefix")}
+										{brandId ? (
+											<Link to="/app/$brand/settings/competitors" params={{ brand: brandId }} className="underline">
+												{t("dashboard.trackedCompetitorsList")}
+											</Link>
+										) : (
+											t("dashboard.trackedCompetitorsList")
+										)}
+										{t("dashboard.competitorDomainsShortSuffix")}
+									</p>
 								</TooltipContent>
 							</Tooltip>
 						</CardTitle>
 						<CardDescription>
-							Individual pages cited by LLMs{brandIsCited && brandName && (
-								<> &mdash; {brandName} accounts for <strong>{brandShare}%</strong> of all citations</>
-							)}
+							{t("dashboard.individualCitedPages")}
+							{brandIsCited &&
+								brandName &&
+								t("dashboard.brandCitationPercent", { brand: brandName, percentage: brandShare })}
 						</CardDescription>
 					</div>
 					<div className="relative w-full sm:w-48 shrink-0">
 						<IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
 						<Input
-							placeholder="Search URLs..."
+							placeholder={t("dashboard.searchUrls")}
 							value={urlSearch}
 							onChange={(e) => setUrlSearch(e.target.value)}
 							className="h-8 pl-8 text-xs"
@@ -94,11 +105,7 @@ export function TopUrlsCard({
 			<Separator />
 			<CardContent>
 				{sourceTabs.length > 2 && (
-					<UnderlineTabs
-						tabs={sourceTabs}
-						activeKey={selectedCategory}
-						onSelect={setSelectedCategory}
-					/>
+					<UnderlineTabs tabs={sourceTabs} activeKey={selectedCategory} onSelect={setSelectedCategory} />
 				)}
 				{pageTypeTabs.length > 2 && (
 					<div className="flex items-center flex-wrap gap-1.5 mt-3">
@@ -131,11 +138,15 @@ export function TopUrlsCard({
 							>
 								<div className="min-w-0 flex-1">
 									<div className="flex items-center gap-2 mb-0.5">
-										<Badge className={`text-[10px] px-1.5 py-0 h-[18px] border-0 shadow-none ${getCategoryColorClass(citation.category)}`}>
+										<Badge
+											className={`text-[10px] px-1.5 py-0 h-[18px] border-0 shadow-none ${getCategoryColorClass(citation.category)}`}
+										>
 											{getCategoryLabel(citation.category)}
 										</Badge>
 										{citation.isNew && (
-											<Badge className="text-[10px] px-1.5 py-0 h-[18px] border-0 shadow-none bg-green-100 text-green-700">NEW</Badge>
+											<Badge className="text-[10px] px-1.5 py-0 h-[18px] border-0 shadow-none bg-green-100 text-green-700">
+												{t("dashboard.new")}
+											</Badge>
 										)}
 										<span className="text-sm font-medium truncate group-hover:underline">
 											{citation.title || extractFilenameFromUrl(citation.url)}
@@ -150,21 +161,23 @@ export function TopUrlsCard({
 									{citation.avgPosition != null && (
 										<Tooltip>
 											<TooltipTrigger asChild>
-												<span className="text-[11px] text-muted-foreground tabular-nums">avg {citation.avgPosition.toFixed(1)}</span>
+												<span className="text-[11px] text-muted-foreground tabular-nums">
+													{t("dashboard.averagePosition", { position: citation.avgPosition.toFixed(1) })}
+												</span>
 											</TooltipTrigger>
 											<TooltipContent className="text-xs">
-												Average citation position (lower = cited earlier in the response)
+												{t("dashboard.averageCitationPositionLowerCitedEarlierInThe")}
 											</TooltipContent>
 										</Tooltip>
 									)}
 									<Tooltip>
 										<TooltipTrigger asChild>
 											<span className="text-sm font-semibold tabular-nums min-w-[2rem] text-right">
-												{citation.count.toLocaleString()}
+												{formatNumber(citation.count)}
 											</span>
 										</TooltipTrigger>
 										<TooltipContent className="text-xs">
-											Total times this URL was cited across all prompt evaluations
+											{t("dashboard.totalTimesThisUrlWasCitedAcrossAll")}
 										</TooltipContent>
 									</Tooltip>
 									<IconExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -174,7 +187,7 @@ export function TopUrlsCard({
 					})}
 					{filteredUrls.length === 0 && (
 						<p className="text-sm text-muted-foreground text-center pt-8 pb-4">
-							No URLs match the current filters.
+							{t("dashboard.noUrlsMatchTheCurrentFilters")}
 						</p>
 					)}
 				</div>

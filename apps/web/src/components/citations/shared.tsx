@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import {
 	type CitationCategory,
 	CATEGORY_CONFIG,
@@ -6,8 +7,7 @@ import {
 	PAGE_TYPE_CONFIG,
 } from "@/lib/domain-categories";
 
-export const getCategoryLabel = (category: string) =>
-	CATEGORY_CONFIG[category as CitationCategory]?.label ?? category;
+export const getCategoryLabel = (category: string) => CATEGORY_CONFIG[category as CitationCategory]?.label ?? category;
 
 export const getCategoryColorClass = (category: string) =>
 	CATEGORY_CONFIG[category as CitationCategory]?.badgeClass ?? "bg-gray-500/90 text-white";
@@ -25,13 +25,13 @@ export const formatUrlForDisplay = (url: string) => {
 };
 
 export function formatPeriodLabel(days: number): string {
-	if (days === 1) return "24 hours";
-	if (days === 7) return "week";
-	if (days === 14) return "2 weeks";
-	if (days === 30) return "month";
-	if (days === 60) return "2 months";
-	if (days === 90) return "3 months";
-	return `${days} days`;
+	if (days === 1) return t("dashboard.24Hours");
+	if (days === 7) return t("dashboard.week");
+	if (days === 14) return t("dashboard.2Weeks");
+	if (days === 30) return t("dashboard.month");
+	if (days === 60) return t("dashboard.2Months");
+	if (days === 90) return t("dashboard.3Months");
+	return t("dashboard.periodDays", { days });
 }
 
 export const extractSubreddit = (url: string): string | null => {
@@ -74,7 +74,7 @@ export function UnderlineTabs<T extends string>({
 	onSelect: (key: T) => void;
 }) {
 	return (
-		<nav className="-mb-px flex gap-4 border-b border-border" aria-label="Tabs">
+		<nav className="-mb-px flex gap-4 border-b border-border" aria-label={t("dashboard.tabs")}>
 			{tabs.map(({ key, label }) => (
 				<button
 					key={key}

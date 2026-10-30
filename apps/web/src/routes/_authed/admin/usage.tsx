@@ -1,3 +1,4 @@
+import { APP_LANGUAGE, UI_LOCALE, t } from "@/i18n";
 /**
  * /admin/usage — Billable upstream API calls per provider and model.
  *
@@ -28,7 +29,7 @@ const PRIMARY_PROVIDER = "olostep";
 
 export const Route = createFileRoute("/_authed/admin/usage")({
 	head: ({ match }) => ({
-		meta: [{ title: `API Usage | ${getAppName(match)}` }],
+		meta: [{ title: `${t("reports.apiUsage")} | ${getAppName(match)}` }],
 	}),
 	component: UsagePage,
 });
@@ -50,7 +51,8 @@ function UsagePage() {
 				}
 			})
 			.catch((err: unknown) => {
-				if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load usage");
+				if (!cancelled)
+					setError(APP_LANGUAGE === "en" && err instanceof Error ? err.message : t("reports.failedToLoadUsage"));
 			})
 			.finally(() => {
 				if (!cancelled) setIsLoading(false);
@@ -64,10 +66,9 @@ function UsagePage() {
 		<div className="space-y-6">
 			<div className="flex flex-wrap items-end justify-between gap-4">
 				<div>
-					<h1 className="text-3xl font-bold">API Usage</h1>
+					<h1 className="text-3xl font-bold">{t("reports.apiUsage")}</h1>
 					<p className="text-muted-foreground">
-						Billable calls to upstream providers. One row per scrape or completion — status polls are not counted,
-						because they are not billed.
+						{t("reports.billableCallsToUpstreamProvidersOneRowPerScrapeOrCompletionStatus")}
 					</p>
 				</div>
 				<div className="flex gap-2">
@@ -78,7 +79,7 @@ function UsagePage() {
 							variant={days === range ? "default" : "outline"}
 							onClick={() => setDays(range)}
 						>
-							{range}d
+							{t("reports.daysCount", { count: range })}
 						</Button>
 					))}
 				</div>
@@ -126,26 +127,30 @@ function UsageContent({ data }: { data: Usage }) {
 		<>
 			<div className="grid gap-4 sm:grid-cols-3">
 				<StatCard
-					title={`Olostep calls (${data.days}d)`}
+					title={t("reports.olostepCallsDays", { count: data.days })}
 					value={primary?.total ?? 0}
 					hint={
 						primary?.failed
-							? `${primary.failed} failed — still billable`
-							: "Compare this against your Olostep dashboard"
+							? t("reports.failedBillable", { count: primary.failed })
+							: t("reports.compareThisAgainstYourOlostepDashboard")
 					}
 				/>
-				<StatCard title="All providers" value={data.grandTotal} hint={`${data.byProvider.length} providers active`} />
 				<StatCard
-					title="Tracked models"
+					title={t("reports.allProviders")}
+					value={data.grandTotal}
+					hint={t("reports.activeProviders", { count: data.byProvider.length })}
+				/>
+				<StatCard
+					title={t("reports.trackedModels")}
 					value={data.byModel.length}
-					hint={`Since ${formatDateTime(data.since, { dateStyle: "medium" })}`}
+					hint={t("reports.sinceDate", { date: formatDateTime(data.since, { dateStyle: "medium" }) })}
 				/>
 			</div>
 
 			<Card>
 				<CardHeader>
-					<CardTitle>Calls per day</CardTitle>
-					<CardDescription>One line per provider.</CardDescription>
+					<CardTitle>{t("reports.callsPerDay")}</CardTitle>
+					<CardDescription>{t("reports.oneLinePerProvider")}</CardDescription>
 				</CardHeader>
 				<CardContent>
 					{series.length === 0 || providerIds.length === 0 ? (
@@ -175,8 +180,8 @@ function UsageContent({ data }: { data: Usage }) {
 
 			<Card>
 				<CardHeader>
-					<CardTitle>Olostep calls by model</CardTitle>
-					<CardDescription>Every tracked model that routes through Olostep.</CardDescription>
+					<CardTitle>{t("reports.olostepCallsByModel")}</CardTitle>
+					<CardDescription>{t("reports.everyTrackedModelThatRoutesThroughOlostep")}</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-6">
 					{primaryModels.length === 0 ? (
@@ -184,7 +189,7 @@ function UsageContent({ data }: { data: Usage }) {
 					) : (
 						<>
 							<ChartContainer
-								config={{ total: { label: "Calls", color: "var(--chart-1)" } }}
+								config={{ total: { label: t("reports.calls"), color: "var(--chart-1)" } }}
 								className="h-[240px] w-full"
 							>
 								<BarChart data={primaryModels} layout="vertical" margin={{ left: 12 }}>
@@ -204,8 +209,8 @@ function UsageContent({ data }: { data: Usage }) {
 			{otherProviders.length > 0 && (
 				<Card>
 					<CardHeader>
-						<CardTitle>Other providers</CardTitle>
-						<CardDescription>Direct LLM APIs and any non-Olostep scrapers.</CardDescription>
+						<CardTitle>{t("reports.otherProviders")}</CardTitle>
+						<CardDescription>{t("reports.directLlmApisAndAnyNonOlostepScrapers")}</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<UsageTable
@@ -220,19 +225,17 @@ function UsageContent({ data }: { data: Usage }) {
 			{data.recentFailures.length > 0 && (
 				<Card>
 					<CardHeader>
-						<CardTitle>Recent failures</CardTitle>
-						<CardDescription>
-							Counted in the totals above — a call that errors upstream is generally still billed.
-						</CardDescription>
+						<CardTitle>{t("reports.recentFailures")}</CardTitle>
+						<CardDescription>{t("reports.countedInTheTotalsAboveACallThatErrorsUpstreamIsGenerally")}</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>When</TableHead>
-									<TableHead>Provider</TableHead>
-									<TableHead>Model</TableHead>
-									<TableHead>Error</TableHead>
+									<TableHead>{t("reports.when")}</TableHead>
+									<TableHead>{t("reports.provider")}</TableHead>
+									<TableHead>{t("reports.model")}</TableHead>
+									<TableHead>{t("reports.error")}</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -270,15 +273,15 @@ function UsageTable({
 		<Table>
 			<TableHeader>
 				<TableRow>
-					{showProvider && <TableHead>Provider</TableHead>}
-					<TableHead>Model</TableHead>
-					<TableHead className="text-right">Calls</TableHead>
-					<TableHead className="text-right">Failed</TableHead>
-					<TableHead className="text-right">Share</TableHead>
-					<TableHead className="text-right">Avg time</TableHead>
+					{showProvider && <TableHead>{t("reports.provider")}</TableHead>}
+					<TableHead>{t("reports.model")}</TableHead>
+					<TableHead className="text-right">{t("reports.calls")}</TableHead>
+					<TableHead className="text-right">{t("reports.failed")}</TableHead>
+					<TableHead className="text-right">{t("reports.share")}</TableHead>
+					<TableHead className="text-right">{t("reports.avgTime")}</TableHead>
 					<TableHead className="text-right">p95</TableHead>
-					<TableHead className="text-right">Slowest</TableHead>
-					<TableHead className="text-right">Last call</TableHead>
+					<TableHead className="text-right">{t("reports.slowest")}</TableHead>
+					<TableHead className="text-right">{t("reports.lastCall")}</TableHead>
 				</TableRow>
 			</TableHeader>
 			<TableBody>
@@ -286,7 +289,7 @@ function UsageTable({
 					<TableRow key={`${row.provider}:${row.model}`}>
 						{showProvider && <TableCell className="text-muted-foreground">{row.provider}</TableCell>}
 						<TableCell className="font-medium">{row.model}</TableCell>
-						<TableCell className="text-right tabular-nums">{row.total.toLocaleString()}</TableCell>
+						<TableCell className="text-right tabular-nums">{row.total.toLocaleString(UI_LOCALE)}</TableCell>
 						<TableCell className="text-right tabular-nums">
 							{row.failed > 0 ? <Badge variant="destructive">{row.failed}</Badge> : "—"}
 						</TableCell>
@@ -303,8 +306,8 @@ function UsageTable({
 				))}
 				<TableRow className="font-semibold">
 					{showProvider && <TableCell />}
-					<TableCell>Total</TableCell>
-					<TableCell className="text-right tabular-nums">{total.toLocaleString()}</TableCell>
+					<TableCell>{t("reports.total")}</TableCell>
+					<TableCell className="text-right tabular-nums">{total.toLocaleString(UI_LOCALE)}</TableCell>
 					<TableCell colSpan={6} />
 				</TableRow>
 			</TableBody>
@@ -317,7 +320,7 @@ function StatCard({ title, value, hint }: { title: string; value: number; hint: 
 		<Card>
 			<CardHeader className="pb-2">
 				<CardDescription>{title}</CardDescription>
-				<CardTitle className="text-3xl tabular-nums">{value.toLocaleString()}</CardTitle>
+				<CardTitle className="text-3xl tabular-nums">{value.toLocaleString(UI_LOCALE)}</CardTitle>
 			</CardHeader>
 			<CardContent>
 				<p className="text-xs text-muted-foreground">{hint}</p>
@@ -329,7 +332,7 @@ function StatCard({ title, value, hint }: { title: string; value: number; hint: 
 function EmptyState() {
 	return (
 		<p className="text-sm text-muted-foreground py-8 text-center">
-			No calls recorded yet for this range. Tracking starts with the next prompt run after the worker restarts.
+			{t("reports.noCallsRecordedYetForThisRangeTrackingStartsWithTheNext")}
 		</p>
 	);
 }

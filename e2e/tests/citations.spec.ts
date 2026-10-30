@@ -13,7 +13,7 @@ test.describe("Citations Page", () => {
     await page.goto(`/app/${BRAND_ID}/citations`);
     // Wait for SSR streaming + hydration to complete — the heading appears once
     // the route loaders finish and the page component renders.
-    await expect(page.getByRole("heading", { name: /citations/i })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: /citations|引用/i })).toBeVisible({ timeout: 30_000 });
   });
 
   test("page loads without crashing", async ({ page }) => {
@@ -21,26 +21,26 @@ test.describe("Citations Page", () => {
     // either citation content, an empty state, or an error message.
     // Use .first() because multiple elements may match when citation data loads.
     await expect(
-      page.getByText(/no citations found|failed to load|citations are only|total citations|cited/i).first()
+      page.getByText(/no citations found|failed to load|citations are only|total citations|cited|引用|読み込みに失敗/i).first()
     ).toBeVisible({ timeout: 30_000 });
   });
 
   test("page shows citations header or content", async ({ page }) => {
     // Wait for loading to finish
     await expect(
-      page.getByText(/no citations found|failed to load|citations are only|cited/i).first()
+      page.getByText(/no citations found|failed to load|citations are only|cited|引用|読み込みに失敗/i).first()
     ).toBeVisible({ timeout: 30_000 });
   });
 
   test("page has filter controls when loaded", async ({ page }) => {
     // Wait for loading to finish
     await expect(
-      page.getByText(/no citations found|failed to load|citations are only|cited/i).first()
+      page.getByText(/no citations found|failed to load|citations are only|cited|引用|読み込みに失敗/i).first()
     ).toBeVisible({ timeout: 30_000 });
 
     // Should have the page content
     const pageContent = await page.textContent("body");
-    expect(pageContent).toContain("Citations");
+    expect(pageContent).toMatch(/Citations|引用/);
   });
 
   test("page is accessible via sidebar navigation", async ({ page }) => {
@@ -51,6 +51,6 @@ test.describe("Citations Page", () => {
     await page.waitForURL(/\/citations/);
 
     const pageContent = await page.textContent("body");
-    expect(pageContent).toContain("Citations");
+    expect(pageContent).toMatch(/Citations|引用/);
   });
 });

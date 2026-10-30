@@ -1,3 +1,5 @@
+import { settingsError } from "@/i18n/settings-labels";
+import { t } from "@/i18n";
 /**
  * /app/$brand/settings/competitors - Competitor management page
  *
@@ -24,8 +26,8 @@ export const Route = createFileRoute("/_authed/app/$brand/settings/competitors")
 		const brandName = getBrandName(matches);
 		return {
 			meta: [
-				{ title: buildTitle("Competitors", { appName, brandName }) },
-				{ name: "description", content: "Manage your tracked competitors." },
+				{ title: buildTitle(t("settings.competitors"), { appName, brandName }) },
+				{ name: "description", content: t("settings.manageYourTrackedCompetitors") },
 			],
 		};
 	},
@@ -61,8 +63,8 @@ function CompetitorsSettingsPage() {
 		return (
 			<div className="space-y-6">
 				<div>
-					<h1 className="text-3xl font-bold">Competitors</h1>
-					<p className="text-muted-foreground">Loading...</p>
+					<h1 className="text-3xl font-bold">{t("settings.competitors")}</h1>
+					<p className="text-muted-foreground">{t("settings.loading")}</p>
 				</div>
 			</div>
 		);
@@ -72,8 +74,8 @@ function CompetitorsSettingsPage() {
 		return (
 			<div className="space-y-6">
 				<div>
-					<h1 className="text-3xl font-bold">Competitors</h1>
-					<p className="text-destructive">Brand not found</p>
+					<h1 className="text-3xl font-bold">{t("settings.competitors")}</h1>
+					<p className="text-destructive">{t("settings.brandNotFound")}</p>
 				</div>
 			</div>
 		);
@@ -102,9 +104,9 @@ function CompetitorsSettingsPage() {
 			queryClient.invalidateQueries({ queryKey: citationKeys.all });
 			queryClient.invalidateQueries({ queryKey: dashboardKeys.all });
 
-			setSuccess("Competitors updated successfully!");
+			setSuccess(t("settings.competitorsUpdatedSuccessfully"));
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "An error occurred");
+			setError(settingsError(err, t("settings.anErrorOccurred")));
 		} finally {
 			setIsSubmitting(false);
 		}
@@ -116,17 +118,17 @@ function CompetitorsSettingsPage() {
 				<div className="flex items-center gap-4">
 					<WebLogo domain={brand.website} size={48} />
 					<div>
-						<h1 className="text-3xl font-bold tracking-tight">Competitors</h1>
-						<p className="text-muted-foreground">Manage your tracked competitors.</p>
+						<h1 className="text-3xl font-bold tracking-tight">{t("settings.competitors")}</h1>
+						<p className="text-muted-foreground">{t("settings.manageYourTrackedCompetitors")}</p>
 					</div>
 				</div>
 			</div>
 
 			<Alert variant="default" className="border-yellow-200 bg-yellow-50 text-yellow-800">
 				<AlertTriangle className="h-4 w-4 text-yellow-600" />
-				<AlertTitle>Warning</AlertTitle>
+				<AlertTitle>{t("settings.warning")}</AlertTitle>
 				<AlertDescription className="text-yellow-700">
-					Updating competitors will only apply to future prompt evaluations. Citation categorization updates retroactively.
+					{t("settings.updatingCompetitorsWillOnlyApplyToFuturePromptEvaluations")}
 				</AlertDescription>
 			</Alert>
 
@@ -138,7 +140,7 @@ function CompetitorsSettingsPage() {
 
 				<div className="flex gap-2">
 					<Button type="submit" disabled={isSubmitting || isReadOnly} className="cursor-pointer">
-						{isSubmitting ? "Saving..." : "Save Changes"}
+						{isSubmitting ? t("settings.saving") : t("settings.saveChanges")}
 					</Button>
 				</div>
 			</form>

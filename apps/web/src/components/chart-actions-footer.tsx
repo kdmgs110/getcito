@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useRouteContext } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
 import { getOptimizeButtonForMode } from "@workspace/deployment/client";
@@ -77,10 +78,10 @@ export function ChartActionsFooter({
 							size="sm"
 							variant="secondary"
 							className="text-xs cursor-pointer h-6 flex items-center px-2"
-							title="Download chart as PNG"
+							title={t("core.downloadChartAsPNG")}
 						>
 							<Download className="size-3 mr-0.5" />
-							<span className="text-xs font-normal">{isDownloading ? "Exporting..." : "Export (PNG)"}</span>
+							<span className="text-xs font-normal">{isDownloading ? t("core.exporting") : t("core.exportPNG")}</span>
 						</Button>
 					)}
 				</div>

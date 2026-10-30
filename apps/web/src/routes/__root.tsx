@@ -1,3 +1,4 @@
+import { APP_LANGUAGE, t } from "@/i18n";
 /// <reference types="vite/client" />
 import { useEffect } from "react";
 import { HeadContent, Outlet, ScriptOnce, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
@@ -27,8 +28,10 @@ interface RouterContext {
 
 // Client-side cache for config data — avoids HTTP round-trips on every SPA navigation.
 // Server-side (SSR) always fetches fresh (cachedRootData is reset per request).
-let cachedRootData: { clientConfig: PublicClientConfig; envValidation: { mode: DeploymentMode; missing: MissingEnvVar[]; isValid: boolean } } | null =
-	typeof window === "undefined" ? null : null;
+let cachedRootData: {
+	clientConfig: PublicClientConfig;
+	envValidation: { mode: DeploymentMode; missing: MissingEnvVar[]; isValid: boolean };
+} | null = typeof window === "undefined" ? null : null;
 
 export const Route = createRootRouteWithContext<RouterContext>()({
 	notFoundComponent: NotFound,
@@ -62,8 +65,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 		const themeColor = hasCustomIcon ? "#000000" : Getcito_THEME_COLOR;
 		const appUrl = branding?.url ? branding.url.replace(/\/$/, "") : undefined;
 
-		const title = `${appName} - AI Search Optimization`;
-		const description = "Track and optimize your brand's visibility across AI models.";
+		const title = `${appName} - ${t("core.tagline")}`;
+		const description = t("core.trackAndOptimizeYourBrandsVisibilityAcrossAIModels");
 		// Don't pass `title` to /api/og — the renderer already shows the brand
 		// (Getcito logo or whitelabel icon + name), so a "Brand - AI Search Optimization"
 		// title would render redundantly. Pages that override og:image can supply
@@ -88,7 +91,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 				{ name: "theme-color", content: themeColor },
 				{ name: "apple-mobile-web-app-title", content: appName },
 				{ property: "og:site_name", content: appName },
-				{ property: "og:locale", content: "en_US" },
+				{ property: "og:locale", content: APP_LANGUAGE === "ja" ? "ja_JP" : "en_US" },
 				{ property: "og:title", content: title },
 				{ property: "og:description", content: description },
 				{ property: "og:image", content: ogImage },
@@ -160,7 +163,7 @@ function RootComponent() {
 
 	if (!envValidation.isValid) {
 		return (
-			<html lang="en">
+			<html lang={APP_LANGUAGE}>
 				<head>
 					<HeadContent />
 				</head>
@@ -173,7 +176,7 @@ function RootComponent() {
 	}
 
 	return (
-		<html lang="en">
+		<html lang={APP_LANGUAGE}>
 			<head>
 				{clarityProjectId && <ScriptOnce>{clarityQueueScript}</ScriptOnce>}
 				<HeadContent />

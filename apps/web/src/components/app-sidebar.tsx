@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import {
 	IconBuilding,
 	IconBuildings,
@@ -62,7 +63,7 @@ export function AppSidebar({
 	if (!adminOnly) {
 		const dashboardItems = [
 			{
-				title: "Overview",
+				title: t("settings.overview"),
 				url: "/",
 				icon: IconDashboard,
 			},
@@ -72,27 +73,27 @@ export function AppSidebar({
 		if (brand?.onboarded) {
 			dashboardItems.push(
 				{
-					title: "Visibility",
+					title: t("settings.visibility"),
 					url: "/visibility",
 					icon: IconChartBar,
 				},
 				{
-					title: "Share of Voice",
+					title: t("settings.shareOfVoice"),
 					url: "/share-of-voice",
 					icon: IconSpeakerphone,
 				},
 				{
-					title: "Query Fan-Out",
+					title: t("settings.queryFanOut"),
 					url: "/query-fan-out",
 					icon: IconSitemap,
 				},
 				{
-					title: "Citations",
+					title: t("settings.citations"),
 					url: "/citations",
 					icon: IconLink,
 				},
 				{
-					title: "Opportunities",
+					title: t("settings.opportunities"),
 					url: "/opportunities",
 					icon: IconTarget,
 				},
@@ -100,31 +101,31 @@ export function AppSidebar({
 		}
 
 		groups.push({
-			label: "Dashboard",
+			label: t("settings.dashboard"),
 			items: dashboardItems,
 		});
 
 		// Settings section - always show so users can access brand settings or delete the brand
 		groups.push({
-			label: "Settings",
+			label: t("settings.settings"),
 			items: [
 				{
-					title: "Brand",
+					title: t("settings.brand"),
 					url: "/settings/brand",
 					icon: IconBuilding,
 				},
 				{
-					title: "Competitors",
+					title: t("settings.competitors"),
 					url: "/settings/competitors",
 					icon: IconBuildings,
 				},
 				{
-					title: "Prompts",
+					title: t("settings.prompts"),
 					url: "/settings/prompts",
 					icon: IconListDetails,
 				},
 				{
-					title: "LLMs",
+					title: t("settings.llms"),
 					url: "/settings/llms",
 					icon: IconCpu,
 				},
@@ -137,37 +138,37 @@ export function AppSidebar({
 		const adminItems = isAdmin
 			? [
 					{
-						title: "Brands",
+						title: t("settings.brands"),
 						url: "/admin",
 						icon: IconTable,
 						absolute: true,
 					},
 					{
-						title: "Reports",
+						title: t("settings.reports"),
 						url: "/reports",
 						icon: IconReport,
 						absolute: true,
 					},
 					{
-						title: "Workflows",
+						title: t("settings.workflows"),
 						url: "/admin/workflows",
 						icon: IconTimeline,
 						absolute: true,
 					},
 					{
-						title: "Queue",
+						title: t("settings.queue"),
 						url: "/admin/queue",
 						icon: IconListNumbers,
 						absolute: true,
 					},
 					{
-						title: "API Usage",
+						title: t("settings.apiUsage"),
 						url: "/admin/usage",
 						icon: IconGauge,
 						absolute: true,
 					},
 					{
-						title: "Tools",
+						title: t("settings.tools"),
 						url: "/admin/tools",
 						icon: IconTool,
 						absolute: true,
@@ -175,7 +176,7 @@ export function AppSidebar({
 				]
 			: [
 					{
-						title: "Reports",
+						title: t("settings.reports"),
 						url: "/reports",
 						icon: IconReport,
 						absolute: true,
@@ -183,7 +184,7 @@ export function AppSidebar({
 				];
 
 		groups.push({
-			label: "Admin",
+			label: t("settings.admin"),
 			items: adminItems,
 		});
 	}

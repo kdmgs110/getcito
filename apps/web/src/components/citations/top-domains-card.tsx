@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Separator } from "@workspace/ui/components/separator";
@@ -48,26 +49,27 @@ export function TopDomainsCard({
 				<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
 					<div className="space-y-1 min-w-0">
 						<CardTitle className="flex items-center gap-1.5">
-							Top Cited Domains
+							{t("dashboard.topCitedDomains")}
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
 								</TooltipTrigger>
 								<TooltipContent className="max-w-xs text-sm font-normal">
-									The most frequently cited domains across all prompt evaluations. Each domain is colored by its category (brand, competitor, etc.).
+									{t("dashboard.theMostFrequentlyCitedDomainsAcrossAllPrompt")}
 								</TooltipContent>
 							</Tooltip>
 						</CardTitle>
-						<CardDescription>
-							Which domains LLMs reference most when responding to your prompts
-						</CardDescription>
+						<CardDescription>{t("dashboard.whichDomainsLlmsReferenceMostWhenRespondingTo")}</CardDescription>
 					</div>
 					<div className="relative w-full sm:w-48 shrink-0">
 						<IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
 						<Input
-							placeholder="Search domains..."
+							placeholder={t("dashboard.searchDomains")}
 							value={domainSearch}
-							onChange={(e) => { setDomainSearch(e.target.value); setVisibleDomains(maxDomains); }}
+							onChange={(e) => {
+								setDomainSearch(e.target.value);
+								setVisibleDomains(maxDomains);
+							}}
 							className="h-8 pl-8 text-xs"
 						/>
 					</div>
@@ -80,7 +82,10 @@ export function TopDomainsCard({
 						<UnderlineTabs
 							tabs={sourceTabs}
 							activeKey={selectedCategory}
-							onSelect={(key) => { setSelectedCategory(key); setVisibleDomains(maxDomains); }}
+							onSelect={(key) => {
+								setSelectedCategory(key);
+								setVisibleDomains(maxDomains);
+							}}
 						/>
 					</div>
 				)}
@@ -94,15 +99,16 @@ export function TopDomainsCard({
 								label: domain.domain,
 								count: domain.count,
 								category: domain.category || "other",
-								action: domain.category === "other" && brandId && competitors ? (
-									<TrackDomainPopover
-										domain={domain.domain}
-										brandId={brandId}
-										brandName={brandName}
-										competitors={competitors}
-										onAdded={onCompetitorAdded}
-									/>
-								) : undefined,
+								action:
+									domain.category === "other" && brandId && competitors ? (
+										<TrackDomainPopover
+											domain={domain.domain}
+											brandId={brandId}
+											brandName={brandName}
+											competitors={competitors}
+											onAdded={onCompetitorAdded}
+										/>
+									) : undefined,
 							}))}
 							colorMapping={DOMAIN_CATEGORY_COLORS}
 							percentageMode="max"
@@ -113,12 +119,14 @@ export function TopDomainsCard({
 								onClick={() => setVisibleDomains((prev) => Math.min(prev + 20, 100))}
 								className="mt-6 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-3 py-1.5 rounded-md border border-border hover:bg-muted/60 transition-colors"
 							>
-								Show more
+								{t("dashboard.showMore")}
 							</button>
 						)}
 					</>
 				) : (
-					<p className="text-sm text-muted-foreground text-center py-4">No domains match the current filters.</p>
+					<p className="text-sm text-muted-foreground text-center py-4">
+						{t("dashboard.noDomainsMatchTheCurrentFilters")}
+					</p>
 				)}
 			</CardContent>
 		</Card>

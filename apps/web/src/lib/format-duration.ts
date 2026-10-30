@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 /**
  * Coarse duration formatting for the admin monitoring pages.
  *
@@ -13,18 +14,24 @@ export function formatDuration(ms: number): string {
 
 	if (weeks > 0) {
 		const remainingDays = days % 7;
-		return remainingDays > 0 ? `${weeks}w ${remainingDays}d` : `${weeks}w`;
+		return remainingDays > 0
+			? `${t("core.durationWeeks", { value: weeks })} ${t("core.durationDays", { value: remainingDays })}`
+			: `${t("core.durationWeeks", { value: weeks })}`;
 	}
 	if (days > 0) {
 		const remainingHours = hours % 24;
-		return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+		return remainingHours > 0
+			? `${t("core.durationDays", { value: days })} ${t("core.durationHours", { value: remainingHours })}`
+			: `${t("core.durationDays", { value: days })}`;
 	}
 	if (hours > 0) {
 		const remainingMinutes = minutes % 60;
-		return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+		return remainingMinutes > 0
+			? `${t("core.durationHours", { value: hours })} ${t("core.durationMinutes", { value: remainingMinutes })}`
+			: `${t("core.durationHours", { value: hours })}`;
 	}
-	if (minutes > 0) return `${minutes}m`;
-	return `${seconds}s`;
+	if (minutes > 0) return `${t("core.durationMinutes", { value: minutes })}`;
+	return `${t("core.durationSeconds", { value: seconds })}`;
 }
 
 /**
@@ -34,20 +41,20 @@ export function formatDuration(ms: number): string {
  */
 export function formatLatency(ms: number | null | undefined): string {
 	if (ms == null) return "—";
-	if (ms < 1000) return `${Math.round(ms)}ms`;
-	if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+	if (ms < 1000) return t("core.durationMilliseconds", { value: Math.round(ms) });
+	if (ms < 60_000) return t("core.durationSeconds", { value: (ms / 1000).toFixed(1) });
 	return formatDuration(ms);
 }
 
 export function formatRelativeTime(dateStr: string | null): string {
-	if (!dateStr) return "Never";
+	if (!dateStr) return t("core.never");
 	const diffMs = Date.now() - new Date(dateStr).getTime();
-	return `${formatDuration(diffMs)} ago`;
+	return t("core.relativePast", { duration: formatDuration(diffMs) });
 }
 
 export function formatFutureTime(timestamp: number | null): string {
-	if (!timestamp) return "Unknown";
+	if (!timestamp) return t("core.unknown");
 	const diffMs = timestamp - Date.now();
-	if (diffMs < 0) return "Overdue";
-	return `in ${formatDuration(diffMs)}`;
+	if (diffMs < 0) return t("core.overdue");
+	return t("core.relativeFuture", { duration: formatDuration(diffMs) });
 }

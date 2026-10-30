@@ -12,7 +12,7 @@ test.describe("Visibility Page", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(`/app/${BRAND_ID}/visibility`);
     // Wait for SSR streaming + hydration — heading appears once route loaders finish
-    await expect(page.getByRole("heading", { name: "Visibility" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: /Visibility|表示状況/ })).toBeVisible({ timeout: 30_000 });
   });
 
   test("page loads with correct title", async ({ page }) => {
@@ -23,7 +23,7 @@ test.describe("Visibility Page", () => {
     // The page body should contain visibility-related content
     const pageContent = await page.textContent("body");
     const hasContent =
-      pageContent?.includes("Visibility") ||
+      /Visibility|表示状況/.test(pageContent ?? "") ||
       pageContent?.includes("monitoring") ||
       pageContent?.includes("prompts");
     expect(hasContent).toBeTruthy();
@@ -43,6 +43,6 @@ test.describe("Visibility Page", () => {
     await expect(visLink).toBeVisible({ timeout: 15_000 });
     await visLink.click();
     await page.waitForURL(/\/visibility/);
-    await expect(page.getByRole("heading", { name: "Visibility" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: /Visibility|表示状況/ })).toBeVisible({ timeout: 15_000 });
   });
 });

@@ -1,5 +1,8 @@
 @import "tailwindcss" source(none);
 @import "@fontsource/titan-one";
+@import "@fontsource/noto-sans-jp/japanese-400.css";
+@import "@fontsource/noto-sans-jp/japanese-500.css";
+@import "@fontsource/noto-sans-jp/japanese-700.css";
 
 @import "tw-animate-css";
 
@@ -18,7 +21,7 @@
 @theme inline {
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
-	--font-sans: var(--font-geist-sans);
+	--font-sans: "Geist Sans", "Noto Sans JP", system-ui, sans-serif;
 	--font-mono: var(--font-geist-mono);
 	--font-titan-one: "Titan One", cursive;
 	--color-sidebar-ring: var(--sidebar-ring);

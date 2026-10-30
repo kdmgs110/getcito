@@ -1,3 +1,5 @@
+import { settingsError } from "@/i18n/settings-labels";
+import { t } from "@/i18n";
 /**
  * Single-step onboarding wizard.
  *
@@ -6,7 +8,7 @@
  * DataForSEO + Anthropic in tandem.
  */
 import { useState, useCallback, useEffect, memo, useMemo, useRef } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
@@ -35,7 +37,6 @@ interface PromptWizardProps {
 }
 
 /** Brand analysis runs in the worker (LLM + web search, ~1 min); the client polls for the result. */
-const POLL_INTERVAL_MS = 2000;
 const ANALYZE_TIMEOUT_MS = 6 * 60 * 1000; // give up after ~6 minutes
 
 const analyzeStatusKey = (brandId: string) => ["analyze-brand", "status", brandId] as const;
@@ -56,7 +57,7 @@ const EditableTagsInput = memo(
 	({
 		items,
 		onValueChange,
-		placeholder = "Add item...",
+		placeholder = t("settings.addItem"),
 		maxItems = 10,
 	}: {
 		items: string[];
@@ -73,10 +74,10 @@ const EditableTagsInput = memo(
 				maxItems={maxItems}
 			/>
 			<p className="text-xs text-muted-foreground">
-				<strong>
-					{items.length}/{maxItems}
-				</strong>{" "}
-				{items.length >= maxItems ? "items added. Remove an item to add a new one." : "items entered."}
+				{t(items.length >= maxItems ? "settings.itemsLimit" : "settings.itemsCount", {
+					count: items.length,
+					max: maxItems,
+				})}
 			</p>
 		</div>
 	),
@@ -98,14 +99,14 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [submitError, setSubmitError] = useState<string | null>(null);
 	const [isSaving, setIsSaving] = useState(false);
-	
+
 	const [data, setData] = useState<WizardData>(() => {
 		if (typeof window !== "undefined" && STORAGE_KEY) {
 			const cached = localStorage.getItem(STORAGE_KEY);
 			if (cached) {
 				try {
 					return JSON.parse(cached);
-				} catch (e) {
+				} catch {
 					// ignore
 				}
 			}
@@ -138,8 +139,7 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 	);
 
 	const { mutate: enqueueAnalysis, isPending: isAnalyzingBrand } = useMutation({
-		mutationFn: (vars: { brandId: string; website: string; brandName?: string }) =>
-			analyzeBrandInfoFn({ data: vars }),
+		mutationFn: (vars: { brandId: string; website: string; brandName?: string }) => analyzeBrandInfoFn({ data: vars }),
 		onMutate: () => {
 			setError(null);
 			setPhase("analyzing");
@@ -154,9 +154,7 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 				competitors: result.competitors.map((c) =>
 					newCompetitorEntry({ name: c.name, domains: c.domains, aliases: c.aliases, expanded: false }),
 				),
-				prompts: result.suggestedPrompts.map((p) =>
-					newPromptEntry({ value: p.prompt, tags: p.tags, enabled: true }),
-				),
+				prompts: result.suggestedPrompts.map((p) => newPromptEntry({ value: p.prompt, tags: p.tags, enabled: true })),
 				shortDescription: result.shortDescription,
 				productsAndServices: result.productsAndServices,
 				keywords: result.keywords,
@@ -166,14 +164,13 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 			setPhase("review");
 		},
 		onError: (err) => {
-			setError(err instanceof Error ? err.message : "Analysis failed");
+			setError(settingsError(err, t("settings.analysisFailed")));
 			setPhase("idle");
 		},
 	});
 
 	const { mutate: enqueueCompetitorsAnalysis, isPending: isAnalyzingCompetitors } = useMutation({
-		mutationFn: (vars: { brandId: string; website: string; brandName: string }) =>
-			analyzeCompetitorsFn({ data: vars }),
+		mutationFn: (vars: { brandId: string; website: string; brandName: string }) => analyzeCompetitorsFn({ data: vars }),
 		onSuccess: (result) => {
 			setData((prev) => ({
 				...prev,
@@ -188,7 +185,7 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 			}));
 		},
 		onError: (err) => {
-			setError(err instanceof Error ? err.message : "Competitors analysis failed");
+			setError(settingsError(err, t("settings.competitorsAnalysisFailed")));
 		},
 	});
 
@@ -198,13 +195,11 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 		onSuccess: (result) => {
 			setData((prev) => ({
 				...prev,
-				prompts: result.suggestedPrompts.map((p) =>
-					newPromptEntry({ value: p.prompt, tags: p.tags, enabled: true }),
-				),
+				prompts: result.suggestedPrompts.map((p) => newPromptEntry({ value: p.prompt, tags: p.tags, enabled: true })),
 			}));
 		},
 		onError: (err) => {
-			setError(err instanceof Error ? err.message : "Prompts analysis failed");
+			setError(settingsError(err, t("settings.promptsAnalysisFailed")));
 		},
 	});
 
@@ -258,7 +253,7 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 	useEffect(() => {
 		if (phase !== "analyzing") return;
 		const timer = window.setTimeout(
-			() => stopAnalyzing("Brand analysis timed out. Please try again."),
+			() => stopAnalyzing(t("settings.brandAnalysisTimedOutPleaseTryAgain")),
 			ANALYZE_TIMEOUT_MS,
 		);
 		return () => window.clearTimeout(timer);
@@ -275,19 +270,16 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 		(competitors: CompetitorEntry[]) => setData((p) => ({ ...p, competitors })),
 		[],
 	);
-	const updatePrompts = useCallback(
-		(prompts: EditablePrompt[]) => setData((p) => ({ ...p, prompts })),
+	const updatePrompts = useCallback((prompts: EditablePrompt[]) => setData((p) => ({ ...p, prompts })), []);
+	const updateShortDescription = useCallback(
+		(shortDescription: string) => setData((p) => ({ ...p, shortDescription })),
 		[],
 	);
-	const updateShortDescription = useCallback((shortDescription: string) => setData((p) => ({ ...p, shortDescription })), []);
 	const updateProductsAndServices = useCallback(
 		(productsAndServices: string[]) => setData((p) => ({ ...p, productsAndServices })),
 		[],
 	);
-	const updateKeywords = useCallback(
-		(keywords: string[]) => setData((p) => ({ ...p, keywords })),
-		[],
-	);
+	const updateKeywords = useCallback((keywords: string[]) => setData((p) => ({ ...p, keywords })), []);
 
 	const previewCounts = useMemo(() => {
 		const enabled = data.prompts.filter((p) => p.enabled && p.value.trim().length > 0).length;
@@ -343,39 +335,38 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 			if (STORAGE_KEY) localStorage.removeItem(STORAGE_KEY);
 			onComplete();
 		} catch (err) {
-			setSubmitError(err instanceof Error ? err.message : "Failed to save");
+			setSubmitError(settingsError(err, t("settings.failedToSave")));
 		} finally {
 			setIsSaving(false);
 		}
-	}, [brand, data, queryClient, router, onComplete]);
+	}, [brand, data, queryClient, router, onComplete, STORAGE_KEY]);
 
 	if (phase === "idle" || phase === "analyzing") {
 		return (
 			<div className="max-w-2xl mx-auto space-y-6">
 				<div className="space-y-2">
-					<h2 className="text-2xl font-bold">Analyzing {brand?.name || "Brand"}</h2>
+					<h2 className="text-2xl font-bold">
+						{t("settings.analyzingBrand", { brand: brand?.name || t("settings.brand") })}
+					</h2>
 					<p className="text-muted-foreground text-balance">
-						Please wait while we analyze {brand?.website} to find competitors, additional domains, and the best generative AI prompts to track. This process may take a couple of minutes.
+						{t("settings.analysisProgress", { website: brand?.website ?? "" })}
 					</p>
 				</div>
-				
+
 				{error ? (
 					<div className="space-y-4">
 						<div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
 							<AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
 							<span>{error}</span>
 						</div>
-						<Button
-							onClick={handleAnalyze}
-							className="flex items-center gap-2 cursor-pointer"
-						>
-							<Play className="h-4 w-4" /> Retry Analysis
+						<Button onClick={handleAnalyze} className="flex items-center gap-2 cursor-pointer">
+							<Play className="h-4 w-4" /> {t("settings.retryAnalysis")}
 						</Button>
 					</div>
 				) : (
 					<div className="flex items-center gap-2 text-sm text-muted-foreground">
-						<Loader2 className="h-4 w-4 animate-spin text-primary" /> 
-						<span className="font-medium text-foreground">Analyzing brand data...</span>
+						<Loader2 className="h-4 w-4 animate-spin text-primary" />
+						<span className="font-medium text-foreground">{t("settings.analyzingBrandData")}</span>
 					</div>
 				)}
 			</div>
@@ -388,23 +379,23 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 				<div className="flex items-center gap-4">
 					<WebLogo domain={data.website} size={48} />
 					<div>
-						<h2 className="text-2xl font-bold">Brand details</h2>
+						<h2 className="text-2xl font-bold">{t("settings.brandDetails")}</h2>
 						<p className="text-muted-foreground">
-							Confirm the brand identity, additional domains, and aliases used for tracking.
+							{t("settings.confirmTheBrandIdentityAdditionalDomainsAndAliasesUsed")}
 						</p>
 					</div>
 				</div>
 				<div className="space-y-3 mt-4">
 					<div>
-						<p className="text-xs text-muted-foreground">Brand name</p>
+						<p className="text-xs text-muted-foreground">{t("settings.brandName")}</p>
 						<Input
 							value={data.brandName}
 							onChange={(e) => updateBrandName(e.target.value)}
-							placeholder="Brand name"
+							placeholder={t("settings.brandName")}
 						/>
 					</div>
 					<div>
-						<p className="text-xs text-muted-foreground">Website URL</p>
+						<p className="text-xs text-muted-foreground">{t("settings.websiteUrl")}</p>
 						<Input
 							type="url"
 							value={data.website}
@@ -413,50 +404,50 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 						/>
 					</div>
 					<div>
-						<p className="text-xs text-muted-foreground">Additional domains</p>
+						<p className="text-xs text-muted-foreground">{t("settings.additionalDomains2")}</p>
 						<EditableTagsInput
 							items={data.additionalDomains}
 							onValueChange={updateAdditionalDomains}
-							placeholder="Add domain..."
+							placeholder={t("settings.addDomain")}
 							maxItems={10}
 						/>
 					</div>
 					<div>
-						<p className="text-xs text-muted-foreground">Aliases</p>
+						<p className="text-xs text-muted-foreground">{t("settings.aliases")}</p>
 						<EditableTagsInput
 							items={data.aliases}
 							onValueChange={updateAliases}
-							placeholder="Add alias..."
+							placeholder={t("settings.addAlias")}
 							maxItems={10}
 						/>
 					</div>
 				</div>
 				<div className="space-y-3 mt-3">
 					<div>
-						<p className="text-xs text-muted-foreground">Short description</p>
+						<p className="text-xs text-muted-foreground">{t("settings.shortDescription2")}</p>
 						<Textarea
 							value={data.shortDescription || ""}
 							onChange={(e) => updateShortDescription(e.target.value)}
-							placeholder="Brief summary of the brand..."
+							placeholder={t("settings.briefSummaryOfTheBrand")}
 							rows={3}
 							className="resize-none"
 						/>
 					</div>
 					<div>
-						<p className="text-xs text-muted-foreground">Products and services</p>
+						<p className="text-xs text-muted-foreground">{t("settings.productsAndServices")}</p>
 						<EditableTagsInput
 							items={data.productsAndServices || []}
 							onValueChange={updateProductsAndServices}
-							placeholder="Add product or service..."
+							placeholder={t("settings.addProductOrService")}
 							maxItems={20}
 						/>
 					</div>
 					<div>
-						<p className="text-xs text-muted-foreground">Keywords</p>
+						<p className="text-xs text-muted-foreground">{t("settings.keywords")}</p>
 						<EditableTagsInput
 							items={data.keywords || []}
 							onValueChange={updateKeywords}
-							placeholder="Add keyword..."
+							placeholder={t("settings.addKeyword")}
 							maxItems={20}
 						/>
 					</div>
@@ -468,8 +459,8 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 			<div className="space-y-3">
 				<div className="flex items-center justify-between">
 					<div>
-						<h2 className="text-2xl font-bold">Competitors</h2>
-						<p className="text-sm text-muted-foreground">Companies you want tracked alongside your brand.</p>
+						<h2 className="text-2xl font-bold">{t("settings.competitors")}</h2>
+						<p className="text-sm text-muted-foreground">{t("settings.companiesYouWantTrackedAlongsideYourBrand")}</p>
 					</div>
 					<Button
 						variant="outline"
@@ -479,10 +470,10 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 					>
 						{isAnalyzingCompetitors ? (
 							<>
-								<Loader2 className="h-4 w-4 mr-2 animate-spin" /> Finding…
+								<Loader2 className="h-4 w-4 mr-2 animate-spin" /> {t("settings.finding")}
 							</>
 						) : (
-							"Find Competitors"
+							t("settings.findCompetitors")
 						)}
 					</Button>
 				</div>
@@ -494,23 +485,19 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 			<div className="space-y-3">
 				<div className="flex items-center justify-between">
 					<div>
-						<h2 className="text-2xl font-bold">Prompts</h2>
+						<h2 className="text-2xl font-bold">{t("settings.prompts")}</h2>
 						<p className="text-sm text-muted-foreground">
-							Pick which AI tracking prompts to start with. <br /> Untick any you don't want, edit tags, or add your own at the bottom.
+							{t("settings.pickWhichAiTrackingPromptsToStartWith")}
+							<br /> {t("settings.untickAnyYouDonTWantEditTagsOr")}
 						</p>
 					</div>
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={handleAnalyzePrompts}
-						disabled={isAnalyzingPrompts || isSaving}
-					>
+					<Button variant="outline" size="sm" onClick={handleAnalyzePrompts} disabled={isAnalyzingPrompts || isSaving}>
 						{isAnalyzingPrompts ? (
 							<>
-								<Loader2 className="h-4 w-4 mr-2 animate-spin" /> Suggesting…
+								<Loader2 className="h-4 w-4 mr-2 animate-spin" /> {t("settings.suggesting")}
 							</>
 						) : (
-							"Suggest Prompts"
+							t("settings.suggestPrompts")
 						)}
 					</Button>
 				</div>
@@ -531,15 +518,14 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 			>
 				{isSaving ? (
 					<>
-						<Loader2 className="h-4 w-4 animate-spin" /> Saving…
+						<Loader2 className="h-4 w-4 animate-spin" /> {t("settings.saving2")}
 					</>
 				) : (
 					<>
-						<Rocket className="h-4 w-4" /> Start tracking ({previewCounts.totalNew} new prompts)
+						<Rocket className="h-4 w-4" /> {t("settings.startTracking", { count: previewCounts.totalNew })}
 					</>
 				)}
 			</Button>
 		</div>
 	);
 }
-

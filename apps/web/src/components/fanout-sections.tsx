@@ -1,6 +1,7 @@
+import { t, formatNumber } from "@/i18n";
 /**
  * Shared fan-out UI sections, used by the Query Fan-Out page and the prompt
- * details "Web Queries" tab: variation lines with prompt-keyword bolding and
+ * details t("dashboard.webQueries") tab: variation lines with prompt-keyword bolding and
  * run counts, a per-model variations breakdown, and the Query Words section
  * (term cloud + Added/Preserved/Dropped word changes).
  */
@@ -50,9 +51,7 @@ export function UnknownQueriesNote({ byModel }: { byModel: ModelFanoutStat[] }) 
 	if (hidden.length === 0) return null;
 	return (
 		<div className="text-muted-foreground text-xs">
-			{hidden.map((m) => getModelDisplayName(m.model)).join(", ")} ran with web search enabled but the queries are
-			unknown — the engine may not have searched, searched with just the prompt itself, or searched without revealing
-			its queries.
+			{t("dashboard.unknownQueriesNote", { models: hidden.map((m) => getModelDisplayName(m.model)).join(", ") })}
 		</div>
 	);
 }
@@ -96,12 +95,18 @@ export function VariationLine({
 				))}
 			</div>
 			{modelCounts?.length ? (
-				<span className="text-muted-foreground shrink-0 text-right text-xs tabular-nums leading-6" title="Times each engine ran this search">
-					{modelCounts.map((mc) => `${mc.count.toLocaleString()}× ${getModelDisplayName(mc.model)}`).join(" · ")}
+				<span
+					className="text-muted-foreground shrink-0 text-right text-xs tabular-nums leading-6"
+					title={t("dashboard.timesEachEngineRanThisSearch")}
+				>
+					{modelCounts.map((mc) => `${formatNumber(mc.count)}× ${getModelDisplayName(mc.model)}`).join(" · ")}
 				</span>
 			) : (
-				<span className="text-muted-foreground shrink-0 text-sm tabular-nums" title="Times engines ran this search">
-					{variation.count.toLocaleString()}×
+				<span
+					className="text-muted-foreground shrink-0 text-sm tabular-nums"
+					title={t("dashboard.timesEnginesRanThisSearch")}
+				>
+					{formatNumber(variation.count)}×
 				</span>
 			)}
 		</div>
@@ -122,7 +127,7 @@ export function VariationsList({
 	modelCounts?: Map<string, VariationModelCount[]>;
 }) {
 	if (variations.length === 0) {
-		return <div className="text-muted-foreground py-4 text-sm">No web queries for this selection.</div>;
+		return <div className="text-muted-foreground py-4 text-sm">{t("dashboard.noWebQueriesForThisSelection")}</div>;
 	}
 	return (
 		<div className="space-y-2">
@@ -131,7 +136,7 @@ export function VariationsList({
 			))}
 			{totalUnique !== undefined && totalUnique > variations.length && (
 				<div className="text-muted-foreground text-xs">
-					Top {variations.length} of {totalUnique.toLocaleString()} variations shown
+					{t("dashboard.topVariations", { shown: variations.length, total: formatNumber(totalUnique) })}
 				</div>
 			)}
 		</div>
@@ -145,9 +150,9 @@ export function VariationsList({
 type WordTab = "added" | "preserved" | "dropped";
 
 const WORD_TAB_HELP: Record<WordTab, string> = {
-	added: "Words engines add that weren't in your prompt — the intent they layer on (e.g. “best”, “2026”, “vs”).",
-	preserved: "Words from your prompt engines keep in their searches.",
-	dropped: "Words from your prompt engines leave out of their searches.",
+	added: t("dashboard.addedWordsHelp"),
+	preserved: t("dashboard.preservedWordsHelp"),
+	dropped: t("dashboard.droppedWordsHelp"),
 };
 
 export function QueryWordsSection({ terms, wordChanges }: { terms: TermStat[]; wordChanges: WordChanges }) {
@@ -175,23 +180,23 @@ export function QueryWordsSection({ terms, wordChanges }: { terms: TermStat[]; w
 					<div className="flex flex-wrap items-center justify-between gap-3">
 						<div>
 							<CardTitle className="flex items-center gap-1.5 text-base">
-								Word Changes
+								{t("dashboard.wordChanges")}
 								<InfoTip>{WORD_TAB_HELP[tab]}</InfoTip>
 							</CardTitle>
-							<CardDescription>How engines rewrite your prompt wording.</CardDescription>
+							<CardDescription>{t("dashboard.howEnginesRewriteYourPromptWording")}</CardDescription>
 						</div>
 						<div className="flex items-center gap-4">
 							<div className="flex items-center gap-2">
 								<Switch id="qf-hide-stop" checked={hideStop} onCheckedChange={setHideStop} />
 								<label htmlFor="qf-hide-stop" className="text-muted-foreground cursor-pointer text-sm">
-									Hide stop words
+									{t("dashboard.hideStopWords")}
 								</label>
 							</div>
 							<Tabs value={tab} onValueChange={(v) => setTab(v as WordTab)}>
 								<TabsList>
-									<TabsTrigger value="added">Added</TabsTrigger>
-									<TabsTrigger value="preserved">Preserved</TabsTrigger>
-									<TabsTrigger value="dropped">Dropped</TabsTrigger>
+									<TabsTrigger value="added">{t("dashboard.added")}</TabsTrigger>
+									<TabsTrigger value="preserved">{t("dashboard.preserved")}</TabsTrigger>
+									<TabsTrigger value="dropped">{t("dashboard.dropped")}</TabsTrigger>
 								</TabsList>
 							</Tabs>
 						</div>
@@ -203,7 +208,7 @@ export function QueryWordsSection({ terms, wordChanges }: { terms: TermStat[]; w
 						<ProgressBarChart items={items} defaultColor={FANOUT_PURPLE} />
 					) : (
 						<div className="text-muted-foreground py-6 text-center text-sm">
-							No {tab} words{hideStop ? " (try showing stop words)" : ""}.
+							{t("dashboard.noWords", { hint: hideStop ? t("dashboard.showStopWordsHint") : "" })}
 						</div>
 					)}
 				</CardContent>

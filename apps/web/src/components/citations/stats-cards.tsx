@@ -1,16 +1,9 @@
+import { t, formatNumber } from "@/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@workspace/ui/components/tooltip";
 import { IconInfoCircle } from "@tabler/icons-react";
 
-function StatCard({
-	title,
-	tooltip,
-	value,
-}: {
-	title: string;
-	tooltip: React.ReactNode;
-	value: React.ReactNode;
-}) {
+function StatCard({ title, tooltip, value }: { title: string; tooltip: React.ReactNode; value: React.ReactNode }) {
 	return (
 		<Card className="flex flex-col">
 			<CardHeader className="gap-0">
@@ -43,14 +36,14 @@ export function CitationStatsCards({
 	return (
 		<div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 			<StatCard
-				title="Brand Citation Share"
-				tooltip="The percentage of all citations that link to your brand's domain. A higher share means AI models are more likely to reference your content."
+				title={t("dashboard.brandCitationShare")}
+				tooltip={t("dashboard.thePercentageOfAllCitationsThatLinkTo")}
 				value={`${brandShare}%`}
 			/>
 			<StatCard
-				title="Unique Domains"
-				tooltip="The number of distinct domains cited across all prompt evaluations in this period."
-				value={uniqueDomains.toLocaleString()}
+				title={t("dashboard.uniqueDomains")}
+				tooltip={t("dashboard.theNumberOfDistinctDomainsCitedAcrossAll")}
+				value={formatNumber(uniqueDomains)}
 			/>
 			{/* Kept deliberately simple: the user doesn't need the Google AI Mode
 			    search/shopping nuance. Those surfaces aren't citations in the
@@ -58,9 +51,9 @@ export function CitationStatsCards({
 			    results, not an external domain w.r.t. the model), so they're
 			    excluded from this count and broken out in the Google Shopping card. */}
 			<StatCard
-				title="Total Citations"
-				tooltip="The total external websites cited by AI models across prompt evaluations."
-				value={totalCitations.toLocaleString()}
+				title={t("dashboard.totalCitations")}
+				tooltip={t("dashboard.theTotalExternalWebsitesCitedByAiModels")}
+				value={formatNumber(totalCitations)}
 			/>
 		</div>
 	);
