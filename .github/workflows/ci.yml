@@ -14,7 +14,8 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    # Pin the OS: Playwright 1.60 does not support Ubuntu 26.04 yet.
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16-alpine
