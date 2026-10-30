@@ -60,3 +60,19 @@ describe("conversion report cache identity", () => {
 		}
 	});
 });
+
+describe("aggregate conversion cache identity", () => {
+	const sibling = { id: "00000000-0000-4000-8000-000000000002", revision: 1 };
+	const both = { ...connection, hostnames: ["example.com", "content.example.com"] };
+	it("canonicalizes domain and goal ordering", () => {
+		expect(conversionReportCacheKey(both, [goal, sibling], input)).toBe(
+			conversionReportCacheKey({ ...both, hostnames: [...both.hostnames].reverse() }, [sibling, goal], input),
+		);
+	});
+	it("isolates aggregate domain membership and each goal revision", () => {
+		const key = conversionReportCacheKey(both, [goal, sibling], input);
+		expect(conversionReportCacheKey(connection, [goal, sibling], input)).not.toBe(key);
+		expect(conversionReportCacheKey(both, [goal], input)).not.toBe(key);
+		expect(conversionReportCacheKey(both, [goal, { ...sibling, revision: 2 }], input)).not.toBe(key);
+	});
+});

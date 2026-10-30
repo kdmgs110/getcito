@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ConversionMetrics, ConversionPeriod } from "./conversion-types";
 import { trafficRequestSchema } from "./filters";
 import { AI_PROVIDERS } from "./types";
-export const CONVERSION_MEASUREMENT_VERSION = 1;
+export const CONVERSION_MEASUREMENT_VERSION = 2;
 export const conversionEventNameSchema = z
 	.string()
 	.min(1)
@@ -12,7 +12,7 @@ export const conversionEventNameSchema = z
 		"Invalid event name",
 	);
 export const conversionRequestSchema = trafficRequestSchema.safeExtend({
-	goalId: z.uuid(),
+	goalId: z.union([z.uuid(), z.literal("all")]),
 	grain: z.enum(["day", "week", "month"]).default("day"),
 	page: z.number().int().min(1).max(100000).default(1),
 	pageSize: z.union([z.literal(5), z.literal(10), z.literal(25), z.literal(50)]).default(10),

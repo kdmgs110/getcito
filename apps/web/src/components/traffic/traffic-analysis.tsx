@@ -46,6 +46,7 @@ import {
 	sameConditions,
 	scopeChange,
 	type TrafficSearch,
+	trafficDomainScopeKey,
 	validDateRange,
 	viewStorageKey,
 } from "./traffic-state";
@@ -60,7 +61,7 @@ function FilterForm({
 }: {
 	conditions: TrafficCondition[];
 	title?: string;
-	hostname: string;
+	hostname: string | string[];
 	canManage: boolean;
 	onApply: (value: TrafficCondition[]) => void;
 	onSave: () => void;
@@ -233,19 +234,26 @@ export function TrafficAnalysis({
 		refetchOnWindowFocus: false,
 	});
 	const status = connection.data;
-	const scope = resolveViewConditions(search, views.data ?? [], status?.hostname ?? "");
+	const hostname = search.hostname ?? views.data?.find((view) => view.id === search.viewId)?.hostname ?? "all";
+	const combined = hostname === "all";
+	const domainScopeKey = trafficDomainScopeKey(status?.availableSites ?? [], hostname);
+	const domainValid = combined || !!status?.availableSites.includes(hostname);
+	const scope = resolveViewConditions(search, views.data ?? [], hostname);
 	const selected = scope.view;
 	const conditions = scope.conditions;
 	const analysisTab = search.analysisTab ?? selected?.analysisTab ?? "traffic";
 	const conversionGoalId = search.conversionGoalId ?? selected?.conversionGoalId ?? undefined;
-	const effectiveSearch = { ...search, analysisTab, conversionGoalId };
+	const effectiveSearch = { ...search, hostname, analysisTab, conversionGoalId };
 	const dirty =
 		!!selected &&
 		(!sameConditions(conditions, selected.conditions) ||
 			analysisTab !== (selected.analysisTab ?? "traffic") ||
-			(conversionGoalId ?? null) !== (selected.conversionGoalId ?? null));
+			(conversionGoalId === "all" ? null : (conversionGoalId ?? null)) !== (selected.conversionGoalId ?? null));
 	const timeZone = status?.timeZone ?? "UTC";
-	const measurementMode = status?.measurementMode ?? "landing_sessions";
+	const measurementMode =
+		(combined && (status?.availableSites.length ?? 0) > 1) || (!combined && hostname !== status?.hostname)
+			? "observed_session_start"
+			: (status?.measurementMode ?? "landing_sessions");
 	const measurement = trafficMeasurementLabels(measurementMode);
 	const range = defaultTrafficRange(timeZone);
 	const from = search.from ?? range.from;
@@ -253,7 +261,7 @@ export function TrafficAnalysis({
 	const grain = search.grain ?? "day";
 	const chart = search.chart ?? "total";
 	const dateValid = validDateRange(from, to);
-	const request = { brandId, from, to, conditions };
+	const request = { brandId, hostname, from, to, conditions };
 	const enabled =
 		!!status?.configured &&
 		!!status?.connected &&
@@ -261,11 +269,13 @@ export function TrafficAnalysis({
 		!status.needsReconnect &&
 		preferencesReady &&
 		!scope.invalidView &&
+		domainValid &&
 		dateValid &&
 		!views.isError;
 	const overview = useQuery({
 		queryKey: [
 			"traffic-overview",
+			domainScopeKey,
 			status?.propertyId,
 			status?.hostname,
 			status?.connectionRevision,
@@ -291,6 +301,7 @@ export function TrafficAnalysis({
 	const pages = useQuery({
 		queryKey: [
 			"traffic-pages",
+			domainScopeKey,
 			status?.propertyId,
 			status?.hostname,
 			status?.connectionRevision,
@@ -309,17 +320,17 @@ export function TrafficAnalysis({
 	useEffect(() => {
 		if (!status || !views.data || initialized.current) return;
 		initialized.current = true;
-		if (!search.viewId && !search.conditions) {
+		if (hostname !== "all" && !search.viewId && !search.conditions) {
 			try {
 				const previous = localStorage.getItem(viewStorageKey(status.userId, brandId));
-				if (previous && views.data.some((view) => view.id === previous && view.hostname === status.hostname))
+				if (previous && views.data.some((view) => view.id === previous && view.hostname === hostname))
 					onSearch({ viewId: previous }, true);
 			} catch {
 				/* Storage can be disabled by the browser. */
 			}
 		}
 		setPreferencesReady(true);
-	}, [status, views.data, brandId, search.viewId, search.conditions, onSearch]);
+	}, [status, views.data, brandId, search.viewId, search.conditions, hostname, onSearch]);
 	useEffect(() => {
 		if (status && views.data && scope.invalidView) {
 			setNotice(t("traffic.invalidView"));
@@ -341,6 +352,7 @@ export function TrafficAnalysis({
 		return onSearch(
 			scopeChange({
 				viewId: id,
+				hostname: view?.hostname ?? hostname,
 				conditions: undefined,
 				ga4: undefined,
 				analysisTab: id ? (view?.analysisTab ?? "traffic") : analysisTab,
@@ -352,11 +364,11 @@ export function TrafficAnalysis({
 		await client.invalidateQueries({ queryKey: ["traffic-views", brandId] });
 	};
 	async function saveView(value: { name: string; conditions: TrafficCondition[] }, initial?: ViewDialogState) {
-		if (!status) return;
+		if (!status || combined) return;
 		const saved = await saveTrafficViewFn({
 			data: {
 				brandId,
-				hostname: status.hostname,
+				hostname,
 				...value,
 				analysisTab: initial?.analysisTab ?? initial?.view?.analysisTab ?? analysisTab,
 				conversionGoalId:
@@ -394,7 +406,15 @@ export function TrafficAnalysis({
 		}
 	}
 	async function connectionChanged() {
-		onSearch(scopeChange({ analysisTab: "traffic", conversionGoalId: undefined }));
+		onSearch(
+			scopeChange({
+				hostname: "all",
+				viewId: undefined,
+				conditions: undefined,
+				analysisTab: "traffic",
+				conversionGoalId: undefined,
+			}),
+		);
 		await client.invalidateQueries({
 			predicate: (query) => typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("traffic-"),
 		});
@@ -458,8 +478,35 @@ export function TrafficAnalysis({
 				<div className="flex flex-wrap items-end justify-between gap-4">
 					<div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
 						<div>
-							<p className="mb-1 text-xs text-muted-foreground">{t("traffic.site")}</p>
-							<p className="font-medium">{status.hostname || "—"}</p>
+							<label className="mb-1 block text-xs text-muted-foreground" htmlFor="traffic-domain">
+								{t("traffic.domainFilter")}
+							</label>
+							<select
+								id="traffic-domain"
+								value={hostname}
+								className="h-9 max-w-full rounded-md border bg-background px-3 text-sm"
+								onChange={(event) => {
+									setManager(false);
+									setViewDialog(undefined);
+									setSavedFromDetail(undefined);
+									void onSearch(
+										scopeChange({
+											hostname: event.target.value,
+											viewId: undefined,
+											conditions: undefined,
+											conversionGoalId: undefined,
+										}),
+									);
+								}}
+							>
+								<option value="all">{t("traffic.allDomains")}</option>
+								{status.availableSites.map((site) => (
+									<option key={site} value={site}>
+										{site}
+									</option>
+								))}
+							</select>
+							{combined && <p className="mt-1 text-xs text-muted-foreground">{status.availableSites.join(" + ")}</p>}
 						</div>
 						<div>
 							<p className="mb-1 text-xs text-muted-foreground">{t("traffic.property")}</p>
@@ -475,13 +522,22 @@ export function TrafficAnalysis({
 					/>
 				</div>
 				{status.connected && analysisTab === "traffic" && <MeasurementNotice mode={measurementMode} />}
+				{!domainValid && (
+					<p role="alert" className="text-sm text-destructive">
+						{t("traffic.invalidDomain")}
+					</p>
+				)}
 				{views.isError ? (
 					<TrafficError error={views.error} retry={() => views.refetch()} />
+				) : combined ? (
+					<p className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+						{t("traffic.domainSavedViewsHelp")}
+					</p>
 				) : (
 					<SavedViewSwitcher
 						allPathsLabel={analysisTab === "conversions" ? t("conversions.allPaths") : undefined}
 						views={views.data ?? []}
-						hostname={status.hostname}
+						hostname={hostname}
 						selected={selected}
 						dirty={dirty}
 						canManage={status.canManage}
@@ -534,10 +590,10 @@ export function TrafficAnalysis({
 					<>
 						<FilterForm
 							title={analysisTab === "conversions" ? t("conversions.filterTitle") : undefined}
-							key={`${status.hostname}:${JSON.stringify(conditions)}`}
+							key={`${hostname}:${JSON.stringify(conditions)}`}
 							conditions={conditions}
-							hostname={status.hostname}
-							canManage={status.canManage}
+							hostname={combined ? status.availableSites : hostname}
+							canManage={status.canManage && !combined}
 							onApply={(parsed) =>
 								onSearch(
 									scopeChange({
@@ -555,7 +611,7 @@ export function TrafficAnalysis({
 						)}
 						{analysisTab === "conversions" ? (
 							<ConversionAnalysis
-								key={`${status.propertyId}:${status.hostname}:${status.connectionRevision}`}
+								key={`${status.propertyId}:${hostname}:${status.connectionRevision}`}
 								brandId={brandId}
 								status={status}
 								request={request}
@@ -624,7 +680,7 @@ export function TrafficAnalysis({
 										<PageTrafficTable
 											key={`${search.pageSearch ?? ""}:${search.pageScope ?? "ai"}`}
 											data={pages.data}
-											hostname={status.hostname ?? ""}
+											hostname={combined ? "" : hostname}
 											query={search.pageSearch ?? ""}
 											pageScope={search.pageScope ?? "ai"}
 											pageSize={search.pageSize ?? 10}
@@ -635,11 +691,11 @@ export function TrafficAnalysis({
 											onScope={(value) => onSearch({ pageScope: value, page: undefined })}
 											onPageSize={(value) => onSearch({ pageSize: value as 5 | 10 | 25 | 50, page: undefined })}
 											onPage={(value) => onSearch({ page: value })}
-											onDetail={(path) => {
+											onDetail={(path, pageHostname) => {
 												detailReturnFocus.current =
 													document.activeElement instanceof HTMLElement ? document.activeElement : null;
 												setSavedFromDetail(undefined);
-												onSearch({ detail: path });
+												onSearch({ detail: path, detailHostname: pageHostname });
 											}}
 										/>
 									</>
@@ -673,7 +729,7 @@ export function TrafficAnalysis({
 					<SavedViewDialog
 						key={viewDialog.view?.id ?? viewDialog.name}
 						initial={viewDialog}
-						hostname={status.hostname}
+						hostname={hostname}
 						onClose={() => setViewDialog(undefined)}
 						onSave={(value) => saveView(value, viewDialog)}
 					/>
@@ -681,7 +737,7 @@ export function TrafficAnalysis({
 				{manager && (
 					<SavedViewManager
 						views={views.data ?? []}
-						hostname={status.hostname}
+						hostname={hostname}
 						timeZone={timeZone}
 						canManage={status.canManage}
 						onClose={() => setManager(false)}
@@ -697,7 +753,7 @@ export function TrafficAnalysis({
 							setManager(false);
 							setViewDialog({
 								...duplicateViewDraft(view, t("traffic.copyName", { name: view.name })),
-								conversionGoalId: view.hostname === status.hostname ? view.conversionGoalId : null,
+								conversionGoalId: view.hostname === hostname ? view.conversionGoalId : null,
 							});
 						}}
 						onDelete={async (view) => {
@@ -713,19 +769,19 @@ export function TrafficAnalysis({
 				)}
 				{analysisTab === "traffic" && search.detail?.startsWith("/") && enabled && (
 					<PageTrafficDetail
-						key={search.detail}
-						request={request}
+						key={`${search.detailHostname ?? hostname}:${search.detail}`}
+						request={{ ...request, detailHostname: search.detailHostname }}
 						path={search.detail}
-						hostname={status.hostname}
+						hostname={search.detailHostname ?? (combined ? t("traffic.allDomains") : hostname)}
 						timeZone={timeZone}
 						initialGrain={grain}
-						connectionKey={`${status.propertyId}:${status.hostname}:${status.connectionRevision}`}
+						connectionKey={`${status.propertyId}:${status.hostname}:${status.connectionRevision}:${domainScopeKey}`}
 						measurementMode={measurementMode}
 						returnFocus={detailReturnFocus.current}
 						registeredView={savedFromDetail}
 						onOpenRegistered={selectView}
-						canManage={status.canManage}
-						onClose={() => onSearch({ detail: undefined })}
+						canManage={status.canManage && !combined}
+						onClose={() => onSearch({ detail: undefined, detailHostname: undefined })}
 						onRegister={() =>
 							setViewDialog({
 								name: (search.detail ?? "").slice(0, 60),

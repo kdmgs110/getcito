@@ -281,3 +281,68 @@ describe("GA4 result cache and tenant isolation", () => {
 		);
 	});
 });
+
+describe("combined domain report scope", () => {
+	const sites = ["example.com", "content.example.com"];
+	it("queries both brand domains by default using conservative measurement", async () => {
+		mocks.access.mockResolvedValue({ sites, session: { user: { id: "user-a" } } });
+		await getTrafficOverviewFn({ data: input });
+		expect(mocks.overview).toHaveBeenCalledWith(
+			expect.objectContaining({
+				hostnames: ["content.example.com", "example.com"],
+				measurementMode: "observed_session_start",
+			}),
+		);
+	});
+	it("separates combined, exact-domain and detail cache identities", async () => {
+		mocks.access.mockResolvedValue({ sites, session: { user: { id: "user-a" } } });
+		await getTrafficOverviewFn({ data: { ...input, hostname: "all" } });
+		await getTrafficOverviewFn({ data: { ...input, hostname: "example.com" } });
+		await getTrafficPageDetailFn({
+			data: { ...input, hostname: "all", detailHostname: "content.example.com", path: "/" },
+		});
+		expect(mocks.overview.mock.calls.map(([request]) => request.hostnames)).toEqual([
+			["content.example.com", "example.com"],
+			["example.com"],
+			["content.example.com"],
+		]);
+		const keys = mocks.writes.map((write) => (write as { cacheKey: string }).cacheKey);
+		expect(new Set(keys).size).toBe(3);
+		expect(mocks.verifySite).not.toHaveBeenCalled();
+	});
+	it("rejects a caller's unowned domain before cache or Google access", async () => {
+		await expect(getTrafficOverviewFn({ data: { ...input, hostname: "evil.example" } })).rejects.toThrow(
+			"TRAFFIC_INVALID_SITE",
+		);
+		expect(mocks.overview).not.toHaveBeenCalled();
+		expect(mocks.token).not.toHaveBeenCalled();
+	});
+	it("includes the current domain set in aggregate cache identity", async () => {
+		await getTrafficOverviewFn({ data: input });
+		mocks.access.mockResolvedValue({ sites, session: { user: { id: "user-a" } } });
+		await getTrafficOverviewFn({ data: input });
+		expect((mocks.writes[0] as { cacheKey: string }).cacheKey).not.toBe(
+			(mocks.writes[1] as { cacheKey: string }).cacheKey,
+		);
+	});
+	it("does not apply a full URL from one domain to every domain", async () => {
+		mocks.access.mockResolvedValue({ sites, session: { user: { id: "user-a" } } });
+		await expect(
+			getTrafficOverviewFn({
+				data: { ...input, conditions: [{ mode: "include", operator: "exact", value: "https://example.com/" }] },
+			}),
+		).rejects.toThrow("TRAFFIC_INVALID_REQUEST");
+		expect(mocks.overview).not.toHaveBeenCalled();
+	});
+});
+
+it("rejects full URLs in a combined detail unless a domain is explicit", async () => {
+	mocks.access.mockResolvedValue({
+		sites: ["example.com", "content.example.com"],
+		session: { user: { id: "user-a" } },
+	});
+	await expect(
+		getTrafficPageDetailFn({ data: { ...input, hostname: "all", path: "https://content.example.com/jobs" } }),
+	).rejects.toThrow("TRAFFIC_INVALID_REQUEST");
+	expect(mocks.overview).not.toHaveBeenCalled();
+});

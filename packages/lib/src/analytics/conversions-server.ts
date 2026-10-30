@@ -13,6 +13,7 @@ import {
 	andFilters,
 	buildPathFilter,
 	type GAFilterExpression,
+	hostnameFilter,
 	normalizeConditions,
 	normalizeHostname,
 	stringFilter,
@@ -26,6 +27,7 @@ import {
 	analyticsAllRows,
 	analyticsApi,
 	analyticsPropertyPath,
+	normalizeReportHosts,
 	verifyAnalyticsHostRange,
 } from "./server";
 import { AI_PROVIDERS, type AIProvider, type TrafficGrain } from "./types";
@@ -159,6 +161,8 @@ function initializeSessions(metrics: ConversionMetrics, converted: boolean) {
 export async function fetchConversionReport(
 	raw: AnalyticsFetchRequest & {
 		eventName: string;
+		eventNames?: string[];
+		eventScopes?: { hostname: string; eventNames: string[] }[];
 		grain: TrafficGrain;
 		page?: number;
 		pageSize?: number;
@@ -168,6 +172,11 @@ export async function fetchConversionReport(
 ): Promise<ConversionReport> {
 	trafficRequestSchema.parse({ ...raw, brandId: "conversions" });
 	conversionEventNameSchema.parse(raw.eventName);
+	if (raw.eventNames && (raw.eventNames.length === 0 || raw.eventNames.length > 100))
+		throw new AnalyticsError("invalid_request");
+	const eventNames = [
+		...new Set((raw.eventNames ?? [raw.eventName]).map((name) => conversionEventNameSchema.parse(name))),
+	].sort();
 	if (
 		!["day", "week", "month"].includes(raw.grain) ||
 		(raw.measurementMode !== undefined && !["landing_sessions", "observed_session_start"].includes(raw.measurementMode))
@@ -183,16 +192,17 @@ export async function fetchConversionReport(
 		(raw.pageSearch?.length ?? 0) > 300
 	)
 		throw new AnalyticsError("invalid_request");
-	const hostname = normalizeHostname(raw.hostname);
-	const conditions = normalizeConditions(raw.conditions, hostname);
+	const hostnames = normalizeReportHosts(raw);
+	const hostname = hostnames[0];
+	const conditions = normalizeConditions(raw.conditions, hostnames);
 	if (raw.detail)
-		conditions.push(...normalizeConditions([{ mode: "include", operator: "exact", value: raw.detail }], hostname));
-	const input = { ...raw, hostname, conditions };
+		conditions.push(...normalizeConditions([{ mode: "include", operator: "exact", value: raw.detail }], hostnames));
+	const input = { ...raw, hostname, hostnames, conditions };
 	const events = await listGA4KeyEvents(input.accessToken, input.propertyId);
-	const event = events.find((event) => event.eventName === input.eventName);
-	if (!event) throw new Error("CONVERSION_EVENT_MISSING");
+	const selectedEvents = eventNames.map((name) => events.find((event) => event.eventName === name));
+	if (selectedEvents.some((event) => !event)) throw new Error("CONVERSION_EVENT_MISSING");
 	const warnings = new Set<string>();
-	let singleHost = input.measurementMode !== "observed_session_start";
+	let singleHost = hostnames.length === 1 && input.measurementMode !== "observed_session_start";
 	if (singleHost) {
 		try {
 			await verifyAnalyticsHostRange(input.accessToken, input.propertyId, hostname, input.from, input.to);
@@ -204,15 +214,30 @@ export async function fetchConversionReport(
 	if (!singleHost) {
 		warnings.add("cv_event_host");
 		warnings.add("cross_host_landing_unverified");
-		warnings.add("cvr_scope_unavailable");
 	}
 	const pd = periodDimension(input.grain);
-	const hostFilter = andFilters(
-		stringFilter("hostName", hostname, "EXACT", false),
-		stringFilter("platform", "web", "EXACT", false),
-	);
+	const hostFilter = andFilters(hostnameFilter(hostnames), stringFilter("platform", "web", "EXACT", false));
 	const pathFilter = buildPathFilter(conditions, "landingPage");
-	const cvFilter = andFilters(hostFilter, pathFilter, stringFilter("eventName", input.eventName));
+	const eventFilter = (names: string[]): GAFilterExpression =>
+		names.length === 1
+			? stringFilter("eventName", names[0])
+			: { filter: { fieldName: "eventName", inListFilter: { values: names, caseSensitive: true } } };
+	let cvEventFilter = eventFilter(eventNames);
+	if (raw.eventScopes) {
+		if (!raw.eventScopes.length || raw.eventScopes.length > 100) throw new AnalyticsError("invalid_request");
+		const scopes = raw.eventScopes.map((scope) => {
+			const host = normalizeHostname(scope.hostname);
+			if (!hostnames.includes(host) || !scope.eventNames.length || scope.eventNames.length > 100)
+				throw new AnalyticsError("invalid_request");
+			const names = [...new Set(scope.eventNames.map((name) => conversionEventNameSchema.parse(name)))].sort();
+			if (names.some((name) => !eventNames.includes(name))) throw new AnalyticsError("invalid_request");
+			return { host, names };
+		});
+		cvEventFilter = {
+			orGroup: { expressions: scopes.map(({ host, names }) => andFilters(hostnameFilter([host]), eventFilter(names))) },
+		};
+	}
+	const cvFilter = andFilters(hostFilter, pathFilter, cvEventFilter);
 	const required = [pd, ...SOURCES, "hostName", "platform", "eventName"];
 	const pageAttributionSupported = await compatible(input, [...required, "landingPage"], ["keyEvents"], cvFilter);
 	if (!pageAttributionSupported) {
@@ -296,42 +321,30 @@ export async function fetchConversionReport(
 			if (path === "(not set)" || !path.startsWith("/")) warnings.add("conversion_landing_unset");
 		}
 	}
-	const rateName = `sessionKeyEventRate:${input.eventName}`;
-	let cvrSupported = false;
-	if (singleHost) {
-		const metadata = await analyticsApi<{ metrics?: { apiName?: string }[] }>(
-			`${DATA_API}/${analyticsPropertyPath(input.propertyId)}/metadata`,
-			input.accessToken,
-		);
-		if (!metadata.metrics?.some((metric) => metric.apiName === rateName))
-			warnings.add("conversion_rate_metric_unavailable");
-		else
-			cvrSupported = await compatible(
-				input,
-				[pd, ...SOURCES, "hostName", "platform", ...(pageAttributionSupported ? ["landingPage"] : [])],
-				["sessions", rateName],
-				andFilters(hostFilter, pathFilter, buildAIFilter()),
-			);
-		if (!cvrSupported) warnings.add("conversion_rate_unavailable");
-	}
-	if (cvrSupported) {
-		const rateFilter = andFilters(hostFilter, pathFilter);
-		const convertedFilter = andFilters(cvFilter, stringFilter("isKeyEvent", "true"));
-		const convertedSupported = await compatible(
-			input,
-			[
-				pd,
-				...SOURCES,
-				"hostName",
-				"platform",
-				"eventName",
-				"isKeyEvent",
-				...(pageAttributionSupported ? ["landingPage"] : []),
-			],
-			["sessions"],
-			convertedFilter,
-		);
-		if (!convertedSupported) warnings.add("conversion_sessions_unavailable");
+	const matching = [...pageMap.values()]
+		.filter((p) => p.path.toLowerCase().includes((input.pageSearch ?? "").trim().toLowerCase()))
+		.sort((a, b) => b.aiCv - a.aiCv || b.cv - a.cv || a.path.localeCompare(b.path));
+	const visiblePaths = matching.slice((page - 1) * pageSize, page * pageSize).map((row) => row.path);
+	// Host filters describe sessions observed on the selected domains, not
+	// necessarily the host where they started. Query both sides with the same
+	// host/path/source scope; never sum per-host totals (sessions can overlap).
+	const rateFilter = andFilters(hostFilter, pathFilter);
+	const convertedFilter = andFilters(cvFilter, stringFilter("isKeyEvent", "true"));
+	const sessionDimensions = [
+		pd,
+		...SOURCES,
+		"hostName",
+		"platform",
+		...(pageAttributionSupported ? ["landingPage"] : []),
+	];
+	const sessionsSupported = await compatible(input, sessionDimensions, ["sessions"], rateFilter);
+	const convertedSupported =
+		sessionsSupported &&
+		(await compatible(input, [...sessionDimensions, "eventName", "isKeyEvent"], ["sessions"], convertedFilter));
+	let cvrSupported = convertedSupported;
+	if (!sessionsSupported) warnings.add("cvr_scope_unavailable");
+	else if (!convertedSupported) warnings.add("conversion_sessions_unavailable");
+	if (sessionsSupported) {
 		initializeSessions(totals, convertedSupported);
 		for (const point of points.values()) initializeSessions(point, convertedSupported);
 		for (const p of pageMap.values()) {
@@ -345,9 +358,19 @@ export async function fetchConversionReport(
 		async function rows(dims: string[], ai: boolean, converted = false) {
 			const response = await analyticsAllRows(input.accessToken, input.propertyId, {
 				dimensions: dims.map((name) => ({ name })),
-				metrics: [{ name: "sessions" }, ...(!converted ? [{ name: rateName }] : [])],
+				metrics: [{ name: "sessions" }],
 				dateRanges: countRequest.dateRanges,
-				dimensionFilter: andFilters(converted ? convertedFilter : rateFilter, ai ? buildAIFilter() : undefined),
+				dimensionFilter: andFilters(
+					converted ? convertedFilter : rateFilter,
+					ai ? buildAIFilter() : undefined,
+					// Only returned pages need per-page denominators. The full-period
+					// and period queries above remain unpaginated session unions.
+					dims.includes("landingPage")
+						? {
+								filter: { fieldName: "landingPage", inListFilter: { values: visiblePaths, caseSensitive: true } },
+							}
+						: undefined,
+				),
 			});
 			for (const warning of response.warnings) warnings.add(warning);
 			return response.rows;
@@ -359,17 +382,10 @@ export async function fetchConversionReport(
 				else target.cvSessions = sessions;
 				return;
 			}
-			const rate = value(row, 1);
-			if (rate > 1) throw new AnalyticsError("upstream");
-			if (ai) {
-				target.aiSessions = sessions;
-				target.aiCvr = sessions > 0 ? rate : null;
-			} else {
-				target.sessions = sessions;
-				target.cvr = sessions > 0 ? rate : null;
-			}
+			if (ai) target.aiSessions = sessions;
+			else target.sessions = sessions;
 		}
-		// Query each requested grain and full-period totals directly. Never average daily CVRs.
+		// Query each requested grain and full-period union directly. Never average daily CVRs.
 		for (const converted of [false, ...(convertedSupported ? [true] : [])]) {
 			for (const ai of [false, true]) {
 				const totalRows = await rows([], ai, converted);
@@ -380,7 +396,7 @@ export async function fetchConversionReport(
 					if (!point) throw new AnalyticsError("upstream");
 					applyMetrics(point, row, ai, converted);
 				}
-				if (pageAttributionSupported && pageMap.size) {
+				if (pageAttributionSupported && visiblePaths.length) {
 					for (const row of await rows(["landingPage"], ai, converted)) {
 						const pageRow = pageMap.get(dimensions(row)[0]);
 						if (pageRow) applyMetrics(pageRow, row, ai, converted);
@@ -392,7 +408,6 @@ export async function fetchConversionReport(
 					}
 				}
 			}
-			const providerTotals = new Map<AIProvider, { sessions: number; weightedRate: number }>();
 			for (const row of await rows(SOURCES, true, converted)) {
 				const [source, medium, channel] = dimensions(row);
 				const provider = classifyAISource(source, medium, channel);
@@ -400,46 +415,55 @@ export async function fetchConversionReport(
 				const n = value(row, 0);
 				const sourceRow = sourceFor(provider);
 				if (converted) sourceRow.cvSessions = (sourceRow.cvSessions ?? 0) + n;
-				else {
-					const rate = value(row, 1);
-					if (rate > 1) throw new AnalyticsError("upstream");
-					const previous = providerTotals.get(provider) ?? { sessions: 0, weightedRate: 0 };
-					previous.sessions += n;
-					previous.weightedRate += n * rate;
-					providerTotals.set(provider, previous);
-				}
+				else sourceRow.sessions = (sourceRow.sessions ?? 0) + n;
 			}
-			if (!converted)
-				for (const [provider, value] of providerTotals) {
-					const source = sourceFor(provider);
-					source.sessions = value.sessions;
-					source.cvr = value.sessions > 0 ? value.weightedRate / value.sessions : null;
-				}
 		}
 	}
-	if (event.createTime) {
-		const date = new Date(event.createTime);
-		if (Number.isFinite(date.getTime())) {
-			const created = new Intl.DateTimeFormat("en-CA", {
-				timeZone: counts.timeZone,
-				year: "numeric",
-				month: "2-digit",
-				day: "2-digit",
-			}).format(date);
-			if (input.from < created) warnings.add("conversion_before_registration");
+	for (const event of selectedEvents)
+		if (event?.createTime) {
+			const date = new Date(event.createTime);
+			if (Number.isFinite(date.getTime())) {
+				const created = new Intl.DateTimeFormat("en-CA", {
+					timeZone: counts.timeZone,
+					year: "numeric",
+					month: "2-digit",
+					day: "2-digit",
+				}).format(date);
+				if (input.from < created) warnings.add("conversion_before_registration");
+			}
 		}
-	}
 	const allMetrics = [
 		totals,
 		...points.values(),
 		...pageMap.values(),
 		...[...pageMap.values()].flatMap((p) => p.trend),
 	];
+	// Event counts can exceed converting sessions. Use the session union for
+	// selected key events, including Japanese names unsupported by rate metrics.
+	for (const metrics of allMetrics) {
+		metrics.cvr =
+			metrics.sessions !== null && metrics.sessions > 0 && metrics.cvSessions !== null
+				? metrics.cvSessions / metrics.sessions
+				: null;
+		metrics.aiCvr =
+			metrics.aiSessions !== null && metrics.aiSessions > 0 && metrics.aiCvSessions !== null
+				? metrics.aiCvSessions / metrics.aiSessions
+				: null;
+	}
+	for (const source of sources)
+		source.cvr =
+			source.sessions !== null && source.sessions > 0 && source.cvSessions !== null
+				? source.cvSessions / source.sessions
+				: null;
+
 	if (
 		allMetrics.some(
 			(item) =>
 				(item.sessions !== null && item.cvSessions !== null && item.cvSessions > item.sessions) ||
 				(item.aiSessions !== null && item.aiCvSessions !== null && item.aiCvSessions > item.aiSessions),
+		) ||
+		sources.some(
+			(source) => source.sessions !== null && source.cvSessions !== null && source.cvSessions > source.sessions,
 		)
 	)
 		warnings.add("inconsistent_totals");
@@ -456,9 +480,7 @@ export async function fetchConversionReport(
 		cvrSupported = false;
 		warnings.add("conversion_rate_quality_unavailable");
 	}
-	const matching = [...pageMap.values()]
-		.filter((p) => p.path.toLowerCase().includes((input.pageSearch ?? "").trim().toLowerCase()))
-		.sort((a, b) => b.aiCv - a.aiCv || b.cv - a.cv || a.path.localeCompare(b.path));
+
 	const pageRows = matching.slice((page - 1) * pageSize, page * pageSize).map((pageRow) => ({
 		...pageRow,
 		trend: [...points.keys()].map((date) => {

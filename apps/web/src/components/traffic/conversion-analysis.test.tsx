@@ -39,6 +39,18 @@ describe("conversion measurement presentation", () => {
 		expect(html).toContain(t("conversions.aiCvSessions"));
 		expect(html).toContain(": 3");
 	});
+	it("renders the requested AI session count and session-based CVR together", () => {
+		const html = renderToStaticMarkup(
+			<ConversionKpis
+				metrics={{ ...metrics, aiSessions: 552, aiCv: 8, aiCvSessions: 8, aiCvr: 8 / 552 }}
+				cvrSupported
+			/>,
+		);
+		expect(html).toContain(t("conversions.aiSessions"));
+		expect(html).toContain("552");
+		expect(html).toContain("1.45%");
+	});
+
 	it("explains unknown landing host and unavailable denominators for observed mode", () => {
 		const report = {
 			measurementScope: "cv_event_host",

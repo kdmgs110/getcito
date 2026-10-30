@@ -64,7 +64,10 @@ export const saveTrafficViewFn = createServerFn({ method: "POST" })
 			name: z.string().trim().min(1).max(60),
 			hostname: z.string().min(1).max(253),
 			conditions: trafficConditionsSchema,
-			conversionGoalId: z.string().uuid().nullable().optional(),
+			conversionGoalId: z
+				.union([z.string().uuid(), z.literal("all")])
+				.nullable()
+				.optional(),
 			analysisTab: z.enum(["traffic", "conversions"]).optional(),
 		}),
 	)
@@ -82,10 +85,10 @@ export const saveTrafficViewFn = createServerFn({ method: "POST" })
 				const preferences: { conversionGoalId?: string | null; analysisTab?: "traffic" | "conversions" } = {};
 				if (data.analysisTab !== undefined) preferences.analysisTab = data.analysisTab;
 				if (data.conversionGoalId !== undefined) {
-					preferences.conversionGoalId = data.conversionGoalId;
-					if (data.conversionGoalId) {
+					preferences.conversionGoalId = data.conversionGoalId === "all" ? null : data.conversionGoalId;
+					if (data.conversionGoalId && data.conversionGoalId !== "all") {
 						const connection = await currentTrafficConnection(data.brandId);
-						if (!connection?.propertyId || connection.hostname !== hostname || connection.status !== "connected")
+						if (!connection?.propertyId || !connection.hostname || connection.status !== "connected")
 							throw new Error("ANALYTICS_CONNECTION_CHANGED");
 						const [locked] = await tx
 							.select({ id: ga4Connections.brandId })
@@ -95,7 +98,7 @@ export const saveTrafficViewFn = createServerFn({ method: "POST" })
 									eq(ga4Connections.brandId, data.brandId),
 									eq(ga4Connections.revision, connection.revision),
 									eq(ga4Connections.propertyId, connection.propertyId),
-									eq(ga4Connections.hostname, hostname),
+									eq(ga4Connections.hostname, connection.hostname),
 									eq(ga4Connections.status, "connected"),
 								),
 							)

@@ -3,7 +3,7 @@ import { seedTrafficFixtures, TRAFFIC_BRAND_ID, TRAFFIC_FROM, TRAFFIC_TO } from 
 
 const ja = !process.env.VITE_APP_LOCALE || /^ja(?:-|$)/i.test(process.env.VITE_APP_LOCALE);
 const text = (japanese: string, english: string) => (ja ? japanese : english);
-const path = `/app/${TRAFFIC_BRAND_ID}/traffic?from=${TRAFFIC_FROM}&to=${TRAFFIC_TO}`;
+const path = `/app/${TRAFFIC_BRAND_ID}/traffic?hostname=example.com&from=${TRAFFIC_FROM}&to=${TRAFFIC_TO}`;
 
 test.describe("GA4 traffic analysis", () => {
 	test.describe.configure({ mode: "serial" });

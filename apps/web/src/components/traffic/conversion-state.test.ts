@@ -2,7 +2,14 @@ import type { ConversionGoal } from "@workspace/lib/analytics";
 import { describe, expect, it } from "vitest";
 import { t } from "@/i18n";
 import { conditionsSummary } from "./condition-editor";
-import { conversionNumber, conversionRate, resolveConversionGoal } from "./conversion-state";
+import {
+	conversionGoalOptions,
+	conversionGoalRevisionKey,
+	conversionNumber,
+	conversionRate,
+	resolveConversionGoal,
+	resolveConversionSelection,
+} from "./conversion-state";
 import { duplicateViewDraft, newViewDraft, scopeChange, validateTrafficSearch } from "./traffic-state";
 
 const goal: ConversionGoal = {
@@ -50,6 +57,7 @@ describe("conversion selection and measurement state", () => {
 			page: undefined,
 			pageSearch: undefined,
 			detail: undefined,
+			detailHostname: undefined,
 		});
 	});
 	it("copies a saved view's conversion preference without carrying its identity", () => {
@@ -70,6 +78,35 @@ describe("conversion selection and measurement state", () => {
 		);
 		expect(draft).toMatchObject({ analysisTab: "conversions", conversionGoalId: goal.id });
 		expect(draft).not.toHaveProperty("id");
+	});
+});
+
+describe("conversion scope across domains", () => {
+	const content = { ...goal, id: "content-signup", hostname: "content.example.com" };
+	it("invalidates combined and individual reports when an applicable host goal changes", () => {
+		const original = conversionGoalRevisionKey([goal, content], "all");
+		expect(conversionGoalRevisionKey([content, goal], "all")).toBe(original);
+		expect(conversionGoalRevisionKey([goal, { ...content, revision: 2 }], "all")).not.toBe(original);
+		expect(conversionGoalRevisionKey([goal, { ...content, enabled: false }], "all")).not.toBe(original);
+		expect(conversionGoalRevisionKey([goal, { ...content, revision: 2 }], goal.hostname)).toBe(
+			conversionGoalRevisionKey([goal, content], goal.hostname),
+		);
+	});
+	it("defaults to the sum of enabled events and deduplicates equivalent host definitions", () => {
+		const goals = [goal, content, { ...goal, id: "disabled", eventName: "purchase", enabled: false }];
+		expect(conversionGoalOptions(goals, "all")).toEqual([goal]);
+		expect(resolveConversionSelection(undefined, goals, "all")).toMatchObject({ id: "all", invalid: false });
+		expect(conversionGoalOptions(goals, content.hostname)).toEqual([content]);
+	});
+	it("restores the same event from a different domain's saved selection", () => {
+		expect(resolveConversionSelection(goal.id, [goal, content], content.hostname)).toMatchObject({
+			id: content.id,
+			goal: content,
+			invalid: false,
+		});
+		expect(resolveConversionSelection("missing", [goal, content], "all").invalid).toBe(true);
+		expect(resolveConversionSelection(content.id, [content], goal.hostname).invalid).toBe(true);
+		expect(resolveConversionSelection(goal.id, [{ ...goal, enabled: false }, content], "all").invalid).toBe(true);
 	});
 });
 

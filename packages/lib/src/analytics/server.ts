@@ -5,6 +5,7 @@ import {
 	andFilters,
 	buildPathFilter,
 	type GAFilterExpression,
+	hostnameFilter,
 	normalizeConditions,
 	normalizeHostname,
 	stringFilter,
@@ -81,6 +82,8 @@ export interface AnalyticsFetchRequest {
 	accessToken: string;
 	propertyId: string;
 	hostname: string;
+	/** Server-resolved authorized domain union; never pass arbitrary client input here. */
+	hostnames?: string[];
 	from: string;
 	to: string;
 	conditions: TrafficCondition[];
@@ -216,8 +219,19 @@ function validateRequest(input: AnalyticsFetchRequest): AnalyticsFetchRequest {
 		throw new AnalyticsError("invalid_request");
 	trafficRequestSchema.parse({ ...input, brandId: "analytics" });
 	propertyPath(input.propertyId);
-	const hostname = normalizeHostname(input.hostname);
-	return { ...input, hostname, conditions: normalizeConditions(input.conditions, hostname) };
+	const hostnames = normalizeReportHosts(input);
+	return {
+		...input,
+		hostname: hostnames[0],
+		hostnames,
+		measurementMode: hostnames.length > 1 ? "observed_session_start" : input.measurementMode,
+		conditions: normalizeConditions(input.conditions, hostnames),
+	};
+}
+export function normalizeReportHosts(input: Pick<AnalyticsFetchRequest, "hostname" | "hostnames">): string[] {
+	if (input.hostnames && (input.hostnames.length === 0 || input.hostnames.length > 100))
+		throw new AnalyticsError("invalid_request");
+	return [...new Set((input.hostnames ?? [input.hostname]).map(normalizeHostname))].sort();
 }
 function requestBase(
 	input: AnalyticsFetchRequest,
@@ -227,7 +241,7 @@ function requestBase(
 		metrics: [{ name: "sessions" }],
 		dateRanges: [{ startDate: input.from, endDate: input.to }],
 		dimensionFilter: andFilters(
-			stringFilter("hostName", input.hostname, "EXACT", false),
+			hostnameFilter(input.hostnames ?? [input.hostname]),
 			...(input.measurementMode === "observed_session_start"
 				? [stringFilter("eventName", "session_start"), stringFilter("platform", "web", "EXACT", false)]
 				: []),
@@ -299,18 +313,42 @@ export async function fetchTrafficOverview(raw: AnalyticsFetchRequest): Promise<
 }
 
 /** Event-scoped metadata only: never add pageTitle to session/landing-page reports. */
-async function rankedPageTitles(input: AnalyticsFetchRequest, paths: string[]): Promise<Map<string, string>> {
-	const eligible = new Set(paths.filter((path) => path.startsWith("/")));
+function trafficPageKey(path: string, hostname?: string): string {
+	return hostname ? JSON.stringify([hostname, path]) : path;
+}
+function rankedPageFilter(
+	pages: Pick<TrafficPageRow, "path" | "hostname">[],
+	pathDimension: "pagePath" | "landingPage",
+): GAFilterExpression {
+	if (pages.some((page) => page.hostname))
+		return {
+			orGroup: {
+				expressions: pages.map((page) =>
+					andFilters(stringFilter(pathDimension, page.path), hostnameFilter([page.hostname as string])),
+				),
+			},
+		};
+	return {
+		filter: { fieldName: pathDimension, inListFilter: { values: pages.map((page) => page.path), caseSensitive: true } },
+	};
+}
+async function rankedPageTitles(
+	input: AnalyticsFetchRequest,
+	pages: Pick<TrafficPageRow, "path" | "hostname">[],
+): Promise<Map<string, string>> {
+	const combined = (input.hostnames?.length ?? 1) > 1;
+	const eligiblePages = pages.filter((page) => page.path.startsWith("/"));
+	const eligible = new Set(eligiblePages.map((page) => trafficPageKey(page.path, page.hostname)));
 	if (!eligible.size) return new Map();
 	const result = await report(input.accessToken, input.propertyId, {
-		dimensions: [{ name: "pagePath" }, { name: "pageTitle" }],
+		dimensions: [{ name: "pagePath" }, { name: "pageTitle" }, ...(combined ? [{ name: "hostName" }] : [])],
 		metrics: [{ name: "eventCount" }],
 		dateRanges: [{ startDate: input.from, endDate: input.to }],
 		dimensionFilter: andFilters(
-			stringFilter("hostName", input.hostname, "EXACT", false),
+			hostnameFilter(input.hostnames ?? [input.hostname]),
 			stringFilter("platform", "web", "EXACT", false),
 			stringFilter("eventName", "page_view"),
-			{ filter: { fieldName: "pagePath", inListFilter: { values: [...eligible], caseSensitive: true } } },
+			rankedPageFilter(eligiblePages, "pagePath"),
 		),
 		orderBys: [
 			{ metric: { metricName: "eventCount" }, desc: true },
@@ -331,16 +369,17 @@ async function rankedPageTitles(input: AnalyticsFetchRequest, paths: string[]): 
 	const counts = new Map<string, Map<string, number>>();
 	for (const row of rows) {
 		const fields = dimensions(row);
-		if (fields.length !== 2) throw new AnalyticsError("upstream");
-		const [path, rawTitle] = fields;
-		if (!eligible.has(path)) continue;
+		if (fields.length !== (combined ? 3 : 2)) throw new AnalyticsError("upstream");
+		const [path, rawTitle, hostname] = fields;
+		const key = trafficPageKey(path, combined ? normalizeHostname(hostname) : undefined);
+		if (!eligible.has(key)) continue;
 		const title = rawTitle.trim().replace(/\s+/g, " ");
 		if (!title || ["(not set)", "(other)"].includes(title.toLowerCase())) continue;
 		const count = sessions(row);
 		if (!Number.isFinite(count)) throw new AnalyticsError("upstream");
-		const titles = counts.get(path) ?? new Map<string, number>();
+		const titles = counts.get(key) ?? new Map<string, number>();
 		titles.set(title, (titles.get(title) ?? 0) + count);
-		counts.set(path, titles);
+		counts.set(key, titles);
 	}
 	return new Map(
 		[...counts].map(([path, titles]) => [
@@ -358,48 +397,70 @@ export async function fetchTrafficPages(
 	if (input.measurementMode !== "observed_session_start")
 		await verifyHostRange(input.accessToken, input.propertyId, input.hostname, input.from, input.to);
 	const pathDimension = trafficPathDimension(input.measurementMode);
+	const combined = (input.hostnames?.length ?? 1) > 1;
+	const hostDimensions = combined ? [{ name: "hostName" }] : [];
 	const search = raw.pageSearch.trim() ? stringFilter(pathDimension, raw.pageSearch.trim(), "CONTAINS") : undefined;
 	const ranked = await report(input.accessToken, input.propertyId, {
 		...requestBase(input, raw.pageScope === "ai" ? andFilters(search, buildAIFilter()) : search),
-		dimensions: [{ name: pathDimension }],
+		dimensions: [{ name: pathDimension }, ...hostDimensions],
 		orderBys: [
 			{ metric: { metricName: "sessions" }, desc: true },
 			{ dimension: { dimensionName: pathDimension }, desc: false },
+			...(combined ? [{ dimension: { dimensionName: "hostName" }, desc: false }] : []),
 		],
 		offset: (raw.page - 1) * raw.pageSize,
 		limit: raw.pageSize,
 	});
-	const paths = (ranked.rows ?? []).map((row) => dimensions(row)[0]);
-	const rows: TrafficPageRow[] = paths.map((path) => ({ path, title: null, ...emptyTrafficTotals(), trend: [] }));
+	const rows: TrafficPageRow[] = (ranked.rows ?? []).map((row) => {
+		const [path, host] = dimensions(row);
+		if (!path || (combined && (!host || !input.hostnames?.includes(normalizeHostname(host)))))
+			throw new AnalyticsError("upstream");
+		return {
+			path,
+			...(combined ? { hostname: normalizeHostname(host) } : {}),
+			title: null,
+			...emptyTrafficTotals(),
+			trend: [],
+		};
+	});
 	const warnings = new Set(metadataWarnings(ranked));
 	if (input.measurementMode === "observed_session_start") warnings.add("observed_session_start");
-	if (paths.length) {
-		const pathSet: GAFilterExpression = {
-			filter: { fieldName: pathDimension, inListFilter: { values: paths, caseSensitive: true } },
-		};
+	if (rows.length) {
+		const pathSet = rankedPageFilter(rows, pathDimension);
 		const [ai, all] = await Promise.all([
 			allRows(input.accessToken, input.propertyId, {
 				...requestBase(input, andFilters(pathSet, buildAIFilter())),
-				dimensions: [pathDimension, "date", "sessionSource", "sessionMedium", "sessionDefaultChannelGroup"].map(
-					(name) => ({ name }),
-				),
+				dimensions: [
+					pathDimension,
+					"date",
+					"sessionSource",
+					"sessionMedium",
+					"sessionDefaultChannelGroup",
+					...(combined ? ["hostName"] : []),
+				].map((name) => ({ name })),
 			}),
 			allRows(input.accessToken, input.propertyId, {
 				...requestBase(input, pathSet),
-				dimensions: [pathDimension, "date"].map((name) => ({ name })),
+				dimensions: [pathDimension, "date", ...(combined ? ["hostName"] : [])].map((name) => ({ name })),
 			}),
 		]);
 		for (const warning of [...ai.warnings, ...all.warnings]) warnings.add(warning);
-		const daily = new Map(paths.map((path) => [path, dailyPoints(input.from, input.to)]));
+		const daily = new Map(
+			rows.map((row) => [trafficPageKey(row.path, row.hostname), dailyPoints(input.from, input.to)]),
+		);
 		for (const row of all.rows) {
-			const [path, date] = dimensions(row);
-			const point = daily.get(path)?.get(isoDate(date));
+			const [path, date, hostname] = dimensions(row);
+			const point = daily
+				.get(trafficPageKey(path, combined ? normalizeHostname(hostname) : undefined))
+				?.get(isoDate(date));
 			if (!point) throw new AnalyticsError("upstream");
 			point.total += sessions(row);
 		}
 		for (const row of ai.rows) {
-			const [path, date, source, medium, channel] = dimensions(row);
-			const point = daily.get(path)?.get(isoDate(date));
+			const [path, date, source, medium, channel, hostname] = dimensions(row);
+			const point = daily
+				.get(trafficPageKey(path, combined ? normalizeHostname(hostname) : undefined))
+				?.get(isoDate(date));
 			const provider = classifyAISource(source, medium, channel);
 			if (!point || !provider) throw new AnalyticsError("upstream");
 			point.ai += sessions(row);
@@ -407,7 +468,7 @@ export async function fetchTrafficPages(
 		}
 		for (let index = 0; index < rows.length; index++) {
 			const row = rows[index];
-			row.trend = [...(daily.get(row.path)?.values() ?? [])];
+			row.trend = [...(daily.get(trafficPageKey(row.path, row.hostname))?.values() ?? [])];
 			for (const point of row.trend) addTrafficTotals(row, point);
 			// The ranking report's period metric is authoritative for its sort key.
 			const rankedCount = sessions(ranked.rows?.[index] as Row);
@@ -415,8 +476,8 @@ export async function fetchTrafficPages(
 			if (row.ai > row.total) warnings.add("inconsistent_totals");
 		}
 		try {
-			const titles = await rankedPageTitles(input, paths);
-			for (const row of rows) row.title = titles.get(row.path) ?? null;
+			const titles = await rankedPageTitles(input, rows);
+			for (const row of rows) row.title = titles.get(trafficPageKey(row.path, row.hostname)) ?? null;
 		} catch {
 			// Optional page-view metadata must not hide successful session reports.
 			warnings.add("page_titles_unavailable");

@@ -44,6 +44,15 @@ function renderRows(rows: TrafficPageRow[]) {
 }
 
 describe("entry-page identity presentation", () => {
+	it("uses each row's verified hostname for equal paths from different domains", () => {
+		const html = renderRows([
+			{ hostname: "www.example.com", path: "/", title: "Main", ...emptyTrafficTotals(), trend: [] },
+			{ hostname: "content.example.com", path: "/", title: "Content", ...emptyTrafficTotals(), trend: [] },
+		]);
+		expect(html).toContain('href="https://www.example.com/"');
+		expect(html).toContain('href="https://content.example.com/"');
+		expect(html).not.toContain('href="https://freelance.example.com/"');
+	});
 	it("shows the escaped title above an unabridged absolute URL while retaining metrics and detail action", () => {
 		const path = `/job_listings/${"long-path-".repeat(20)}`;
 		const html = renderRows([

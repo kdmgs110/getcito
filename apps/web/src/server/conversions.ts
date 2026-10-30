@@ -9,7 +9,7 @@ import {
 import { fetchConversionReport, listGA4KeyEvents } from "@workspace/lib/analytics/conversions-server";
 import { db } from "@workspace/lib/db/db";
 import { conversionGoals, ga4Connections, trafficQueryCache } from "@workspace/lib/db/schema";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { conversionReportCacheKey } from "./conversion-cache";
 import {
@@ -18,9 +18,11 @@ import {
 	requireTrafficAccess,
 	trafficAccessToken,
 } from "./traffic-runtime";
+import { resolveTrafficHosts } from "./traffic-scope";
 
 const brandInput = z.object({ brandId: z.string().min(1).max(200) });
-const goalInput = brandInput.extend({
+const scopedBrandInput = brandInput.extend({ hostname: z.string().min(1).max(253).optional() });
+const goalInput = scopedBrandInput.extend({
 	id: z.string().uuid().optional(),
 	revision: z.number().int().positive().optional(),
 	displayName: z.string().trim().min(1).max(60),
@@ -78,20 +80,68 @@ function scope(connection: Connection) {
 		eq(conversionGoals.hostname, connection.hostname),
 	);
 }
-async function getGoal(connection: Connection, id: string): Promise<GoalRow> {
+async function getGoal(connection: Connection, id: string, hosts = [connection.hostname]): Promise<GoalRow> {
 	const [goal] = await db
 		.select()
 		.from(conversionGoals)
-		.where(and(scope(connection), eq(conversionGoals.id, id)))
+		.where(
+			and(
+				eq(conversionGoals.brandId, connection.brandId),
+				eq(conversionGoals.propertyId, connection.propertyId),
+				inArray(conversionGoals.hostname, hosts),
+				eq(conversionGoals.id, id),
+			),
+		)
 		.limit(1);
 	if (!goal) throw new Error("CONVERSION_GOAL_NOT_FOUND");
 	return goal;
 }
-async function assertGoal(connection: Connection, goal: GoalRow) {
+async function reportGoals(
+	connection: Connection,
+	allowed: string[],
+	hosts: string[],
+	goalId: string,
+): Promise<GoalRow[]> {
+	let eventName: string | undefined;
+	if (goalId !== "all") {
+		const selected = await getGoal(connection, goalId, allowed);
+		if (!selected.enabled) throw new Error("CONVERSION_GOAL_DISABLED");
+		if (hosts.length === 1 && selected.hostname === hosts[0]) return [selected];
+		eventName = selected.eventName;
+	}
+	const goals = await db
+		.select()
+		.from(conversionGoals)
+		.where(
+			and(
+				eq(conversionGoals.brandId, connection.brandId),
+				eq(conversionGoals.propertyId, connection.propertyId),
+				inArray(conversionGoals.hostname, hosts),
+				eq(conversionGoals.enabled, true),
+				...(eventName ? [eq(conversionGoals.eventName, eventName)] : []),
+			),
+		)
+		.orderBy(asc(conversionGoals.id));
+	if (!goals.length) throw new Error("CONVERSION_GOAL_NOT_FOUND");
+	return goals;
+}
+function goalSnapshot(goals: GoalRow[]): string {
+	return JSON.stringify(
+		goals
+			.map((goal) => [goal.id, goal.revision, goal.hostname, goal.eventName, goal.enabled])
+			.sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+	);
+}
+async function assertGoals(
+	connection: Connection,
+	allowed: string[],
+	hosts: string[],
+	goalId: string,
+	goals: GoalRow[],
+) {
 	await assertTrafficRevision(connection.brandId, connection.revision);
-	const current = await getGoal(connection, goal.id);
-	if (current.revision !== goal.revision) throw new Error("CONVERSION_GOAL_CONFLICT");
-	if (!current.enabled) throw new Error("CONVERSION_GOAL_DISABLED");
+	const current = await reportGoals(connection, allowed, hosts, goalId);
+	if (goalSnapshot(current) !== goalSnapshot(goals)) throw new Error("CONVERSION_GOAL_CONFLICT");
 }
 async function keyEvents(connection: Connection): Promise<GA4KeyEvent[]> {
 	const events = await listGA4KeyEvents(await trafficAccessToken(connection), connection.propertyId);
@@ -107,13 +157,20 @@ function uniqueViolation(error: unknown): boolean {
 	return false;
 }
 export const listConversionGoalsFn = createServerFn({ method: "GET" })
-	.validator(brandInput)
+	.validator(scopedBrandInput)
 	.handler(async ({ data }): Promise<ConversionGoal[]> => {
-		const { connection } = await context(data.brandId);
+		const { connection, sites } = await context(data.brandId);
+		const hosts = resolveTrafficHosts(sites, data.hostname);
 		const goals = await db
 			.select()
 			.from(conversionGoals)
-			.where(scope(connection))
+			.where(
+				and(
+					eq(conversionGoals.brandId, connection.brandId),
+					eq(conversionGoals.propertyId, connection.propertyId),
+					inArray(conversionGoals.hostname, hosts),
+				),
+			)
 			.orderBy(asc(conversionGoals.createdAt), asc(conversionGoals.id));
 		await assertTrafficRevision(data.brandId, connection.revision);
 		return goals.map(asGoal);
@@ -131,7 +188,10 @@ export const listConversionEventsFn = createServerFn({ method: "GET" })
 export const saveConversionGoalFn = createServerFn({ method: "POST" })
 	.validator(goalInput)
 	.handler(async ({ data }): Promise<ConversionGoal> => {
-		const { connection, session } = await context(data.brandId, true);
+		const { connection: activeConnection, session, sites } = await context(data.brandId, true);
+		const [hostname] = resolveTrafficHosts(sites, data.hostname ?? activeConnection.hostname);
+		if (data.hostname === "all") throw new Error("TRAFFIC_INVALID_SITE");
+		const connection = { ...activeConnection, hostname };
 		if (data.id && !data.revision) throw new Error("CONVERSION_GOAL_CONFLICT");
 		try {
 			const existing = data.id ? await getGoal(connection, data.id) : undefined;
@@ -160,7 +220,7 @@ export const saveConversionGoalFn = createServerFn({ method: "POST" })
 							eq(ga4Connections.revision, connection.revision),
 							eq(ga4Connections.status, "connected"),
 							eq(ga4Connections.propertyId, connection.propertyId),
-							eq(ga4Connections.hostname, connection.hostname),
+							eq(ga4Connections.hostname, activeConnection.hostname),
 						),
 					)
 					.for("update");
@@ -218,17 +278,24 @@ export const saveConversionGoalFn = createServerFn({ method: "POST" })
 export const getConversionReportFn = createServerFn({ method: "GET" })
 	.validator(conversionRequestSchema)
 	.handler(async ({ data }): Promise<ConversionReport> => {
-		const { connection } = await context(data.brandId);
-		const goal = await getGoal(connection, data.goalId);
-		if (!goal.enabled) throw new Error("CONVERSION_GOAL_DISABLED");
-		const conditions = normalizeConditions(data.conditions, connection.hostname);
-		const normalized = { ...data, conditions };
-		const key = conversionReportCacheKey(connection, goal, normalized);
+		const { connection, sites } = await context(data.brandId);
+		const hosts = resolveTrafficHosts(sites, data.hostname);
+		const goals = await reportGoals(connection, sites, hosts, data.goalId);
+		let conditions: import("@workspace/lib/analytics").TrafficCondition[];
+		try {
+			conditions = normalizeConditions(data.conditions, hosts);
+		} catch {
+			throw new Error("TRAFFIC_INVALID_REQUEST");
+		}
+		const normalized = { ...data, hostname: hosts.length > 1 ? "all" : hosts[0], conditions };
+		const scopedConnection = { ...connection, hostnames: hosts };
+		const key = conversionReportCacheKey(scopedConnection, goals, normalized);
+		const verify = () => assertGoals(connection, sites, hosts, data.goalId, goals);
 		try {
 			// A cached report must not turn a removed GA4 event into a misleading zero or
 			// keep reporting it as active. This endpoint remains readable by members.
-			if (!(await keyEvents(connection)).some((event) => event.eventName === goal.eventName))
-				throw new Error("CONVERSION_EVENT_MISSING");
+			const events = new Set((await keyEvents(connection)).map((event) => event.eventName));
+			if (goals.some((goal) => !events.has(goal.eventName))) throw new Error("CONVERSION_EVENT_MISSING");
 			const [cached] = await db
 				.select()
 				.from(trafficQueryCache)
@@ -241,13 +308,13 @@ export const getConversionReportFn = createServerFn({ method: "GET" })
 				)
 				.limit(1);
 			if (cached && cached.expiresAt.getTime() > Date.now()) {
-				await assertGoal(connection, goal);
+				await verify();
 				return cached.payload as ConversionReport;
 			}
 			const previous = pending.get(key);
 			if (previous) {
 				const report = await previous;
-				await assertGoal(connection, goal);
+				await verify();
 				return report;
 			}
 			const operation = (async () => {
@@ -255,11 +322,24 @@ export const getConversionReportFn = createServerFn({ method: "GET" })
 					...normalized,
 					accessToken: await trafficAccessToken(connection),
 					propertyId: connection.propertyId,
-					hostname: connection.hostname,
-					measurementMode: connection.measurementMode,
-					eventName: goal.eventName,
+					hostname: hosts[0],
+					hostnames: hosts,
+					measurementMode:
+						hosts.length > 1 || hosts[0] !== connection.hostname
+							? "observed_session_start"
+							: connection.measurementMode,
+					eventName: goals[0].eventName,
+					eventNames: [...new Set(goals.map((goal) => goal.eventName))],
+					eventScopes: hosts
+						.map((hostname) => ({
+							hostname,
+							eventNames: [
+								...new Set(goals.filter((goal) => goal.hostname === hostname).map((goal) => goal.eventName)),
+							],
+						}))
+						.filter((scope) => scope.eventNames.length > 0),
 				});
-				await assertGoal(connection, goal);
+				await verify();
 				await db
 					.insert(trafficQueryCache)
 					.values({
@@ -275,7 +355,7 @@ export const getConversionReportFn = createServerFn({ method: "GET" })
 						set: { payload: report, fetchedAt: new Date(report.fetchedAt), expiresAt: new Date(Date.now() + TTL) },
 					});
 				try {
-					await assertGoal(connection, goal);
+					await verify();
 				} catch (error) {
 					await db.delete(trafficQueryCache).where(eq(trafficQueryCache.cacheKey, key));
 					throw error;

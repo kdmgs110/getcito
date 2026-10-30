@@ -308,3 +308,73 @@ describe("Conversion report ownership and cache races", () => {
 		expect(mocks.writes[1].cacheKey).not.toBe(first);
 	});
 });
+
+describe("multi-domain conversion reports", () => {
+	const other = { ...goal, id: "00000000-0000-4000-8000-000000000002", hostname: "content.example.com" };
+	const sites = ["example.com", "content.example.com"];
+	it("combines enabled host/event pairs in one report without duplicating shared events", async () => {
+		mocks.access.mockResolvedValue({ sites, session: { user: { id: "manager" } } });
+		mocks.results.push([goal, other], [], [goal, other], [goal, other]);
+		await getConversionReportFn({ data: { ...input, goalId: "all", hostname: "all" } });
+		expect(mocks.report).toHaveBeenCalledTimes(1);
+		expect(mocks.report).toHaveBeenCalledWith(
+			expect.objectContaining({
+				hostnames: ["content.example.com", "example.com"],
+				eventNames: [goal.eventName],
+				eventScopes: [
+					{ hostname: other.hostname, eventNames: [goal.eventName] },
+					{ hostname: goal.hostname, eventNames: [goal.eventName] },
+				],
+			}),
+		);
+		expect(params(0)).toEqual(expect.arrayContaining([brandId, "123", ...sites, true]));
+	});
+	it("does not count a domain without the selected event enabled", async () => {
+		mocks.access.mockResolvedValue({ sites, session: { user: { id: "manager" } } });
+		mocks.results.push([goal], [], [goal], [goal]);
+		await getConversionReportFn({ data: { ...input, goalId: "all", hostname: "all" } });
+		expect(mocks.report).toHaveBeenCalledWith(
+			expect.objectContaining({ eventScopes: [{ hostname: goal.hostname, eventNames: [goal.eventName] }] }),
+		);
+	});
+	it("invalidates an aggregate if enabled goal membership changes while loading", async () => {
+		mocks.access.mockResolvedValue({ sites, session: { user: { id: "manager" } } });
+		mocks.results.push([goal, other], [], [goal]);
+		await expect(getConversionReportFn({ data: { ...input, goalId: "all" } })).rejects.toThrow(
+			"CONVERSION_GOAL_CONFLICT",
+		);
+		expect(mocks.writes).toHaveLength(0);
+	});
+	it("rejects an unowned domain before looking up goals", async () => {
+		await expect(getConversionReportFn({ data: { ...input, hostname: "evil.example" } })).rejects.toThrow(
+			"TRAFFIC_INVALID_SITE",
+		);
+		expect(mocks.wheres).toHaveLength(0);
+	});
+	it("saves a goal on another owned domain without changing the active connection", async () => {
+		mocks.access.mockResolvedValue({ sites, session: { user: { id: "manager" } } });
+		mocks.results.push([{ brandId }], [{ count: 0 }], [other], []);
+		await saveConversionGoalFn({
+			data: { brandId, hostname: other.hostname, eventName: other.eventName, displayName: "申込", enabled: true },
+		});
+		expect(mocks.writes[0]).toMatchObject({ hostname: other.hostname, propertyId: "123" });
+		expect(params(0)).toContain(connection.hostname);
+	});
+});
+
+it("expands one selected conversion event across its enabled domain settings", async () => {
+	const other = { ...goal, id: "00000000-0000-4000-8000-000000000002", hostname: "content.example.com" };
+	mocks.access.mockResolvedValue({ sites: [goal.hostname, other.hostname], session: { user: { id: "manager" } } });
+	mocks.results.push([goal], [goal, other], [], [goal], [goal, other], [goal], [goal, other]);
+	await getConversionReportFn({ data: { ...input, hostname: "all" } });
+	expect(mocks.report).toHaveBeenCalledWith(
+		expect.objectContaining({
+			eventNames: [goal.eventName],
+			eventScopes: [
+				{ hostname: other.hostname, eventNames: [goal.eventName] },
+				{ hostname: goal.hostname, eventNames: [goal.eventName] },
+			],
+		}),
+	);
+	expect(params(1)).toEqual(expect.arrayContaining([goal.eventName, true]));
+});

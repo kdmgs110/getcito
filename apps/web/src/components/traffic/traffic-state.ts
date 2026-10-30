@@ -1,6 +1,8 @@
 import type { SavedTrafficView, TrafficCondition, TrafficGrain } from "@workspace/lib/analytics";
 
 export interface TrafficSearch {
+	hostname?: string;
+	detailHostname?: string;
 	viewId?: string;
 	analysisTab?: "traffic" | "conversions";
 	conversionGoalId?: string;
@@ -40,7 +42,16 @@ export function parseConditions(value: unknown): TrafficCondition[] | null {
 }
 export function validateTrafficSearch(search: Record<string, unknown>): TrafficSearch {
 	const output: TrafficSearch = {};
-	for (const key of ["viewId", "from", "to", "detail", "pageSearch", "conversionGoalId"] as const) {
+	for (const key of [
+		"viewId",
+		"from",
+		"to",
+		"detail",
+		"pageSearch",
+		"conversionGoalId",
+		"hostname",
+		"detailHostname",
+	] as const) {
 		if (typeof search[key] === "string" && search[key].length <= 2000) output[key] = search[key];
 	}
 	if (typeof search.conditions === "string" && parseConditions(search.conditions))
@@ -87,7 +98,12 @@ export function viewStorageKey(userId: string, brandId: string) {
 	return `getcito:traffic-view:${encodeURIComponent(userId)}:${encodeURIComponent(brandId)}`;
 }
 export function scopeChange(patch: Partial<TrafficSearch>): Partial<TrafficSearch> {
-	return { ...patch, page: undefined, pageSearch: undefined, detail: undefined };
+	return { ...patch, page: undefined, pageSearch: undefined, detail: undefined, detailHostname: undefined };
+}
+
+/** Domain membership can change without replacing the GA4 connection. */
+export function trafficDomainScopeKey(availableSites: string[], hostname = "all"): string {
+	return JSON.stringify([...new Set(hostname === "all" ? availableSites : [hostname])].sort());
 }
 
 export function reorderSiteViewIds(

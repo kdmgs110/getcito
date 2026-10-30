@@ -71,6 +71,96 @@ function mockReports(
 }
 
 describe("GA4 traffic reports", () => {
+	it("queries a deduplicated host union once for each combined total rather than adding host sessions", async () => {
+		const requests: Request[] = [];
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (_url: string, init: RequestInit) => {
+				const request = JSON.parse(init.body as string) as Request;
+				requests.push(request);
+				return json({
+					rows:
+						request.dimensions.length === 1
+							? [row(["20261001"], 12)]
+							: [row(["20261001", "chatgpt.com", "referral", "Referral"], 3)],
+					rowCount: 1,
+				});
+			}),
+		);
+		const result = await fetchTrafficOverview({
+			...input,
+			hostnames: ["content.example.com", "example.com", "example.com"],
+		});
+		expect(result.totals).toMatchObject({ ai: 3, total: 12 });
+		expect(requests).toHaveLength(2);
+		expect(result.warnings).toContain("observed_session_start");
+		for (const request of requests) {
+			expect(JSON.stringify(request.dimensionFilter)).toContain(
+				'"fieldName":"hostName","inListFilter":{"values":["content.example.com","example.com"],"caseSensitive":false}',
+			);
+			expect(JSON.stringify(request.dimensionFilter)).toContain('"value":"session_start"');
+			expect(request.dimensions.some(({ name }) => name === "hostName")).toBe(false);
+		}
+	});
+	it("keeps identical paths and their titles separate across combined hosts", async () => {
+		const requests: Request[] = [];
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (_url: string, init: RequestInit) => {
+				const request = JSON.parse(init.body as string) as Request;
+				requests.push(request);
+				const names = request.dimensions.map(({ name }) => name);
+				if (names.includes("pageTitle"))
+					return json({
+						rows: [row(["/", "Main home", "example.com"], 20), row(["/", "Content home", "content.example.com"], 40)],
+						rowCount: 2,
+					});
+				if (names.length === 2)
+					return json({ rows: [row(["/", "example.com"], 3), row(["/", "content.example.com"], 2)], rowCount: 2 });
+				if (names.length === 3)
+					return json({
+						rows: [row(["/", "20261001", "example.com"], 12), row(["/", "20261001", "content.example.com"], 8)],
+						rowCount: 2,
+					});
+				return json({
+					rows: [
+						row(["/", "20261001", "chatgpt.com", "referral", "Referral", "example.com"], 3),
+						row(["/", "20261001", "claude.ai", "referral", "Referral", "content.example.com"], 2),
+					],
+					rowCount: 2,
+				});
+			}),
+		);
+		const report = await fetchTrafficPages({
+			...input,
+			hostnames: ["example.com", "content.example.com"],
+			page: 1,
+			pageSize: 5,
+			pageSearch: "",
+			pageScope: "ai",
+		});
+		expect(report.rows.map(({ hostname, path, title, ai, total }) => ({ hostname, path, title, ai, total }))).toEqual([
+			{ hostname: "example.com", path: "/", title: "Main home", ai: 3, total: 12 },
+			{ hostname: "content.example.com", path: "/", title: "Content home", ai: 2, total: 8 },
+		]);
+		expect(report.rows[0].trend[0]).toMatchObject({ ai: 3, total: 12 });
+		expect(report.rows[1].trend[0]).toMatchObject({ ai: 2, total: 8 });
+		expect(report.warnings).toEqual(["observed_session_start"]);
+		expect(requests).toHaveLength(4);
+		expect(requests[0].dimensions).toEqual([{ name: "pagePath" }, { name: "hostName" }]);
+	});
+	it("rejects an ambiguous full URL in a combined path filter before querying GA4", async () => {
+		const fetch = vi.fn();
+		vi.stubGlobal("fetch", fetch);
+		await expect(
+			fetchTrafficOverview({
+				...input,
+				hostnames: ["example.com", "content.example.com"],
+				conditions: [{ mode: "include", operator: "exact", value: "https://example.com/" }],
+			}),
+		).rejects.toThrow("Select a domain");
+		expect(fetch).not.toHaveBeenCalled();
+	});
 	it("joins identical-scope daily totals and AI providers without double counting", async () => {
 		const requests = mockReports((request) =>
 			request.dimensions.length === 1

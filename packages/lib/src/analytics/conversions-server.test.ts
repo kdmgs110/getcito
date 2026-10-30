@@ -44,7 +44,7 @@ interface MockOptions {
 	observed?: boolean;
 	rateMetric?: boolean;
 	compatible?: (request: Request) => boolean;
-	report?: (request: Request) => Response;
+	report?: (request: Request) => Response | undefined;
 	keyEvents?: unknown[];
 }
 function mock(options: MockOptions = {}) {
@@ -83,7 +83,8 @@ function mock(options: MockOptions = {}) {
 				});
 			}
 			if (request.dimensions[0]?.name === "hostName") return json({ rows: [row(["example.com"], [100])], rowCount: 1 });
-			if (options.report) return options.report(request);
+			const custom = options.report?.(request);
+			if (custom) return custom;
 			if (request.metrics[0].name === "keyEvents")
 				return json({
 					rows: [
@@ -104,7 +105,7 @@ function mock(options: MockOptions = {}) {
 					metadata: { timeZone: "Asia/Tokyo" },
 				});
 			const converted = filtered(request, "isKeyEvent");
-			const metric = (n: number, rate: number) => (converted ? [n] : [n, rate]);
+			const metric = (n: number, _rate: number) => [n];
 			if (request.dimensions.length === 0)
 				return json({
 					rows: [row([], metric(converted ? (ai(request) ? 4 : 10) : ai(request) ? 20 : 100, ai(request) ? 0.2 : 0.1))],
@@ -144,18 +145,97 @@ afterEach(() => {
 });
 
 describe("GA4 conversion reporting", () => {
+	it("accepts an all-goals report request while retaining domain selection", () => {
+		expect(
+			conversionRequestSchema.parse({
+				brandId: "brand",
+				goalId: "all",
+				hostname: "all",
+				from: input.from,
+				to: input.to,
+			}),
+		).toMatchObject({ goalId: "all", hostname: "all" });
+	});
+	it("counts enabled host/event unions and calculates CVR from deduplicated session unions", async () => {
+		mock({
+			keyEvents: [
+				{ name: "properties/123/keyEvents/1", eventName: "apply" },
+				{ name: "properties/123/keyEvents/2", eventName: "download" },
+			],
+			report: (request) =>
+				request.metrics[0].name === "keyEvents"
+					? json({
+							rows: [
+								row(["20261001", "chatgpt.com", "referral", "Referral", "/seminar"], [10]),
+								row(["20261002", "gemini.google.com", "referral", "Referral", "/contact"], [5]),
+							],
+							rowCount: 2,
+						})
+					: undefined,
+		});
+		const report = await fetchConversionReport({
+			...input,
+			hostnames: ["example.com", "content.example.com"],
+			eventNames: ["apply", "download", "apply"],
+			eventScopes: [
+				{ hostname: "example.com", eventNames: ["download"] },
+				{ hostname: "content.example.com", eventNames: ["apply"] },
+			],
+		});
+		expect(report.totals).toMatchObject({
+			aiCv: 15,
+			cv: 15,
+			aiCvr: 0.2,
+			cvr: 0.1,
+			sessions: 100,
+			aiSessions: 20,
+			aiCvSessions: 4,
+		});
+		expect(report.cvrSupported).toBe(true);
+		expect(report.measurementScope).toBe("cv_event_host");
+		expect(report.sources.find((source) => source.provider === "chatgpt")?.cv).toBe(10);
+		expect(report.sources.find((source) => source.provider === "gemini")?.cv).toBe(5);
+		const counts = requests.filter(
+			(request) => request.metrics[0].name === "keyEvents" && request.offset !== undefined,
+		);
+		expect(counts).toHaveLength(1);
+		const serialized = JSON.stringify(counts[0].dimensionFilter);
+		expect(serialized).toContain(
+			'"fieldName":"hostName","inListFilter":{"values":["content.example.com","example.com"]',
+		);
+		expect(serialized).toContain('"orGroup":{"expressions":[');
+		expect(serialized).toContain('"value":"example.com","caseSensitive":false}');
+		expect(serialized).toContain('"fieldName":"eventName","stringFilter":{"matchType":"EXACT","value":"download"');
+		expect(serialized).toContain('"value":"content.example.com","caseSensitive":false}');
+		expect(serialized).toContain('"fieldName":"eventName","stringFilter":{"matchType":"EXACT","value":"apply"');
+		expect(
+			requests.some((request) => request.metrics.some(({ name }) => name.startsWith("sessionKeyEventRate:"))),
+		).toBe(false);
+	});
+	it("rejects event scopes outside the selected hosts or selected CVs", async () => {
+		mock();
+		await expect(
+			fetchConversionReport({ ...input, eventScopes: [{ hostname: "other.example", eventNames: ["apply"] }] }),
+		).rejects.toMatchObject({ code: "invalid_request" });
+		await expect(
+			fetchConversionReport({ ...input, eventScopes: [{ hostname: "example.com", eventNames: ["download"] }] }),
+		).rejects.toMatchObject({ code: "invalid_request" });
+		expect(requests.filter((request) => request.metrics[0].name === "keyEvents")).toHaveLength(0);
+	});
 	it("allocates complete trends only for the selected pages in a year-long report", async () => {
 		const paths = 500;
 		const initialized = vi.spyOn(conversionHelpers, "emptyConversionPeriod");
 		mock({
-			report: () =>
-				json({
-					rows: Array.from({ length: paths }, (_, index) =>
-						row(["20261001", "chatgpt.com", "referral", "Referral", `/jobs/${index}`], [1]),
-					),
-					rowCount: paths,
-					metadata: { timeZone: "Asia/Tokyo" },
-				}),
+			report: (request) =>
+				request.metrics[0].name === "keyEvents"
+					? json({
+							rows: Array.from({ length: paths }, (_, index) =>
+								row(["20261001", "chatgpt.com", "referral", "Referral", `/jobs/${index}`], [1]),
+							),
+							rowCount: paths,
+							metadata: { timeZone: "Asia/Tokyo" },
+						})
+					: json({ rows: [], rowCount: 0 }),
 		});
 		const report = await fetchConversionReport({
 			...input,
@@ -171,8 +251,23 @@ describe("GA4 conversion reporting", () => {
 		for (const page of report.pages.rows) {
 			expect(page.trend).toHaveLength(365);
 			expect(page.trend.find((point) => point.date === "2026-10-01")).toMatchObject({ cv: 1, aiCv: 1 });
-			expect(page.trend.find((point) => point.date === "2026-01-01")).toMatchObject({ cv: 0, aiCv: 0, sessions: null });
+			expect(page.trend.find((point) => point.date === "2026-01-01")).toMatchObject({ cv: 0, aiCv: 0, sessions: 0 });
 		}
+		const pageSessions = requests.filter(
+			(request) =>
+				request.metrics[0].name === "sessions" &&
+				request.offset !== undefined &&
+				request.dimensions.some((d) => d.name === "landingPage"),
+		);
+		expect(pageSessions.length).toBeGreaterThan(0);
+		for (const request of pageSessions) {
+			const serialized = JSON.stringify(request.dimensionFilter);
+			expect(serialized).toContain(JSON.stringify(report.pages.rows.map((row) => row.path)));
+		}
+		for (const request of requests.filter(
+			(request) => request.metrics[0].name === "sessions" && !request.dimensions.length,
+		))
+			expect(filtered(request, "landingPage")).toBe(false);
 		// One sparse point per populated path, plus the global and five displayed calendars.
 		expect(initialized.mock.calls.length).toBeLessThanOrEqual(paths + 6 * 365);
 	});
@@ -200,8 +295,8 @@ describe("GA4 conversion reporting", () => {
 			aiSessions: 5,
 			cvSessions: 1,
 			aiCvSessions: 1,
-			cvr: 0.4,
-			aiCvr: 0.4,
+			cvr: 0.2,
+			aiCvr: 0.2,
 		});
 	});
 
@@ -238,7 +333,7 @@ describe("GA4 conversion reporting", () => {
 		});
 		expect(report.totals.aiCvr).not.toBe(8 / 20);
 		expect(report.pages.rows.map((p) => p.path)).toEqual(["/jobs/2", "/jobs/1"]);
-		const rates = requests.filter((r) => r.metrics.some((m) => m.name.startsWith("sessionKeyEventRate:")));
+		const rates = requests.filter((r) => r.metrics[0].name === "sessions" && !filtered(r, "isKeyEvent"));
 		expect(rates.length).toBeGreaterThan(0);
 		for (const request of rates) {
 			expect(filtered(request, "eventName")).toBe(false);
@@ -249,7 +344,7 @@ describe("GA4 conversion reporting", () => {
 			true,
 		);
 	});
-	it("returns CV-host scoped counts for multi-host observed mode and never fabricates CVR", async () => {
+	it("uses matching domain/path filters for sessions and converting sessions in observed mode", async () => {
 		mock();
 		const report = await fetchConversionReport({
 			...input,
@@ -260,14 +355,20 @@ describe("GA4 conversion reporting", () => {
 		expect(report.totals).toMatchObject({
 			cv: 18,
 			aiCv: 8,
-			sessions: null,
-			aiSessions: null,
-			cvr: null,
-			aiCvr: null,
-			cvSessions: null,
+			sessions: 100,
+			aiSessions: 20,
+			cvr: 0.1,
+			aiCvr: 0.2,
+			cvSessions: 10,
 		});
-		expect(report.warnings).toEqual(expect.arrayContaining(["cross_host_landing_unverified", "cvr_scope_unavailable"]));
+		expect(report.warnings).toEqual(expect.arrayContaining(["cross_host_landing_unverified"]));
 		expect(report.pageAttributionSupported).toBe(true);
+		expect(report.cvrSupported).toBe(true);
+		expect(
+			requests
+				.filter((r) => r.metrics[0].name === "sessions")
+				.every((r) => filtered(r, "hostName") && filtered(r, "platform", "web") && filtered(r, "landingPage")),
+		).toBe(true);
 		expect(requests.some((r) => r.metrics.some((m) => m.name.startsWith("sessionKeyEventRate:")))).toBe(false);
 		expect(
 			requests
@@ -318,22 +419,49 @@ describe("GA4 conversion reporting", () => {
 				aiCv: 3,
 				aiCvr: 0.1,
 			});
-			expect(
-				requests
-					.filter((r) => r.metrics.some((m) => m.name.startsWith("sessionKeyEventRate:")))
-					.some((r) => r.dimensions.length === 0),
-			).toBe(true);
+			expect(requests.filter((r) => r.metrics[0].name === "sessions").some((r) => r.dimensions.length === 0)).toBe(
+				true,
+			);
 			expect(requests.every((r) => !r.dimensions.some((d) => d.name === "date"))).toBe(true);
 		}
 	});
-	it("keeps CV counts when an event-specific CVR metric is unavailable", async () => {
-		mock({ rateMetric: false });
+	it("does not depend on an event-specific CVR metric for Japanese key events", async () => {
+		mock({ rateMetric: false, keyEvents: [{ name: "properties/123/keyEvents/1", eventName: "webセミナー申し込み" }] });
+		const report = await fetchConversionReport({
+			...input,
+			eventName: "webセミナー申し込み",
+			measurementMode: "observed_session_start",
+		});
+		expect(report.cvrSupported).toBe(true);
+		expect(report.totals).toMatchObject({ aiCv: 8, aiSessions: 20, aiCvSessions: 4, aiCvr: 0.2 });
+		expect(requests.some((r) => r.metrics.some((m) => m.name.startsWith("sessionKeyEventRate:")))).toBe(false);
+	});
+	it("preserves denominators if converted-session dimensions are unavailable", async () => {
+		mock({ compatible: (r) => !filtered(r, "isKeyEvent") });
+		const report = await fetchConversionReport(input);
+		expect(report.totals).toMatchObject({ aiCv: 8, aiSessions: 20, aiCvSessions: null, aiCvr: null });
+		expect(report.cvrSupported).toBe(false);
+		expect(report.warnings).toContain("conversion_sessions_unavailable");
+	});
+	it("leaves sessions unavailable when GA4 cannot support matching dimensions", async () => {
+		mock({ compatible: (r) => r.metrics[0].name !== "sessions" });
+		const report = await fetchConversionReport(input);
+		expect(report.totals).toMatchObject({ aiCv: 8, aiSessions: null, aiCvSessions: null, aiCvr: null });
+		expect(report.cvrSupported).toBe(false);
+	});
+	it("suppresses impossible rates when converting sessions exceed the denominator", async () => {
+		mock({
+			report: (r) =>
+				r.metrics[0].name === "sessions" && !r.dimensions.length
+					? json({ rows: [row([], [filtered(r, "isKeyEvent") ? 9 : 5])], rowCount: 1 })
+					: undefined,
+		});
 		const report = await fetchConversionReport(input);
 		expect(report.cvrSupported).toBe(false);
-		expect(report.totals.aiCv).toBe(8);
 		expect(report.totals.aiCvr).toBeNull();
-		expect(report.warnings).toContain("conversion_rate_metric_unavailable");
+		expect(report.warnings).toContain("inconsistent_totals");
 	});
+
 	it("cannot apply a landing-page condition when the required dimension is incompatible", async () => {
 		mock({ compatible: (request) => !request.dimensions.some((d) => d.name === "landingPage") });
 		await expect(

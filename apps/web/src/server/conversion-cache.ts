@@ -13,6 +13,7 @@ type CacheConnection = {
 	revision: string;
 	propertyId: string;
 	hostname: string;
+	hostnames?: string[];
 	measurementMode: AnalyticsMeasurementMode;
 };
 type CacheGoal = { id: string; revision: number };
@@ -20,14 +21,19 @@ type CacheGoal = { id: string; revision: number };
 /** Pure key shared by the endpoint and deterministic report fixtures. */
 export function conversionReportCacheKey(
 	connection: CacheConnection,
-	goal: CacheGoal,
+	goal: CacheGoal | CacheGoal[],
 	input: ConversionRequest,
 ): string {
+	const hosts = [...new Set(connection.hostnames ?? [connection.hostname])].sort();
+	const goals = (Array.isArray(goal) ? goal : [goal])
+		.map(({ id, revision }) => ({ id, revision }))
+		.sort((a, b) => a.id.localeCompare(b.id));
 	const normalized = {
+		hostnames: hosts,
 		brandId: input.brandId,
 		from: input.from,
 		to: input.to,
-		conditions: normalizeConditions(input.conditions ?? [], connection.hostname),
+		conditions: normalizeConditions(input.conditions ?? [], hosts),
 		goalId: input.goalId,
 		grain: input.grain ?? "day",
 		page: input.page ?? 1,
@@ -38,7 +44,7 @@ export function conversionReportCacheKey(
 	return createHash("sha256")
 		.update(
 			JSON.stringify([
-				"conversion-report-v1",
+				"conversion-report-v2",
 				AI_CLASSIFICATION_VERSION,
 				FILTER_SCHEMA_VERSION,
 				CONVERSION_MEASUREMENT_VERSION,
@@ -47,8 +53,7 @@ export function conversionReportCacheKey(
 				connection.propertyId,
 				connection.hostname,
 				connection.measurementMode,
-				goal.id,
-				goal.revision,
+				goals,
 				normalized,
 			]),
 		)

@@ -81,7 +81,7 @@ export async function seedTrafficFixtures() {
 		};
 		const fetchedAt = new Date().toISOString();
 		async function cache(kind: "overview" | "pages" | "detail", input: unknown, payload: unknown) {
-			const key = trafficCacheKey(kind, connection, input);
+			const key = trafficCacheKey(kind, connection, { ...(input as Record<string, unknown>), hostname: TRAFFIC_HOST, hostnames: [TRAFFIC_HOST] });
 			await client.query(
 				`INSERT INTO traffic_query_cache(cache_key,brand_id,connection_revision,payload,expires_at)
 				VALUES($1,$2,$3,$4,NOW()+INTERVAL '6 hours') ON CONFLICT(cache_key) DO UPDATE SET payload=EXCLUDED.payload,expires_at=EXCLUDED.expires_at`,

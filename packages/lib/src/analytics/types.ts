@@ -23,6 +23,8 @@ export interface TrafficOverview {
 }
 export interface TrafficPageRow extends TrafficTotals {
 	path: string;
+	/** Present for combined reports so identical paths on different hosts stay separate. */
+	hostname?: string;
 	/** Most frequent page-view title on this host during the selected period. */
 	title?: string | null;
 	trend: TrafficPoint[];
@@ -37,6 +39,9 @@ export interface TrafficPages {
 }
 export interface TrafficRequest {
 	brandId: string;
+	/** Omitted or `all` selects all domains configured for the brand. */
+	hostname?: string;
+	detailHostname?: string;
 	from: string;
 	to: string;
 	conditions: TrafficCondition[];

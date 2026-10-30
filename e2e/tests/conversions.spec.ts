@@ -10,7 +10,7 @@ import {
 
 const ja = !process.env.VITE_APP_LOCALE || /^ja(?:-|$)/i.test(process.env.VITE_APP_LOCALE);
 const text = (japanese: string, english: string) => (ja ? japanese : english);
-const path = `/app/${CONVERSION_BRAND_ID}/traffic?from=${CONVERSION_FROM}&to=${CONVERSION_TO}&analysisTab=conversions`;
+const path = `/app/${CONVERSION_BRAND_ID}/traffic?hostname=example.com&conversionGoalId=${CONVERSION_GOAL_ID}&from=${CONVERSION_FROM}&to=${CONVERSION_TO}&analysisTab=conversions`;
 
 test.describe("AI conversions", () => {
 	test.describe.configure({ mode: "serial" });

@@ -239,3 +239,50 @@ describe("Saved conversion view preferences", () => {
 		expect(mocks.writes).toHaveLength(0);
 	});
 });
+
+it("stores all-enabled CV selection as a nullable preference rather than a fake goal UUID", async () => {
+	mocks.results.push([{ ...view, conversionGoalId: null, analysisTab: "conversions" }]);
+	await saveTrafficViewFn({
+		data: {
+			brandId,
+			id,
+			revision: 1,
+			hostname: "example.com",
+			name: "All CV",
+			conditions: [],
+			analysisTab: "conversions",
+			conversionGoalId: "all",
+		},
+	});
+	expect(mocks.writes[0]).toMatchObject({ conversionGoalId: null, analysisTab: "conversions" });
+	expect(mocks.connection).not.toHaveBeenCalled();
+});
+
+it("saves a site's CV view while its connection anchor is another owned domain", async () => {
+	mocks.access.mockResolvedValue({ ...user, sites: ["example.com", "content.example.com"] });
+	mocks.connection.mockResolvedValue({
+		brandId,
+		propertyId: "123",
+		hostname: "content.example.com",
+		status: "connected",
+		revision: "connection-revision",
+	});
+	mocks.results.push([{ id: brandId }], [{ id }], [{ ...view, conversionGoalId: id, analysisTab: "conversions" }]);
+	await saveTrafficViewFn({
+		data: {
+			brandId,
+			id,
+			revision: 1,
+			hostname: "example.com",
+			name: "Site CV",
+			conditions: [],
+			conversionGoalId: id,
+			analysisTab: "conversions",
+		},
+	});
+	const lock = new PgDialect().sqlToQuery(mocks.wheres[0] as never);
+	const goalQuery = new PgDialect().sqlToQuery(mocks.wheres[1] as never);
+	expect(lock.params).toContain("content.example.com");
+	expect(goalQuery.params).toContain("example.com");
+	expect(mocks.writes[0]).toMatchObject({ conversionGoalId: id, analysisTab: "conversions" });
+});

@@ -1,16 +1,18 @@
+import type { SavedTrafficView } from "@workspace/lib/analytics";
 import { describe, expect, it } from "vitest";
 import {
+	duplicateViewDraft,
 	parseConditions,
 	ratio,
+	reorderSiteViewIds,
 	resolveViewConditions,
 	scopeChange,
-	validDateRange,
+	trafficDomainScopeKey,
 	validateTrafficSearch,
+	validDateRange,
 	viewStorageKey,
-	reorderSiteViewIds,
-	duplicateViewDraft,
 } from "./traffic-state";
-import type { SavedTrafficView } from "@workspace/lib/analytics";
+
 const view: SavedTrafficView = {
 	id: "view-1",
 	brandId: "brand-1",
@@ -22,6 +24,33 @@ const view: SavedTrafficView = {
 	updatedAt: "2026-10-30",
 };
 describe("traffic URL and view state", () => {
+	it("keys all-domain reports by canonical domain membership without changing exact-domain reports", () => {
+		const main = "www.example.com";
+		const content = "content.example.com";
+		expect(trafficDomainScopeKey([main, content, main])).toBe(trafficDomainScopeKey([content, main]));
+		expect(trafficDomainScopeKey([main, content])).not.toBe(trafficDomainScopeKey([main]));
+		expect(trafficDomainScopeKey([main, content], main)).toBe(trafficDomainScopeKey([main], main));
+	});
+	it("retains domain scope and clears the previous page's domain with report scope changes", () => {
+		expect(validateTrafficSearch({ hostname: "all", detailHostname: "content.example.com" })).toEqual({
+			hostname: "all",
+			detailHostname: "content.example.com",
+		});
+		const changed = {
+			hostname: "all",
+			viewId: "old",
+			conditions: "[]",
+			detailHostname: "content.example.com",
+			...scopeChange({ hostname: "example.com", viewId: undefined, conditions: undefined }),
+		};
+		expect(changed).toMatchObject({
+			hostname: "example.com",
+			viewId: undefined,
+			conditions: undefined,
+			detail: undefined,
+			detailHostname: undefined,
+		});
+	});
 	it("restores a saved view and allows explicit temporary all-path conditions", () => {
 		expect(resolveViewConditions({ viewId: view.id }, [view], "example.com").conditions).toEqual(view.conditions);
 		const changed = resolveViewConditions({ viewId: view.id, conditions: "[]" }, [view], "example.com");

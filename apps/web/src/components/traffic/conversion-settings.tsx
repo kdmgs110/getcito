@@ -40,6 +40,8 @@ export function ConversionSettings({
 	brandId,
 	scopeKey,
 	goals,
+	hostname,
+	availableSites,
 	canManage,
 	onClose,
 	onChanged,
@@ -47,10 +49,15 @@ export function ConversionSettings({
 	brandId: string;
 	scopeKey: string;
 	goals: ConversionGoal[];
+	hostname: string;
+	availableSites: string[];
 	canManage: boolean;
 	onClose: () => void;
 	onChanged: (goal?: ConversionGoal) => Promise<void>;
 }) {
+	const [site, setSite] = useState(hostname);
+	const siteGoals = goals.filter((goal) => goal.hostname === site);
+	const siteId = useId();
 	const events = useQuery({
 		queryKey: ["traffic-conversion-events", brandId, scopeKey],
 		queryFn: () => listConversionEventsFn({ data: { brandId } }),
@@ -70,6 +77,7 @@ export function ConversionSettings({
 			const saved = await saveConversionGoalFn({
 				data: {
 					brandId,
+					hostname: goal.hostname,
 					id: goal.id,
 					revision: goal.revision,
 					displayName: goal.displayName,
@@ -94,6 +102,28 @@ export function ConversionSettings({
 				</SheetHeader>
 				<div className="space-y-5 px-4 pb-6">
 					<p className="rounded-lg border bg-muted/30 p-3 text-sm">{t("conversions.readOnly")}</p>
+					<label htmlFor={siteId} className="flex flex-wrap items-center gap-3 text-sm">
+						{t("traffic.domainFilter")}
+						<select
+							id={siteId}
+							value={site}
+							disabled={busy}
+							className="h-9 rounded-md border bg-background px-3"
+							onChange={(event) => {
+								setSite(event.target.value);
+								setEditing(undefined);
+								setNotice(false);
+								setError(undefined);
+							}}
+						>
+							{availableSites.map((site) => (
+								<option key={site} value={site}>
+									{site}
+								</option>
+							))}
+						</select>
+					</label>
+					<p className="text-xs text-muted-foreground">{t("conversions.domainSettingsHelp")}</p>
 					{notice && (
 						<p role="status" className="text-sm">
 							{t("conversions.saved")}
@@ -116,8 +146,8 @@ export function ConversionSettings({
 								</Button>
 							)}
 						</div>
-						{!goals.length && <p className="text-sm text-muted-foreground">{t("conversions.notConfigured")}</p>}
-						{goals.map((goal) => (
+						{!siteGoals.length && <p className="text-sm text-muted-foreground">{t("conversions.notConfigured")}</p>}
+						{siteGoals.map((goal) => (
 							<div key={goal.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
 								<div className="min-w-0 flex-1">
 									<p className="break-words text-sm font-medium">{goal.displayName}</p>
@@ -199,6 +229,7 @@ export function ConversionSettings({
 											const saved = await saveConversionGoalFn({
 												data: {
 													brandId,
+													hostname: site,
 													...value,
 													...(editing !== "new" ? { id: editing.id, revision: editing.revision } : {}),
 													enabled: editing === "new" ? true : editing.enabled,

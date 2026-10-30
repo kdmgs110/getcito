@@ -11,16 +11,21 @@ import {
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@workspace/ui/components/sheet";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatNumber, t, UI_LOCALE } from "@/i18n";
 import { getConversionReportFn, listConversionGoalsFn } from "@/server/conversions";
 import { ConversionSettings } from "./conversion-settings";
-import { conversionNumber, conversionRate, resolveConversionGoal } from "./conversion-state";
+import {
+	conversionGoalRevisionKey,
+	conversionNumber,
+	conversionRate,
+	resolveConversionSelection,
+} from "./conversion-state";
 import { QualityNotices } from "./quality-notices";
 import { TrafficCard, TrafficError, TrafficLoading } from "./shared";
 import { dateLabel, GrainToggle, sourceColors, sourceLabels } from "./traffic-chart";
-import { scopeChange, type TrafficSearch } from "./traffic-state";
+import { scopeChange, type TrafficSearch, trafficDomainScopeKey } from "./traffic-state";
 
 type Metric = "cv" | "sessions" | "cvr";
 export function ConversionKpis({ metrics, cvrSupported }: { metrics: ConversionMetrics; cvrSupported: boolean }) {
@@ -222,6 +227,9 @@ function ConversionPeriodTable({ report }: { report: ConversionReport }) {
 								{t("conversions.allCv")}
 							</th>
 							<th scope="col" className="p-3 text-right">
+								{t("conversions.aiSessions")}
+							</th>
+							<th scope="col" className="p-3 text-right">
 								{t("conversions.aiCvSessions")}
 							</th>
 							<th scope="col" className="p-3 text-right">
@@ -237,6 +245,7 @@ function ConversionPeriodTable({ report }: { report: ConversionReport }) {
 								</th>
 								<td className="p-3 text-right tabular-nums">{conversionNumber(point.aiCv)}</td>
 								<td className="p-3 text-right tabular-nums">{conversionNumber(point.cv)}</td>
+								<td className="p-3 text-right tabular-nums">{conversionNumber(point.aiSessions)}</td>
 								<td className="p-3 text-right tabular-nums">{conversionNumber(point.aiCvSessions)}</td>
 								<td className="p-3 text-right tabular-nums">
 									{conversionRate(report.cvrSupported ? point.aiCvr : null)}
@@ -251,6 +260,7 @@ function ConversionPeriodTable({ report }: { report: ConversionReport }) {
 							</th>
 							<td className="p-3 text-right tabular-nums">{conversionNumber(report.totals.aiCv)}</td>
 							<td className="p-3 text-right tabular-nums">{conversionNumber(report.totals.cv)}</td>
+							<td className="p-3 text-right tabular-nums">{conversionNumber(report.totals.aiSessions)}</td>
 							<td className="p-3 text-right tabular-nums">{conversionNumber(report.totals.aiCvSessions)}</td>
 							<td className="p-3 text-right tabular-nums">
 								{conversionRate(report.cvrSupported ? report.totals.aiCvr : null)}
@@ -507,8 +517,17 @@ export function ConversionAnalysis({
 	const id = useId();
 	const [settings, setSettings] = useState(false);
 	const returnFocus = useRef<HTMLElement | null>(null);
+	const hostname = request.hostname ?? "all";
+	const domainScopeKey = trafficDomainScopeKey(status.availableSites, hostname);
 	const goals = useQuery({
-		queryKey: ["traffic-conversion-goals", brandId, status.propertyId, status.hostname, status.connectionRevision],
+		queryKey: [
+			"traffic-conversion-goals",
+			brandId,
+			status.propertyId,
+			status.hostname,
+			status.connectionRevision,
+			trafficDomainScopeKey(status.availableSites),
+		],
 		queryFn: () => listConversionGoalsFn({ data: { brandId } }),
 		enabled: !!status.connected,
 		retry: false,
@@ -516,16 +535,15 @@ export function ConversionAnalysis({
 		staleTime: 30000,
 	});
 	const available = (goals.data ?? []).filter(
-		(goal) => goal.propertyId === status.propertyId && goal.hostname === status.hostname,
+		(goal) => goal.propertyId === status.propertyId && status.availableSites.includes(goal.hostname),
 	);
-	const resolved = resolveConversionGoal(search.conversionGoalId, available);
+	const resolved = resolveConversionSelection(search.conversionGoalId, available, hostname);
 	const goal = resolved.goal;
-	useEffect(() => {
-		if (goal && !search.conversionGoalId) void onSearch({ conversionGoalId: goal.id }, true);
-	}, [goal, search.conversionGoalId, onSearch]);
+	const hasGoals = resolved.options.length > 0;
+	const goalRevisions = conversionGoalRevisionKey(available, hostname, goal?.eventName);
 	const reportRequest = {
 		...request,
-		goalId: goal?.id ?? "",
+		goalId: resolved.id,
 		grain: search.grain ?? ("day" as const),
 		page: search.page ?? 1,
 		pageSize: search.pageSize ?? 10,
@@ -534,15 +552,16 @@ export function ConversionAnalysis({
 	const report = useQuery({
 		queryKey: [
 			"traffic-conversions",
+			domainScopeKey,
 			status.propertyId,
 			status.hostname,
 			status.connectionRevision,
-			goal?.revision,
+			goalRevisions,
 			status.measurementMode,
 			reportRequest,
 		],
 		queryFn: () => getConversionReportFn({ data: reportRequest }),
-		enabled: enabled && !!goal && !resolved.invalid,
+		enabled: enabled && hasGoals && !resolved.invalid,
 		retry: false,
 		refetchOnWindowFocus: false,
 		staleTime: 30 * 60000,
@@ -551,16 +570,17 @@ export function ConversionAnalysis({
 	const detail = useQuery({
 		queryKey: [
 			"traffic-conversion-detail",
+			domainScopeKey,
 			status.propertyId,
 			status.hostname,
 			status.connectionRevision,
-			goal?.revision,
+			goalRevisions,
 			status.measurementMode,
 			reportRequest,
 			detailPath,
 		],
 		queryFn: () => getConversionReportFn({ data: { ...reportRequest, detail: detailPath, page: 1, pageSearch: "" } }),
-		enabled: enabled && !!goal && !resolved.invalid && !!detailPath && report.data?.pageAttributionSupported === true,
+		enabled: enabled && hasGoals && !resolved.invalid && !!detailPath && report.data?.pageAttributionSupported === true,
 		retry: false,
 		refetchOnWindowFocus: false,
 		staleTime: 30 * 60000,
@@ -569,7 +589,8 @@ export function ConversionAnalysis({
 		await client.invalidateQueries({
 			predicate: (query) => typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("traffic-conversion"),
 		});
-		if (saved?.enabled) await onSearch(scopeChange({ conversionGoalId: saved.id }));
+		if (saved?.enabled && (hostname === "all" || saved.hostname === hostname))
+			await onSearch(scopeChange({ conversionGoalId: saved.id }));
 	}
 	return (
 		<div className="space-y-5">
@@ -579,17 +600,15 @@ export function ConversionAnalysis({
 					<select
 						id={id}
 						className="h-9 max-w-64 rounded-md border bg-background px-3"
-						value={goal?.id ?? ""}
+						value={resolved.id}
 						onChange={(e) => void onSearch(scopeChange({ conversionGoalId: e.target.value || undefined }))}
 					>
-						<option value="">{t("conversions.chooseGoal")}</option>
-						{available
-							.filter((item) => item.enabled)
-							.map((item) => (
-								<option key={item.id} value={item.id}>
-									{item.displayName}
-								</option>
-							))}
+						<option value="all">{t("conversions.allGoals")}</option>
+						{resolved.options.map((item) => (
+							<option key={item.id} value={item.id}>
+								{item.displayName}
+							</option>
+						))}
 					</select>
 				</label>
 				<Button variant="outline" size="sm" onClick={() => setSettings(true)}>
@@ -604,7 +623,7 @@ export function ConversionAnalysis({
 					{t("conversions.unavailableGoal")}
 				</p>
 			)}
-			{goals.data && !goals.isError && !goal && !resolved.invalid && (
+			{goals.data && !goals.isError && !hasGoals && !resolved.invalid && (
 				<TrafficCard>
 					<div className="space-y-3 py-8 text-center">
 						<h2 className="text-xl font-semibold">{t("conversions.empty")}</h2>
@@ -617,7 +636,7 @@ export function ConversionAnalysis({
 					</div>
 				</TrafficCard>
 			)}
-			{goal && enabled && (
+			{hasGoals && !resolved.invalid && enabled && (
 				<>
 					<div className="flex flex-wrap items-center justify-between gap-3">
 						<p className="text-xs text-muted-foreground">
@@ -655,12 +674,14 @@ export function ConversionAnalysis({
 					brandId={brandId}
 					scopeKey={`${status.propertyId}:${status.hostname}:${status.connectionRevision}`}
 					goals={available}
+					hostname={hostname === "all" ? status.hostname : hostname}
+					availableSites={status.availableSites}
 					canManage={status.canManage}
 					onClose={() => setSettings(false)}
 					onChanged={changed}
 				/>
 			)}
-			{detailPath && goal && enabled && report.data?.pageAttributionSupported && (
+			{detailPath && hasGoals && !resolved.invalid && enabled && report.data?.pageAttributionSupported && (
 				<Sheet open onOpenChange={(open) => !open && void onSearch({ detail: undefined })}>
 					<SheetContent
 						className="w-full overflow-y-auto sm:max-w-3xl"
@@ -674,7 +695,7 @@ export function ConversionAnalysis({
 						<SheetHeader>
 							<SheetTitle>{t("conversions.detailTitle")}</SheetTitle>
 							<SheetDescription>
-								{goal.displayName} · {request.from} – {request.to}
+								{goal?.displayName ?? t("conversions.allGoals")} · {request.from} – {request.to}
 							</SheetDescription>
 						</SheetHeader>
 						<div className="space-y-5 px-4 pb-6">

@@ -14,7 +14,7 @@ node_modules
 !.yarn/versions
 
 # testing
-/coverage
+coverage/
 
 # next.js
 .next/
@@ -42,11 +42,11 @@ yarn-error.log*
 debug-storybook.log
 storybook-static/
 
-# env files (can opt-in for committing if needed)
+# Local environment and credential files; keep documented templates versioned.
 .env
+.env.*
 !.env.example
-!.env.whitelabel.example
-!.env.local.example
+!.env.*.example
 
 # playwright
 playwright-report/
@@ -97,3 +97,13 @@ apps/cli/
 
 .claude/skills/add-changeset/
 docs/
+
+# Local analysis exports, credentials, and generated verification artifacts
+/output/
+/outputs/
+/artifacts/
+client_secret_*.json
+credentials.local.json
+tokens.local.json
+*.sqlite
+*.sqlite3

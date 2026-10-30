@@ -1,4 +1,10 @@
 export const conversionMessages = {
+	"conversions.allGoals": { en: "All enabled conversions", ja: "すべての有効なCV" },
+	"conversions.domainSettingsHelp": {
+		en: "Conversion settings are saved separately for each domain. The all-domain report combines enabled events on their configured domains.",
+		ja: "CV設定はドメインごとに保存されます。全ドメイン表示では、それぞれのドメインで有効なCVを合算します。",
+	},
+
 	"conversions.allPaths": { en: "All landing paths", ja: "すべての開始パス" },
 	"conversions.filterTitle": { en: "Landing path conditions", ja: "開始パス条件" },
 	"conversions.landingUnset": {
@@ -105,8 +111,8 @@ export const conversionMessages = {
 	"conversions.previous": { en: "Previous", ja: "前へ" },
 	"conversions.next": { en: "Next", ja: "次へ" },
 	"conversions.hostScope": {
-		en: "Counts key events recorded on this host by the session’s AI source. The host where the session began is unverified.",
-		ja: "このホストで発生したキーイベントを、セッションのAI参照元で集計します。セッションが始まったホストは未判定です。",
+		en: "Sessions are counted where activity was recorded on the selected domains, and CVR is converting sessions divided by those sessions. The host where the session began is unverified.",
+		ja: "選択ドメイン上で計測されたセッションと、そのドメインでCVしたセッションを集計します。AI CVRは「AI CVセッション ÷ AI流入セッション」です。セッションが始まったホストは未判定です。",
 	},
 	"conversions.cvrUnavailable": {
 		en: "CVR is unavailable because matching session denominators have not been verified. Recorded session starts are not used as a substitute.",
