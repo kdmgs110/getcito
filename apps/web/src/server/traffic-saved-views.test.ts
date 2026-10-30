@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
 	wheres: [] as unknown[],
 	writes: [] as unknown[],
 	access: vi.fn(),
+	connection: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-start", () => ({
@@ -16,7 +17,10 @@ vi.mock("@tanstack/react-start", () => ({
 		}),
 	}),
 }));
-vi.mock("./traffic-runtime", () => ({ requireTrafficAccess: mocks.access }));
+vi.mock("./traffic-runtime", () => ({
+	requireTrafficAccess: mocks.access,
+	currentTrafficConnection: mocks.connection,
+}));
 vi.mock("@workspace/lib/db/db", () => {
 	const query = () => {
 		const chain = {
@@ -35,6 +39,7 @@ vi.mock("@workspace/lib/db/db", () => {
 			},
 			orderBy: () => Promise.resolve(mocks.results.shift() ?? []),
 			returning: () => Promise.resolve(mocks.results.shift() ?? []),
+			for: () => Promise.resolve(mocks.results.shift() ?? []),
 			// biome-ignore lint/suspicious/noThenProperty: Drizzle builders are intentionally awaitable.
 			then: (resolve: (value: unknown[]) => unknown) => Promise.resolve(mocks.results.shift() ?? []).then(resolve),
 		};
@@ -83,6 +88,13 @@ beforeEach(() => {
 	mocks.wheres.length = 0;
 	mocks.writes.length = 0;
 	mocks.access.mockReset().mockResolvedValue(user);
+	mocks.connection.mockReset().mockResolvedValue({
+		brandId,
+		propertyId: "123",
+		hostname: "example.com",
+		status: "connected",
+		revision: "connection-revision",
+	});
 });
 
 describe("Shared traffic view authorization and concurrency", () => {
@@ -142,5 +154,88 @@ describe("Shared traffic view authorization and concurrency", () => {
 	it("normalizes names for shared uniqueness without altering the displayed language", () => {
 		expect(normalizedTrafficViewName("  Ｔｏｐ　 Page ")).toBe("top page");
 		expect(normalizedTrafficViewName("トップページ")).toBe("トップページ");
+	});
+});
+
+describe("Saved conversion view preferences", () => {
+	it("preserves conversion preferences when legacy callers omit them", async () => {
+		mocks.results.push([{ ...view, conversionGoalId: id, analysisTab: "conversions" }]);
+		const result = await saveTrafficViewFn({
+			data: { brandId, id, revision: 1, hostname: "example.com", name: "Top", conditions: [] },
+		});
+		expect(result.conversionGoalId).toBe(id);
+		expect(result.analysisTab).toBe("conversions");
+		expect(mocks.writes[0]).not.toHaveProperty("conversionGoalId");
+		expect(mocks.writes[0]).not.toHaveProperty("analysisTab");
+	});
+	it("can explicitly clear the selected CV and return to traffic", async () => {
+		mocks.results.push([{ ...view, conversionGoalId: null, analysisTab: "traffic" }]);
+		await saveTrafficViewFn({
+			data: {
+				brandId,
+				id,
+				revision: 1,
+				hostname: "example.com",
+				name: "Top",
+				conditions: [],
+				conversionGoalId: null,
+				analysisTab: "traffic",
+			},
+		});
+		expect(mocks.writes[0]).toMatchObject({ conversionGoalId: null, analysisTab: "traffic" });
+	});
+	it("validates CV membership under the current property and site before writing", async () => {
+		mocks.results.push([{ id: brandId }], [{ id }], [{ ...view, conversionGoalId: id, analysisTab: "conversions" }]);
+		await saveTrafficViewFn({
+			data: {
+				brandId,
+				id,
+				revision: 1,
+				hostname: "example.com",
+				name: "Top",
+				conditions: [],
+				conversionGoalId: id,
+				analysisTab: "conversions",
+			},
+		});
+		const query = new PgDialect().sqlToQuery(mocks.wheres[1] as never);
+		expect(query.params).toEqual(expect.arrayContaining([id, brandId, "123", "example.com", true]));
+		expect(mocks.writes[0]).toMatchObject({ conversionGoalId: id, analysisTab: "conversions" });
+	});
+	it("rejects a foreign, disabled or obsolete CV selection", async () => {
+		mocks.results.push([{ id: brandId }], []);
+		await expect(
+			saveTrafficViewFn({
+				data: {
+					brandId,
+					id,
+					revision: 1,
+					hostname: "example.com",
+					name: "Top",
+					conditions: [],
+					conversionGoalId: id,
+					analysisTab: "conversions",
+				},
+			}),
+		).rejects.toThrow("CONVERSION_GOAL_NOT_FOUND");
+		expect(mocks.writes).toHaveLength(0);
+	});
+	it("rejects a CV preference if the property reconnects before its lock", async () => {
+		mocks.results.push([]);
+		await expect(
+			saveTrafficViewFn({
+				data: {
+					brandId,
+					id,
+					revision: 1,
+					hostname: "example.com",
+					name: "Top",
+					conditions: [],
+					conversionGoalId: id,
+					analysisTab: "conversions",
+				},
+			}),
+		).rejects.toThrow("ANALYTICS_CONNECTION_CHANGED");
+		expect(mocks.writes).toHaveLength(0);
 	});
 });

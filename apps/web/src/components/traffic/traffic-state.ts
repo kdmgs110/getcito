@@ -2,6 +2,8 @@ import type { SavedTrafficView, TrafficCondition, TrafficGrain } from "@workspac
 
 export interface TrafficSearch {
 	viewId?: string;
+	analysisTab?: "traffic" | "conversions";
+	conversionGoalId?: string;
 	from?: string;
 	to?: string;
 	grain?: TrafficGrain;
@@ -38,7 +40,7 @@ export function parseConditions(value: unknown): TrafficCondition[] | null {
 }
 export function validateTrafficSearch(search: Record<string, unknown>): TrafficSearch {
 	const output: TrafficSearch = {};
-	for (const key of ["viewId", "from", "to", "detail", "pageSearch"] as const) {
+	for (const key of ["viewId", "from", "to", "detail", "pageSearch", "conversionGoalId"] as const) {
 		if (typeof search[key] === "string" && search[key].length <= 2000) output[key] = search[key];
 	}
 	if (typeof search.conditions === "string" && parseConditions(search.conditions))
@@ -46,6 +48,7 @@ export function validateTrafficSearch(search: Record<string, unknown>): TrafficS
 	if (["day", "week", "month"].includes(String(search.grain))) output.grain = search.grain as TrafficGrain;
 	if (["total", "sources"].includes(String(search.chart))) output.chart = search.chart as "total" | "sources";
 	if (["ai", "all"].includes(String(search.pageScope))) output.pageScope = search.pageScope as "ai" | "all";
+	if (search.analysisTab === "traffic" || search.analysisTab === "conversions") output.analysisTab = search.analysisTab;
 	const page = Number(search.page);
 	if (Number.isSafeInteger(page) && page > 0 && page <= 100000) output.page = page;
 	const pageSize = Number(search.pageSize);
@@ -104,6 +107,24 @@ export function reorderSiteViewIds(
 export function duplicateViewDraft(
 	view: SavedTrafficView,
 	name: string,
-): Pick<SavedTrafficView, "name" | "conditions"> {
-	return { name: name.slice(0, 60), conditions: view.conditions.map((condition) => ({ ...condition })) };
+): Pick<SavedTrafficView, "name" | "conditions" | "analysisTab" | "conversionGoalId"> {
+	return {
+		name: name.slice(0, 60),
+		conditions: view.conditions.map((condition) => ({ ...condition })),
+		analysisTab: view.analysisTab,
+		conversionGoalId: view.conversionGoalId,
+	};
+}
+
+export function newViewDraft(
+	conditions: TrafficCondition[],
+	analysisTab: "traffic" | "conversions",
+	conversionGoalId?: string,
+) {
+	return {
+		name: "",
+		conditions: conditions.map((condition) => ({ ...condition })),
+		analysisTab,
+		conversionGoalId: conversionGoalId ?? null,
+	};
 }

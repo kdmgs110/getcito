@@ -1,9 +1,5 @@
-import { useId, useState } from "react";
-import { BookmarkPlus } from "lucide-react";
 import { normalizeConditions, type SavedTrafficView, type TrafficCondition } from "@workspace/lib/analytics";
 import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
-import { Label } from "@workspace/ui/components/label";
 import {
 	Dialog,
 	DialogContent,
@@ -12,15 +8,21 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@workspace/ui/components/dialog";
+import { Input } from "@workspace/ui/components/input";
+import { Label } from "@workspace/ui/components/label";
+import { BookmarkPlus } from "lucide-react";
+import { useId, useState } from "react";
 import { t } from "@/i18n";
 import { ConditionEditor, conditionsSummary } from "./condition-editor";
-import { useTrafficMeasurement } from "./traffic-measurement";
 import { trafficError } from "./shared";
+import { useTrafficMeasurement } from "./traffic-measurement";
 export interface ViewDialogState {
 	view?: SavedTrafficView;
 	name: string;
 	conditions: TrafficCondition[];
 	keepDetail?: boolean;
+	analysisTab?: "traffic" | "conversions";
+	conversionGoalId?: string | null;
 }
 export function SavedViewDialog({
 	initial,
@@ -87,7 +89,15 @@ export function SavedViewDialog({
 					</div>
 					<div className="rounded-lg bg-muted/50 p-3 text-sm">
 						<p className="font-medium">{t("traffic.savedConditions")}</p>
-						<p className="mt-2 break-all text-pretty">{conditionsSummary(conditions, measurement.mode)}</p>
+						<p className="mt-2 break-all text-pretty">
+							{conditionsSummary(
+								conditions,
+								measurement.mode,
+								(initial.analysisTab ?? initial.view?.analysisTab) === "conversions"
+									? t("conversions.allPaths")
+									: undefined,
+							)}
+						</p>
 					</div>
 					<p className="text-pretty text-xs text-muted-foreground">{t("traffic.saveNote")}</p>
 					{error && (

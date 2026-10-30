@@ -257,7 +257,7 @@ Required-column legend: **local** = required in local mode · **wl** = required 
 
 ### Google Analytics traffic analysis (optional)
 
-For the optional Google Analytics integration, see [GA4 traffic analysis setup](GA4_SETUP.md). It adds read-only property access, AI-session charts, page-level trends, and shared saved analysis views. Configure `GOOGLE_ANALYTICS_CLIENT_ID`, `GOOGLE_ANALYTICS_CLIENT_SECRET`, `GOOGLE_ANALYTICS_REDIRECT_URI`, and `ANALYTICS_TOKEN_ENCRYPTION_KEY` on the server; no Google credentials are required to run the rest of GetCito.
+For the optional Google Analytics integration, see [GA4 traffic analysis setup](GA4_SETUP.md). It adds read-only property access, AI-session charts, page-level trends, conversion-goal settings with AI-attributed outcomes, and shared saved analysis views. Configure `GOOGLE_ANALYTICS_CLIENT_ID`, `GOOGLE_ANALYTICS_CLIENT_SECRET`, `GOOGLE_ANALYTICS_REDIRECT_URI`, and `ANALYTICS_TOKEN_ENCRYPTION_KEY` on the server; no Google credentials are required to run the rest of GetCito.
 
 ### Scraper providers (required when referenced by `SCRAPE_TARGETS`)
 

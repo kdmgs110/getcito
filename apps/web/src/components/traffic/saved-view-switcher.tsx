@@ -1,8 +1,8 @@
-import { Bookmark, ListFilter, Plus } from "lucide-react";
 import type { SavedTrafficView } from "@workspace/lib/analytics";
 import { Button } from "@workspace/ui/components/button";
 import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
 import { cn } from "@workspace/ui/lib/utils";
+import { Bookmark, ListFilter, Plus } from "lucide-react";
 import { t } from "@/i18n";
 import { conditionsSummary } from "./condition-editor";
 import { useTrafficMeasurement } from "./traffic-measurement";
@@ -12,6 +12,7 @@ export function SavedViewSwitcher({
 	selected,
 	dirty,
 	canManage,
+	allPathsLabel,
 	onSelect,
 	onCreate,
 	onManage,
@@ -23,6 +24,7 @@ export function SavedViewSwitcher({
 	selected?: SavedTrafficView;
 	dirty: boolean;
 	canManage: boolean;
+	allPathsLabel?: string;
 	onSelect: (id?: string) => void;
 	onCreate: () => void;
 	onManage: () => void;
@@ -93,7 +95,9 @@ export function SavedViewSwitcher({
 					</span>
 				)}
 				<span className="min-w-0 break-all text-muted-foreground">
-					{conditionsSummary(selected?.conditions ?? [], measurement.mode)}
+					{!selected?.conditions.length && allPathsLabel
+						? allPathsLabel
+						: conditionsSummary(selected?.conditions ?? [], measurement.mode)}
 				</span>
 				{dirty && selected && (
 					<div className="ml-auto flex gap-2">

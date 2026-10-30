@@ -51,7 +51,7 @@ docker compose up -d web
 
 Views are shared within the brand. Owners and admins manage them; members can select them and explore temporary filters without modifying the shared definition. Views save conditions, rather than fixed historical dates or a snapshot of the traffic numbers.
 
-## Measurement and availability
+## Traffic measurement and availability
 
 - For a verified single-site property, the metric is **sessions by landing page**, not pageviews or every page visited during a session.
 - If a property contains several hostnames or its stream's configured website is outdated, GetCito verifies actual session starts on the selected site and uses **observed session starts** instead. Every report is restricted to that web hostname and `eventName=session_start`; paths come from that same event's `pagePath`. The chart, denominator, source breakdown, ranking, and details all use this measurement consistently. The interface labels this mode **セッション開始（計測分）**.
@@ -63,6 +63,20 @@ Views are shared within the brand. Owners and admins manage them; members can se
 - GA4 processing delay, thresholding, sampling, and other-row limitations can affect results. Data-quality warnings and fetch times accompany results; API failures are not shown as zero sessions.
 - Results are cached for 30 minutes. Selecting a view fetches that scope; registering views does not start a scheduled monitoring task or query all saved views at once.
 - A site must be verifiable from its stream configuration and observed data. A mixed-site property additionally needs actual session-start observations for the selected hostname and a compatible Data API dimension combination; unsupported boundaries are rejected. Historical sessions with missing start events require another measurement configuration or session-level event analysis to reconstruct their entrance host.
+
+## Conversion settings and analysis
+
+Open **Conversions / コンバージョン** in Traffic analysis, then **CV settings / CV設定**. Owners and admins can select an existing GA4 key event, give it a display name, rename it, or disable/reactivate it. These settings are stored in GetCito; the integration never creates events or changes GA4 key-event settings. If an event is missing from the picker, configure its instrumentation and key-event status in GA4 first. No additional OAuth scope is required.
+
+Select one conversion goal to view AI and all-source key-event counts, daily/weekly/monthly trends, provider breakdowns, landing-path rankings and path details. Saved views preserve the analysis tab and selected conversion goal along with path conditions. Disabling a saved goal shows an explicit unavailable state instead of silently choosing a different outcome.
+
+- **CV count** uses GA4 `keyEvents` with the event's configured counting method. A repeat conversion can count more than once in one session.
+- **CV sessions** count sessions containing that selected key event. **CVR** uses GA4's event-specific `sessionKeyEventRate:event_name`; GetCito does not divide key-event counts by sessions or average daily rates. GA4-native weekly/monthly and whole-period aggregates preserve the denominator.
+- AI attribution uses the same session-source classification as traffic analysis. It does not include assisted conversions or conversions in a later session. Event-scoped advertising attribution is not used as a substitute for session source.
+- Path filters apply to the session's GA4 `landingPage`, not the page where the conversion occurred. A thank-you URL is not a completion rule; this release selects existing GA4 key events.
+- For multi-host properties in observed-start mode, conversion reports instead restrict **the conversion event's hostname** to the selected site. They never apply the traffic screen's `session_start` event filter to key-event counts. The start hostname cannot be established from this report, so landing paths are explicitly labeled **CVしたセッションの開始パス（開始ホスト未判定）**. Session denominators, CV sessions and CVR remain unavailable (`—`). These CV counts must not be divided by the separate observed traffic totals.
+- Unsupported metric combinations and GA4 data-quality limitations suppress CVR with a reason. Unavailable values differ from genuine zero conversions. Missing key events, expired authorization and upstream errors are reported explicitly.
+- Key-event registration is not retroactive. Date ranges before the event's registration show a notice. Reports retain the property's time zone and a last-fetched timestamp, and are cached for 30 minutes per connection, goal revision and report conditions.
 
 If authorization is revoked or the connecting user's Google access changes, reconnect through the connection settings. Disconnecting removes local credentials and cached reports while preserving named view definitions. Deleting a view does not delete GA4 data.
 

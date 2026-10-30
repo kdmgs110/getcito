@@ -88,9 +88,8 @@ test.describe("GA4 traffic analysis", () => {
 		await page.getByRole("button", { name: text("登録", "Register"), exact: true }).click();
 		let dialog = page.getByRole("dialog");
 		await dialog.getByLabel(text("登録名", "View name"), { exact: true }).fill("E2Eホーム");
-		await expect(dialog.getByRole("textbox", { name: text("ページパス 1", "Page path 1"), exact: true })).toHaveValue(
-			"/",
-		);
+		await dialog.getByRole("button", { name: text("条件を追加", "Add condition"), exact: true }).click();
+		await dialog.getByRole("textbox", { name: text("ページパス 1", "Page path 1"), exact: true }).fill("/");
 		await dialog.getByRole("button", { name: text("登録して表示", "Save and display"), exact: true }).click();
 		await expect(page.getByRole("tab", { name: "E2Eホーム", exact: true })).toHaveAttribute("data-state", "active");
 		await expect(page.getByText("112", { exact: true }).first()).toBeVisible();

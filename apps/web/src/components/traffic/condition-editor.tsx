@@ -1,17 +1,21 @@
-import { useId, useRef } from "react";
-import { Plus, Trash2 } from "lucide-react";
 import type { AnalyticsMeasurementMode, TrafficCondition } from "@workspace/lib/analytics";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
+import { Plus, Trash2 } from "lucide-react";
+import { useId, useRef } from "react";
 import { t } from "@/i18n";
-import { useTrafficMeasurement, trafficMeasurementLabels } from "./traffic-measurement";
+import { trafficMeasurementLabels, useTrafficMeasurement } from "./traffic-measurement";
 export const conditionLabels = () => ({
 	exact: t("traffic.exact"),
 	subtree: t("traffic.subtree"),
 	contains: t("traffic.contains"),
 	regex: t("traffic.regex"),
 });
-export function conditionsSummary(conditions: TrafficCondition[], mode?: AnalyticsMeasurementMode): string {
+export function conditionsSummary(
+	conditions: TrafficCondition[],
+	mode?: AnalyticsMeasurementMode,
+	allPathsLabel?: string,
+): string {
 	return conditions.length
 		? conditions
 				.map(
@@ -19,7 +23,7 @@ export function conditionsSummary(conditions: TrafficCondition[], mode?: Analyti
 						`${c.mode === "exclude" ? t("traffic.exclude") : t("traffic.include")} · ${conditionLabels()[c.operator]} · ${c.value}`,
 				)
 				.join(" / ")
-		: trafficMeasurementLabels(mode).allPaths;
+		: (allPathsLabel ?? trafficMeasurementLabels(mode).allPaths);
 }
 const selectClass =
 	"h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:outline-2 focus-visible:outline-ring";

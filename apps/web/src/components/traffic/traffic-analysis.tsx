@@ -1,18 +1,19 @@
-import { useEffect, useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, ChartNoAxesCombined, RefreshCw } from "lucide-react";
 import {
-	aggregateTrafficPoints,
 	AI_CLASSIFICATION_VERSION,
 	ANALYTICS_MEASUREMENT_VERSION,
-	FILTER_SCHEMA_VERSION,
+	aggregateTrafficPoints,
 	defaultTrafficRange,
+	FILTER_SCHEMA_VERSION,
 	normalizeConditions,
-	type TrafficCondition,
 	type SavedTrafficView,
+	type TrafficCondition,
 } from "@workspace/lib/analytics";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
+import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
+import { BookmarkPlus, ChartNoAxesCombined, RefreshCw } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { t, UI_LOCALE } from "@/i18n";
 import { getTrafficConnectionFn, getTrafficOverviewFn, getTrafficPagesFn } from "@/server/traffic";
 import {
@@ -23,38 +24,42 @@ import {
 } from "@/server/traffic-saved-views";
 import { ConditionEditor } from "./condition-editor";
 import { ConnectionSettings } from "./connection-settings";
+import { ConversionAnalysis } from "./conversion-analysis";
 import { PageTrafficDetail } from "./page-traffic-detail";
 import { PageTrafficTable } from "./page-traffic-table";
 import { QualityNotices } from "./quality-notices";
-import {
-	MeasurementNotice,
-	TrafficMeasurementContext,
-	trafficMeasurementLabels,
-	useTrafficMeasurement,
-} from "./traffic-measurement";
 import { SavedViewDialog, type ViewDialogState } from "./saved-view-dialog";
 import { SavedViewManager } from "./saved-view-manager";
 import { SavedViewSwitcher } from "./saved-view-switcher";
 import { TrafficCard, TrafficError, TrafficLoading, trafficError } from "./shared";
 import { GrainToggle, TrafficChart, TrafficKpis, TrafficPeriodTable } from "./traffic-chart";
 import {
-	resolveViewConditions,
+	MeasurementNotice,
+	TrafficMeasurementContext,
+	trafficMeasurementLabels,
+	useTrafficMeasurement,
+} from "./traffic-measurement";
+import {
 	duplicateViewDraft,
+	newViewDraft,
+	resolveViewConditions,
 	sameConditions,
 	scopeChange,
+	type TrafficSearch,
 	validDateRange,
 	viewStorageKey,
-	type TrafficSearch,
 } from "./traffic-state";
 
 function FilterForm({
 	conditions,
+	title,
 	hostname,
 	canManage,
 	onApply,
 	onSave,
 }: {
 	conditions: TrafficCondition[];
+	title?: string;
 	hostname: string;
 	canManage: boolean;
 	onApply: (value: TrafficCondition[]) => void;
@@ -74,7 +79,7 @@ function FilterForm({
 	}
 	return (
 		<TrafficCard
-			title={measurement.targetPages}
+			title={title ?? measurement.targetPages}
 			action={
 				canManage && (
 					<Button size="sm" variant="outline" disabled={dirty} onClick={onSave}>
@@ -85,7 +90,7 @@ function FilterForm({
 			}
 		>
 			<form
-				aria-label={measurement.targetPages}
+				aria-label={title ?? measurement.targetPages}
 				onSubmit={(event) => {
 					event.preventDefault();
 					apply();
@@ -231,7 +236,14 @@ export function TrafficAnalysis({
 	const scope = resolveViewConditions(search, views.data ?? [], status?.hostname ?? "");
 	const selected = scope.view;
 	const conditions = scope.conditions;
-	const dirty = !!selected && !sameConditions(conditions, selected.conditions);
+	const analysisTab = search.analysisTab ?? selected?.analysisTab ?? "traffic";
+	const conversionGoalId = search.conversionGoalId ?? selected?.conversionGoalId ?? undefined;
+	const effectiveSearch = { ...search, analysisTab, conversionGoalId };
+	const dirty =
+		!!selected &&
+		(!sameConditions(conditions, selected.conditions) ||
+			analysisTab !== (selected.analysisTab ?? "traffic") ||
+			(conversionGoalId ?? null) !== (selected.conversionGoalId ?? null));
 	const timeZone = status?.timeZone ?? "UTC";
 	const measurementMode = status?.measurementMode ?? "landing_sessions";
 	const measurement = trafficMeasurementLabels(measurementMode);
@@ -264,7 +276,7 @@ export function TrafficAnalysis({
 			request,
 		],
 		queryFn: () => getTrafficOverviewFn({ data: request }),
-		enabled,
+		enabled: enabled && analysisTab === "traffic",
 		staleTime: 30 * 60000,
 		retry: false,
 		refetchOnWindowFocus: false,
@@ -289,7 +301,7 @@ export function TrafficAnalysis({
 			pagesRequest,
 		],
 		queryFn: () => getTrafficPagesFn({ data: pagesRequest }),
-		enabled,
+		enabled: enabled && analysisTab === "traffic",
 		staleTime: 30 * 60000,
 		retry: false,
 		refetchOnWindowFocus: false,
@@ -325,7 +337,16 @@ export function TrafficAnalysis({
 	}, [status, preferencesReady, scope.invalidView, search.viewId, brandId]);
 	const selectView = (id?: string) => {
 		setNotice(undefined);
-		return onSearch(scopeChange({ viewId: id, conditions: undefined, ga4: undefined }));
+		const view = views.data?.find((item) => item.id === id);
+		return onSearch(
+			scopeChange({
+				viewId: id,
+				conditions: undefined,
+				ga4: undefined,
+				analysisTab: id ? (view?.analysisTab ?? "traffic") : analysisTab,
+				conversionGoalId: id ? (view?.conversionGoalId ?? undefined) : conversionGoalId,
+			}),
+		);
 	};
 	const refreshViews = async () => {
 		await client.invalidateQueries({ queryKey: ["traffic-views", brandId] });
@@ -337,25 +358,43 @@ export function TrafficAnalysis({
 				brandId,
 				hostname: status.hostname,
 				...value,
+				analysisTab: initial?.analysisTab ?? initial?.view?.analysisTab ?? analysisTab,
+				conversionGoalId:
+					initial && "conversionGoalId" in initial
+						? initial.conversionGoalId
+						: initial?.view
+							? (initial.view.conversionGoalId ?? null)
+							: (conversionGoalId ?? null),
 				...(initial?.view ? { id: initial.view.id, revision: initial.view.revision } : {}),
 			},
 		});
 		await refreshViews();
 		if (initial?.keepDetail) setSavedFromDetail(saved);
-		else await selectView(saved.id);
+		else
+			await onSearch(
+				scopeChange({
+					viewId: saved.id,
+					conditions: undefined,
+					analysisTab: saved.analysisTab ?? "traffic",
+					conversionGoalId: saved.conversionGoalId ?? undefined,
+				}),
+			);
 		setNotice(t("traffic.savedSuccess"));
 	}
 	async function saveChanges() {
 		if (!selected) return;
 		setActionError(undefined);
 		try {
-			await saveView({ name: selected.name, conditions }, { view: selected, name: selected.name, conditions });
+			await saveView(
+				{ name: selected.name, conditions },
+				{ view: selected, name: selected.name, conditions, analysisTab, conversionGoalId: conversionGoalId ?? null },
+			);
 		} catch (e) {
 			setActionError(trafficError(e));
 		}
 	}
 	async function connectionChanged() {
-		onSearch(scopeChange({}));
+		onSearch(scopeChange({ analysisTab: "traffic", conversionGoalId: undefined }));
 		await client.invalidateQueries({
 			predicate: (query) => typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("traffic-"),
 		});
@@ -392,6 +431,15 @@ export function TrafficAnalysis({
 						</Button>
 					</div>
 				</header>
+				<Tabs
+					value={analysisTab}
+					onValueChange={(value) => onSearch(scopeChange({ analysisTab: value as "traffic" | "conversions" }))}
+				>
+					<TabsList aria-label={t("traffic.title")}>
+						<TabsTrigger value="traffic">{t("conversions.trafficTab")}</TabsTrigger>
+						<TabsTrigger value="conversions">{t("conversions.tab")}</TabsTrigger>
+					</TabsList>
+				</Tabs>
 				{search.ga4 && (search.ga4 !== "connected" || !status.connected) && (
 					<p role="status" className="rounded-lg border p-3 text-sm">
 						{t(search.ga4 === "connected" ? "traffic.oauthSuccess" : "traffic.oauthError")}
@@ -426,23 +474,30 @@ export function TrafficAnalysis({
 						onApply={(start, end) => onSearch(scopeChange({ from: start, to: end }))}
 					/>
 				</div>
-				{status.connected && <MeasurementNotice mode={measurementMode} />}
+				{status.connected && analysisTab === "traffic" && <MeasurementNotice mode={measurementMode} />}
 				{views.isError ? (
 					<TrafficError error={views.error} retry={() => views.refetch()} />
 				) : (
 					<SavedViewSwitcher
+						allPathsLabel={analysisTab === "conversions" ? t("conversions.allPaths") : undefined}
 						views={views.data ?? []}
 						hostname={status.hostname}
 						selected={selected}
 						dirty={dirty}
 						canManage={status.canManage}
 						onSelect={selectView}
-						onCreate={() =>
-							setViewDialog({ name: "", conditions: [{ mode: "include", operator: "exact", value: "/" }] })
-						}
+						onCreate={() => setViewDialog(newViewDraft(conditions, analysisTab, conversionGoalId))}
 						onManage={() => setManager(true)}
 						onSave={saveChanges}
-						onRestore={() => onSearch(scopeChange({ conditions: undefined }))}
+						onRestore={() =>
+							onSearch(
+								scopeChange({
+									conditions: undefined,
+									analysisTab: selected?.analysisTab ?? "traffic",
+									conversionGoalId: selected?.conversionGoalId ?? undefined,
+								}),
+							)
+						}
 					/>
 				)}
 				{!status.configured || !status.connected || status.needsReconnect ? (
@@ -478,6 +533,7 @@ export function TrafficAnalysis({
 				) : (
 					<>
 						<FilterForm
+							title={analysisTab === "conversions" ? t("conversions.filterTitle") : undefined}
 							key={`${status.hostname}:${JSON.stringify(conditions)}`}
 							conditions={conditions}
 							hostname={status.hostname}
@@ -490,97 +546,111 @@ export function TrafficAnalysis({
 									}),
 								)
 							}
-							onSave={() => setViewDialog({ name: "", conditions })}
+							onSave={() => setViewDialog(newViewDraft(conditions, analysisTab, conversionGoalId))}
 						/>
 						{!dateValid && (
 							<p role="alert" className="text-sm text-destructive">
 								{t("traffic.dateInvalid")}
 							</p>
 						)}
-						{enabled && overview.isPending && <TrafficLoading />}
-						{overview.isError && <TrafficError error={overview.error} retry={() => overview.refetch()} />}
-						{overview.data && enabled && (
+						{analysisTab === "conversions" ? (
+							<ConversionAnalysis
+								key={`${status.propertyId}:${status.hostname}:${status.connectionRevision}`}
+								brandId={brandId}
+								status={status}
+								request={request}
+								enabled={enabled}
+								search={effectiveSearch}
+								onSearch={onSearch}
+							/>
+						) : (
 							<>
-								<div className="flex flex-wrap items-center justify-between gap-3">
-									<p className="text-xs text-muted-foreground">
-										{from} – {to} · {timeZone}
-									</p>
-									<div className="flex items-center gap-2">
-										<GrainToggle value={grain} onChange={(v) => onSearch({ grain: v })} />
-										<Button
-											variant="ghost"
-											size="icon"
-											aria-label={t("traffic.retry")}
-											disabled={overview.isFetching}
-											onClick={() => {
-												void overview.refetch();
-												void pages.refetch();
+								{enabled && overview.isPending && <TrafficLoading />}
+								{overview.isError && <TrafficError error={overview.error} retry={() => overview.refetch()} />}
+								{overview.data && enabled && (
+									<>
+										<div className="flex flex-wrap items-center justify-between gap-3">
+											<p className="text-xs text-muted-foreground">
+												{from} – {to} · {timeZone}
+											</p>
+											<div className="flex items-center gap-2">
+												<GrainToggle value={grain} onChange={(v) => onSearch({ grain: v })} />
+												<Button
+													variant="ghost"
+													size="icon"
+													aria-label={t("traffic.retry")}
+													disabled={overview.isFetching}
+													onClick={() => {
+														void overview.refetch();
+														void pages.refetch();
+													}}
+												>
+													<RefreshCw className="size-4" />
+												</Button>
+											</div>
+										</div>
+										{overview.isFetching && (
+											<p role="status" className="text-xs text-muted-foreground">
+												{t("traffic.updating")}
+											</p>
+										)}
+										<TrafficKpis totals={overview.data.totals} />
+										<QualityNotices warnings={overview.data.warnings} />
+										{overview.data.totals.total === 0 && (
+											<div className="rounded-lg bg-muted/30 p-4 text-sm">
+												<p className="font-medium">{t("traffic.noData")}</p>
+												<p className="mt-1 text-muted-foreground">{t("traffic.noDataHelp")}</p>
+											</div>
+										)}
+										<TrafficChart
+											points={aggregateTrafficPoints(overview.data.points, grain, from, to)}
+											chart={chart}
+											onChartChange={(value) => onSearch({ chart: value })}
+										/>
+										<TrafficPeriodTable
+											data={overview.data}
+											grain={grain}
+											from={from}
+											to={to}
+											onGrainChange={(v) => onSearch({ grain: v })}
+										/>
+									</>
+								)}
+								{enabled && pages.isPending && <TrafficLoading />}
+								{pages.isError && <TrafficError error={pages.error} retry={() => pages.refetch()} />}
+								{pages.data && enabled && (
+									<>
+										<QualityNotices warnings={pages.data.warnings} />
+										<PageTrafficTable
+											key={`${search.pageSearch ?? ""}:${search.pageScope ?? "ai"}`}
+											data={pages.data}
+											query={search.pageSearch ?? ""}
+											pageScope={search.pageScope ?? "ai"}
+											pageSize={search.pageSize ?? 10}
+											grain={grain}
+											from={from}
+											to={to}
+											onSearch={(value) => onSearch({ pageSearch: value || undefined, page: undefined })}
+											onScope={(value) => onSearch({ pageScope: value, page: undefined })}
+											onPageSize={(value) => onSearch({ pageSize: value as 5 | 10 | 25 | 50, page: undefined })}
+											onPage={(value) => onSearch({ page: value })}
+											onDetail={(path) => {
+												detailReturnFocus.current =
+													document.activeElement instanceof HTMLElement ? document.activeElement : null;
+												setSavedFromDetail(undefined);
+												onSearch({ detail: path });
 											}}
-										>
-											<RefreshCw className="size-4" />
-										</Button>
-									</div>
-								</div>
-								{overview.isFetching && (
-									<p role="status" className="text-xs text-muted-foreground">
-										{t("traffic.updating")}
-									</p>
+										/>
+									</>
 								)}
-								<TrafficKpis totals={overview.data.totals} />
-								<QualityNotices warnings={overview.data.warnings} />
-								{overview.data.totals.total === 0 && (
-									<div className="rounded-lg bg-muted/30 p-4 text-sm">
-										<p className="font-medium">{t("traffic.noData")}</p>
-										<p className="mt-1 text-muted-foreground">{t("traffic.noDataHelp")}</p>
-									</div>
-								)}
-								<TrafficChart
-									points={aggregateTrafficPoints(overview.data.points, grain, from, to)}
-									chart={chart}
-									onChartChange={(value) => onSearch({ chart: value })}
-								/>
-								<TrafficPeriodTable
-									data={overview.data}
-									grain={grain}
-									from={from}
-									to={to}
-									onGrainChange={(v) => onSearch({ grain: v })}
-								/>
-							</>
-						)}
-						{enabled && pages.isPending && <TrafficLoading />}
-						{pages.isError && <TrafficError error={pages.error} retry={() => pages.refetch()} />}
-						{pages.data && enabled && (
-							<>
-								<QualityNotices warnings={pages.data.warnings} />
-								<PageTrafficTable
-									key={`${search.pageSearch ?? ""}:${search.pageScope ?? "ai"}`}
-									data={pages.data}
-									query={search.pageSearch ?? ""}
-									pageScope={search.pageScope ?? "ai"}
-									pageSize={search.pageSize ?? 10}
-									grain={grain}
-									from={from}
-									to={to}
-									onSearch={(value) => onSearch({ pageSearch: value || undefined, page: undefined })}
-									onScope={(value) => onSearch({ pageScope: value, page: undefined })}
-									onPageSize={(value) => onSearch({ pageSize: value as 5 | 10 | 25 | 50, page: undefined })}
-									onPage={(value) => onSearch({ page: value })}
-									onDetail={(path) => {
-										detailReturnFocus.current =
-											document.activeElement instanceof HTMLElement ? document.activeElement : null;
-										setSavedFromDetail(undefined);
-										onSearch({ detail: path });
-									}}
-								/>
 							</>
 						)}
 					</>
 				)}
 				<footer className="space-y-2 text-pretty text-xs leading-relaxed text-muted-foreground">
-					<p>{measurement.measurementNote}</p>
+					{analysisTab === "traffic" && <p>{measurement.measurementNote}</p>}
 					<p>{t("traffic.provisional")}</p>
-					{overview.data && (
+					{analysisTab === "traffic" && overview.data && (
 						<p>
 							{t("traffic.lastFetched")}:{" "}
 							{new Intl.DateTimeFormat(UI_LOCALE, { dateStyle: "short", timeStyle: "short", timeZone }).format(
@@ -624,7 +694,10 @@ export function TrafficAnalysis({
 						}}
 						onDuplicate={(view) => {
 							setManager(false);
-							setViewDialog(duplicateViewDraft(view, t("traffic.copyName", { name: view.name })));
+							setViewDialog({
+								...duplicateViewDraft(view, t("traffic.copyName", { name: view.name })),
+								conversionGoalId: view.hostname === status.hostname ? view.conversionGoalId : null,
+							});
 						}}
 						onDelete={async (view) => {
 							await deleteTrafficViewFn({ data: { brandId, id: view.id, revision: view.revision } });
@@ -637,7 +710,7 @@ export function TrafficAnalysis({
 						}}
 					/>
 				)}
-				{search.detail?.startsWith("/") && enabled && (
+				{analysisTab === "traffic" && search.detail?.startsWith("/") && enabled && (
 					<PageTrafficDetail
 						key={search.detail}
 						request={request}

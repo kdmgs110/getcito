@@ -1,9 +1,9 @@
-import type { ReactNode } from "react";
-import { AlertCircle } from "lucide-react";
 import { Button } from "@workspace/ui/components/button";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { t } from "@/i18n";
 import { cn } from "@workspace/ui/lib/utils";
+import { AlertCircle } from "lucide-react";
+import type { ReactNode } from "react";
+import { t } from "@/i18n";
 export function TrafficCard({
 	title,
 	action,
@@ -40,6 +40,12 @@ export function TrafficLoading() {
 	);
 }
 const errorKeys = {
+	CONVERSION_GOAL_NOT_FOUND: "conversions.goalMissing",
+	CONVERSION_GOAL_DISABLED: "conversions.goalDisabled",
+	CONVERSION_EVENT_MISSING: "conversions.eventMissing",
+	CONVERSION_GOAL_CONFLICT: "conversions.conflict",
+	CONVERSION_GOAL_DUPLICATE: "conversions.duplicate",
+	CONVERSION_GOAL_LIMIT: "conversions.limit",
 	ANALYTICS_UNSUPPORTED_SITE: "traffic.unsupportedSite",
 	ANALYTICS_REPORT_TOO_LARGE: "traffic.reportLarge",
 	ANALYTICS_QUOTA: "traffic.quota",

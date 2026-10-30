@@ -1,5 +1,13 @@
 import { t } from "@/i18n";
+
 const warningKeys = {
+	conversion_landing_unavailable: "conversions.pageUnsupported",
+	conversion_landing_unset: "conversions.landingUnset",
+	conversion_rate_metric_unavailable: "conversions.cvrUnavailable",
+	conversion_rate_unavailable: "conversions.cvrUnavailable",
+	conversion_sessions_unavailable: "conversions.sessionsUnavailable",
+	conversion_before_registration: "conversions.beforeRegistration",
+	conversion_rate_quality_unavailable: "conversions.cvrUnavailable",
 	stale_cache: "traffic.staleCache",
 	data_loss_other: "traffic.dataLoss",
 	data_thresholding: "traffic.thresholding",

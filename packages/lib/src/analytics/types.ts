@@ -46,6 +46,8 @@ export interface TrafficPagesRequest extends TrafficRequest {
 	pageScope: "ai" | "all";
 }
 export interface SavedTrafficView {
+	conversionGoalId?: string | null;
+	analysisTab?: "traffic" | "conversions";
 	id: string;
 	brandId: string;
 	hostname: string;

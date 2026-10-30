@@ -6,10 +6,10 @@ import {
 	trafficConditionsSchema,
 } from "@workspace/lib/analytics";
 import { db } from "@workspace/lib/db/db";
-import { trafficSavedViews } from "@workspace/lib/db/schema";
+import { conversionGoals, ga4Connections, trafficSavedViews } from "@workspace/lib/db/schema";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { requireTrafficAccess } from "./traffic-runtime";
+import { currentTrafficConnection, requireTrafficAccess } from "./traffic-runtime";
 import { normalizeAnalyticsHostname } from "./traffic-security";
 
 const brandInput = z.object({ brandId: z.string().min(1).max(200) });
@@ -26,6 +26,8 @@ function asSavedView(view: typeof trafficSavedViews.$inferSelect): SavedTrafficV
 		sortOrder: view.sortOrder,
 		revision: view.revision,
 		updatedAt: view.updatedAt.toISOString(),
+		conversionGoalId: view.conversionGoalId ?? null,
+		analysisTab: view.analysisTab ?? "traffic",
 	};
 }
 
@@ -62,6 +64,8 @@ export const saveTrafficViewFn = createServerFn({ method: "POST" })
 			name: z.string().trim().min(1).max(60),
 			hostname: z.string().min(1).max(253),
 			conditions: trafficConditionsSchema,
+			conversionGoalId: z.string().uuid().nullable().optional(),
+			analysisTab: z.enum(["traffic", "conversions"]).optional(),
 		}),
 	)
 	.handler(async ({ data }): Promise<SavedTrafficView> => {
@@ -72,33 +76,73 @@ export const saveTrafficViewFn = createServerFn({ method: "POST" })
 		if (!name || name.length > 60) throw new Error("TRAFFIC_VIEW_INVALID_NAME");
 		const normalizedName = normalizedTrafficViewName(name);
 		const conditions = normalizeConditions(data.conditions, hostname);
+
 		try {
-			if (data.id) {
-				if (!data.revision) throw new Error("TRAFFIC_VIEW_CONFLICT");
-				const [updated] = await db
-					.update(trafficSavedViews)
-					.set({
-						name,
-						normalizedName,
-						conditions,
-						filterSchemaVersion: FILTER_SCHEMA_VERSION,
-						revision: sql`${trafficSavedViews.revision} + 1`,
-						updatedBy: session.user.id,
-						updatedAt: new Date(),
-					})
-					.where(
-						and(
-							eq(trafficSavedViews.id, data.id),
-							eq(trafficSavedViews.brandId, data.brandId),
-							eq(trafficSavedViews.hostname, hostname),
-							eq(trafficSavedViews.revision, data.revision),
-						),
-					)
-					.returning();
-				if (!updated) throw new Error("TRAFFIC_VIEW_CONFLICT");
-				return asSavedView(updated);
-			}
-			const [created] = await db.transaction(async (tx) => {
+			return await db.transaction(async (tx) => {
+				const preferences: { conversionGoalId?: string | null; analysisTab?: "traffic" | "conversions" } = {};
+				if (data.analysisTab !== undefined) preferences.analysisTab = data.analysisTab;
+				if (data.conversionGoalId !== undefined) {
+					preferences.conversionGoalId = data.conversionGoalId;
+					if (data.conversionGoalId) {
+						const connection = await currentTrafficConnection(data.brandId);
+						if (!connection?.propertyId || connection.hostname !== hostname || connection.status !== "connected")
+							throw new Error("ANALYTICS_CONNECTION_CHANGED");
+						const [locked] = await tx
+							.select({ id: ga4Connections.brandId })
+							.from(ga4Connections)
+							.where(
+								and(
+									eq(ga4Connections.brandId, data.brandId),
+									eq(ga4Connections.revision, connection.revision),
+									eq(ga4Connections.propertyId, connection.propertyId),
+									eq(ga4Connections.hostname, hostname),
+									eq(ga4Connections.status, "connected"),
+								),
+							)
+							.for("share");
+						if (!locked) throw new Error("ANALYTICS_CONNECTION_CHANGED");
+						const [goal] = await tx
+							.select({ id: conversionGoals.id })
+							.from(conversionGoals)
+							.where(
+								and(
+									eq(conversionGoals.id, data.conversionGoalId),
+									eq(conversionGoals.brandId, data.brandId),
+									eq(conversionGoals.propertyId, connection.propertyId),
+									eq(conversionGoals.hostname, hostname),
+									eq(conversionGoals.enabled, true),
+								),
+							)
+							.for("share");
+						if (!goal) throw new Error("CONVERSION_GOAL_NOT_FOUND");
+					}
+				}
+				if (data.id) {
+					if (!data.revision) throw new Error("TRAFFIC_VIEW_CONFLICT");
+					const [updated] = await tx
+						.update(trafficSavedViews)
+						.set({
+							name,
+							normalizedName,
+							conditions,
+							...preferences,
+							filterSchemaVersion: FILTER_SCHEMA_VERSION,
+							revision: sql`${trafficSavedViews.revision} + 1`,
+							updatedBy: session.user.id,
+							updatedAt: new Date(),
+						})
+						.where(
+							and(
+								eq(trafficSavedViews.id, data.id),
+								eq(trafficSavedViews.brandId, data.brandId),
+								eq(trafficSavedViews.hostname, hostname),
+								eq(trafficSavedViews.revision, data.revision),
+							),
+						)
+						.returning();
+					if (!updated) throw new Error("TRAFFIC_VIEW_CONFLICT");
+					return asSavedView(updated);
+				}
 				await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`traffic-views:${data.brandId}:${hostname}`}))`);
 				const [count] = await tx
 					.select({
@@ -108,7 +152,7 @@ export const saveTrafficViewFn = createServerFn({ method: "POST" })
 					.from(trafficSavedViews)
 					.where(and(eq(trafficSavedViews.brandId, data.brandId), eq(trafficSavedViews.hostname, hostname)));
 				if ((count?.count ?? 0) >= 200) throw new Error("TRAFFIC_VIEW_LIMIT");
-				return tx
+				const [created] = await tx
 					.insert(trafficSavedViews)
 					.values({
 						brandId: data.brandId,
@@ -116,14 +160,15 @@ export const saveTrafficViewFn = createServerFn({ method: "POST" })
 						name,
 						normalizedName,
 						conditions,
+						...preferences,
 						filterSchemaVersion: FILTER_SCHEMA_VERSION,
 						sortOrder: (count?.last ?? -1) + 1,
 						createdBy: session.user.id,
 						updatedBy: session.user.id,
 					})
 					.returning();
+				return asSavedView(created);
 			});
-			return asSavedView(created);
 		} catch (error) {
 			if (uniqueViolation(error)) throw new Error("TRAFFIC_VIEW_DUPLICATE_NAME");
 			throw error;

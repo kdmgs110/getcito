@@ -1,25 +1,25 @@
 import { OAuth2Client } from "google-auth-library";
-import { classifyAISource, buildAIFilter } from "./classification";
+import { buildAIFilter, classifyAISource } from "./classification";
 import { addTrafficTotals, defaultTrafficRange, emptyTrafficTotals, trafficDates } from "./dates";
 import {
 	andFilters,
 	buildPathFilter,
+	type GAFilterExpression,
 	normalizeConditions,
 	normalizeHostname,
 	stringFilter,
 	trafficPagesRequestSchema,
-	trafficRequestSchema,
 	trafficPathDimension,
-	type GAFilterExpression,
+	trafficRequestSchema,
 } from "./filters";
 import type {
+	AnalyticsMeasurementMode,
 	AnalyticsProperty,
 	AnalyticsPropertySummary,
-	AnalyticsMeasurementMode,
 	TrafficCondition,
 	TrafficOverview,
-	TrafficPages,
 	TrafficPageRow,
+	TrafficPages,
 	TrafficPoint,
 } from "./types";
 
@@ -540,3 +540,14 @@ async function checkReportCompatibility(
 	)
 		throw new AnalyticsError("invalid_request");
 }
+
+export type { Report as AnalyticsReport, ReportRequest as AnalyticsReportRequest, Row as AnalyticsRow };
+/** Shared authenticated transport and bounded reporting for conversion analytics. */
+export {
+	allRows as analyticsAllRows,
+	api as analyticsApi,
+	metadataWarnings as analyticsMetadataWarnings,
+	propertyPath as analyticsPropertyPath,
+	report as analyticsReport,
+	verifyHostRange as verifyAnalyticsHostRange,
+};
