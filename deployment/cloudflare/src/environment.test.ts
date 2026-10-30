@@ -54,14 +54,16 @@ test("proxy preserves POST payload and cookies but replaces untrusted forwarded 
 		body: "email=test%40example.org",
 		headers: {
 			Cookie: "session=test",
+			Host: "attacker.example",
 			Forwarded: "host=attacker.example",
 			"X-Forwarded-Host": "attacker.example",
 			"X-Forwarded-Proto": "http",
 		},
 	});
 	const result = forwardRequest(request, canonicalOrigin(bindings));
-	assert.equal(result.url, "http://container/api/auth/sign-in/email?redirect=%2Fapp");
+	assert.equal(result.url, "http://getcito.example.org/api/auth/sign-in/email?redirect=%2Fapp");
 	assert.equal(result.method, "POST");
+	assert.equal(result.headers.get("host"), "getcito.example.org");
 	assert.equal(result.headers.get("cookie"), "session=test");
 	assert.equal(result.headers.get("forwarded"), null);
 	assert.equal(result.headers.get("x-forwarded-host"), "getcito.example.org");

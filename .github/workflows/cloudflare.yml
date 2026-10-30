@@ -52,8 +52,8 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/getcito_cloudflare_test
       BETTER_AUTH_SECRET: container-ci-only-not-a-production-secret-00000000
-      APP_URL: http://localhost:3000
-      VITE_APP_URL: http://localhost:3000
+      APP_URL: https://getcito.example.org
+      VITE_APP_URL: https://getcito.example.org
       DEPLOYMENT_MODE: local
       VITE_DEPLOYMENT_MODE: local
       SCRAPE_TARGETS: chatgpt:openai-api:gpt-4o-mini:online
@@ -72,7 +72,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/lib exec drizzle-kit migrate
       - name: Build the production architecture
-        run: docker build --platform linux/amd64 --target cloudflare -f docker/Dockerfile -t getcito-cloudflare:ci .
+        run: docker build --platform linux/amd64 --target cloudflare --build-arg VITE_APP_URL -f docker/Dockerfile -t getcito-cloudflare:ci .
       - name: Confirm an empty database cannot expose a bootstrap page
         run: |
           docker run -d --name getcito-empty --network host -e DATABASE_URL getcito-cloudflare:ci
@@ -88,7 +88,7 @@ jobs:
             -e DATAFORSEO_PASSWORD -e DISABLE_TELEMETRY getcito-cloudflare:ci
           for attempt in $(seq 1 90); do
             if curl --fail --silent http://127.0.0.1:3001/__container/health; then
-              curl --fail --silent http://127.0.0.1:3000/auth/login > /dev/null
+              node deployment/cloudflare/scripts/check-proxied-auth.mjs
               docker stop --time 40 getcito-ready
               test "$(docker inspect --format '{{.State.ExitCode}}' getcito-ready)" = 0
               exit 0

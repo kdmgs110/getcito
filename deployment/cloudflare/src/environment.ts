@@ -119,9 +119,11 @@ export function blockedPublicPath(pathname: string): boolean {
 export function forwardRequest(request: Request, origin: URL): Request {
 	const url = new URL(request.url);
 	url.protocol = "http:";
-	url.host = "container";
+	// The TCP port binding chooses the destination. Keep the public host so
+	// Node/H3 reconstructs the same origin used by browser auth requests.
+	url.host = origin.host;
 	const forwarded = new Request(url, request);
-	forwarded.headers.delete("host");
+	forwarded.headers.set("host", origin.host);
 	forwarded.headers.delete("forwarded");
 	// Never trust client-supplied proxy values for auth redirect/cookie origins.
 	forwarded.headers.set("x-forwarded-host", origin.host);
