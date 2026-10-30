@@ -17,6 +17,7 @@ import { Link } from "@tanstack/react-router";
 
 /** Map of page segments to display names */
 const PAGE_NAMES: Record<string, string> = {
+	traffic: t("traffic.title"),
 	visibility: t("settings.visibility"),
 	"share-of-voice": t("settings.shareOfVoice"),
 	"query-fan-out": t("settings.queryFanOut"),

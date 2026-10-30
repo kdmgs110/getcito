@@ -16,6 +16,22 @@ export const environmentMessages = {
 		en: "Session cookie encryption secret.",
 		ja: "セッションCookieの暗号化に使用するシークレットです。",
 	},
+	GOOGLE_ANALYTICS_CLIENT_ID: {
+		en: "Google OAuth web client ID for the optional GA4 traffic integration.",
+		ja: "GA4トラフィック連携に使用するGoogle OAuthのWebクライアントIDです（任意）。",
+	},
+	GOOGLE_ANALYTICS_CLIENT_SECRET: {
+		en: "Google OAuth web client secret for the optional GA4 traffic integration.",
+		ja: "GA4トラフィック連携に使用するGoogle OAuthのWebクライアントシークレットです（任意）。",
+	},
+	GOOGLE_ANALYTICS_REDIRECT_URI: {
+		en: "Absolute OAuth callback URL registered for the GA4 traffic integration.",
+		ja: "GA4連携用にGoogleへ登録したOAuthコールバックの絶対URLです。",
+	},
+	ANALYTICS_TOKEN_ENCRYPTION_KEY: {
+		en: "32-byte encryption key for server-side GA4 refresh tokens (64 hexadecimal characters).",
+		ja: "GA4の更新トークンをサーバーで暗号化する32バイトの鍵です（16進数64文字）。",
+	},
 	AUTH0_DOMAIN: {
 		en: "Auth0 tenant domain (used for whitelabel logout redirects).",
 		ja: "Auth0のテナントドメインです。ホワイトラベル環境のログアウト後の転送先に使用します。",

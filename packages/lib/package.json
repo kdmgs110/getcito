@@ -30,7 +30,9 @@
     "./expedite": "./src/expedite.ts",
     "./providers": "./src/providers/index.ts",
     "./providers/models": "./src/providers/models.ts",
-    "./providers/types": "./src/providers/types.ts"
+    "./providers/types": "./src/providers/types.ts",
+    "./analytics": "./src/analytics/index.ts",
+    "./analytics/server": "./src/analytics/server.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.84",
@@ -45,7 +47,9 @@
     "drizzle-orm": "^0.45.2",
     "olostep": "^1.1.0",
     "pg": "^8.21.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "re2js": "^2.9.0",
+    "google-auth-library": "^10.5.0"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",

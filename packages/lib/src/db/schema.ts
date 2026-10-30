@@ -1,4 +1,18 @@
-import { boolean, index, integer, json, pgEnum, pgTable, smallint, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+	boolean,
+	index,
+	integer,
+	json,
+	jsonb,
+	pgEnum,
+	pgTable,
+	smallint,
+	text,
+	timestamp,
+	uniqueIndex,
+	uuid,
+} from "drizzle-orm/pg-core";
+import type { AnalyticsMeasurementMode, TrafficCondition } from "../analytics/types";
 
 // Better-auth tables & relations — re-exported so `import * as schema` sees everything.
 // Source file is auto-generated; run `pnpm run generate:auth-schema` to refresh.
@@ -31,6 +45,85 @@ export const brands = pgTable("brands", {
 		.$onUpdate(() => new Date())
 		.notNull(),
 }).enableRLS();
+
+/** One Google Analytics integration per brand. Credentials never leave the server. */
+export const ga4Connections = pgTable("ga4_connections", {
+	brandId: text("brand_id")
+		.primaryKey()
+		.references(() => brands.id, { onDelete: "cascade" }),
+	refreshTokenCiphertext: text("refresh_token_ciphertext").notNull(),
+	connectedBy: text("connected_by").notNull(),
+	propertyId: text("property_id"),
+	propertyName: text("property_name"),
+	hostname: text("hostname"),
+	timeZone: text("time_zone").default("UTC").notNull(),
+	measurementMode: text("measurement_mode").$type<AnalyticsMeasurementMode>().default("landing_sessions").notNull(),
+	status: text("status").default("connected").notNull(),
+	revision: uuid("revision").defaultRandom().notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}).enableRLS();
+
+/** Short-lived, one-time OAuth state bound to both the current user and session. */
+export const ga4OAuthStates = pgTable(
+	"ga4_oauth_states",
+	{
+		stateHash: text("state_hash").primaryKey(),
+		brandId: text("brand_id")
+			.notNull()
+			.references(() => brands.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		sessionId: text("session_id").notNull(),
+		verifierCiphertext: text("verifier_ciphertext").notNull(),
+		consumedAt: timestamp("consumed_at", { withTimezone: true }),
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("ga4_oauth_states_expiry_idx").on(table.expiresAt)],
+).enableRLS();
+
+export const trafficSavedViews = pgTable(
+	"traffic_saved_views",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		brandId: text("brand_id")
+			.notNull()
+			.references(() => brands.id, { onDelete: "cascade" }),
+		hostname: text("hostname").notNull(),
+		name: text("name").notNull(),
+		normalizedName: text("normalized_name").notNull(),
+		conditions: jsonb("conditions").$type<TrafficCondition[]>().notNull(),
+		filterSchemaVersion: integer("filter_schema_version").default(1).notNull(),
+		sortOrder: integer("sort_order").default(0).notNull(),
+		revision: integer("revision").default(1).notNull(),
+		createdBy: text("created_by").notNull(),
+		updatedBy: text("updated_by").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("traffic_saved_views_brand_host_name_idx").on(table.brandId, table.hostname, table.normalizedName),
+		index("traffic_saved_views_brand_sort_idx").on(table.brandId, table.sortOrder),
+	],
+).enableRLS();
+
+export const trafficQueryCache = pgTable(
+	"traffic_query_cache",
+	{
+		cacheKey: text("cache_key").primaryKey(),
+		brandId: text("brand_id")
+			.notNull()
+			.references(() => brands.id, { onDelete: "cascade" }),
+		connectionRevision: uuid("connection_revision").notNull(),
+		payload: jsonb("payload").notNull(),
+		fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+	},
+	(table) => [
+		index("traffic_query_cache_brand_idx").on(table.brandId),
+		index("traffic_query_cache_expiry_idx").on(table.expiresAt),
+	],
+).enableRLS();
 
 export const prompts = pgTable(
 	"prompts",

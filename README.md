@@ -255,6 +255,10 @@ Required-column legend: **local** = required in local mode · **wl** = required 
 | `DISABLE_TELEMETRY` | server | optional | Set to any value to disable telemetry. |
 | `ENVIRONMENT` | server | optional | Environment name reported to Sentry. |
 
+### Google Analytics traffic analysis (optional)
+
+For the optional Google Analytics integration, see [GA4 traffic analysis setup](GA4_SETUP.md). It adds read-only property access, AI-session charts, page-level trends, and shared saved analysis views. Configure `GOOGLE_ANALYTICS_CLIENT_ID`, `GOOGLE_ANALYTICS_CLIENT_SECRET`, `GOOGLE_ANALYTICS_REDIRECT_URI`, and `ANALYTICS_TOKEN_ENCRYPTION_KEY` on the server; no Google credentials are required to run the rest of GetCito.
+
 ### Scraper providers (required when referenced by `SCRAPE_TARGETS`)
 
 | Variable | Provider | Description |

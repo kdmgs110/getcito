@@ -4,9 +4,16 @@ import { coreMessages } from "./messages/core";
 import { dashboardMessages } from "./messages/dashboard";
 import { settingsMessages } from "./messages/settings";
 import { reportMessages } from "./messages/reports";
+import { trafficMessages } from "./messages/traffic";
 
 export { APP_LANGUAGE, createTranslator, resolveLanguage } from "@workspace/ui/lib/i18n";
-export const messages = { ...coreMessages, ...dashboardMessages, ...settingsMessages, ...reportMessages };
+export const messages = {
+	...coreMessages,
+	...dashboardMessages,
+	...settingsMessages,
+	...reportMessages,
+	...trafficMessages,
+};
 export const t = createTranslator(messages);
 export const UI_LOCALE = APP_LOCALE;
 export function formatNumber(value: number, options?: Intl.NumberFormatOptions): string {
