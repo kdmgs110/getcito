@@ -40,6 +40,18 @@ executes Node with the production tsx import hook to avoid a resident pnpm proce
 is preserved. Supported explicit policies are `verify-full` (verify certificate),
 `disable`, and `no-verify` (encrypted connection without certificate verification).
 Prefer `verify-full` with a valid provider certificate chain for production.
+For a managed database with a provider CA, set `DATABASE_SSL_CA` to the trusted
+PEM CA certificate bundle distributed by that provider, including actual line
+breaks and every `BEGIN CERTIFICATE` / `END CERTIFICATE` marker. The app validates
+each certificate and applies the bundle only to PostgreSQL TLS connections,
+including both pg-boss pools and the release migrator. Set
+`DATABASE_SSL_MODE=verify-full` with this bundle so the certificate chain and
+database hostname are verified. A CA bundle with any other TLS mode is rejected.
+Obtain and verify the regional CA through the provider's official distribution
+as an operational step; the application does not download certificates at startup.
+Store the public bundle in Heroku config rather than committing a certificate
+file. When the provider rotates CAs, update the config bundle through the same
+verified process.
 `no-verify` requires an explicit operator choice and is never selected automatically.
 Explicit policy overrides URL SSL parameters consistently for app pools,
 pg-boss and migrations. Never print the database URL or config var values.

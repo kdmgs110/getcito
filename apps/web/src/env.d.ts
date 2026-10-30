@@ -46,6 +46,7 @@ declare global {
 			readonly DEPLOYMENT_MODE: string;
 			readonly DATABASE_URL: string;
 			readonly DATABASE_SSL_MODE?: string;
+			readonly DATABASE_SSL_CA?: string;
 			readonly DB_POOL_MAX?: string;
 			readonly PG_BOSS_POOL_MAX?: string;
 			readonly WORKER_PROMPT_CONCURRENCY?: string;

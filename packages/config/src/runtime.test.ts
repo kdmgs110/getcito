@@ -1,3 +1,4 @@
+import { rootCertificates } from "node:tls";
 import { describe, expect, it } from "vitest";
 import { databaseConnection, positiveIntegerEnv } from "./runtime";
 
@@ -12,6 +13,7 @@ describe("positiveIntegerEnv", () => {
 });
 
 describe("databaseConnection", () => {
+	const ca = rootCertificates[0];
 	const connectionString =
 		"postgres://user:private-password@example.com/db?ssl=true&sslmode=require&application_name=test";
 	it("leaves existing URL behavior intact unless explicitly configured", () => {
@@ -34,5 +36,33 @@ describe("databaseConnection", () => {
 			"DATABASE_URL must be a PostgreSQL URL",
 		);
 		expect(() => databaseConnection({ DATABASE_SSL_MODE: "invalid" })).toThrow("DATABASE_SSL_MODE");
+	});
+	it("scopes a provider CA bundle to strict PostgreSQL TLS", () => {
+		const bundle = `${ca}\n${ca}\n`;
+		const config = databaseConnection({
+			DATABASE_URL: connectionString,
+			DATABASE_SSL_MODE: "verify-full",
+			DATABASE_SSL_CA: bundle,
+		});
+		expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: bundle });
+	});
+	it.each([undefined, "disable", "no-verify"])("rejects a CA without strict verification (mode %s)", (mode) => {
+		expect(() => databaseConnection({ DATABASE_SSL_MODE: mode, DATABASE_SSL_CA: ca })).toThrow(
+			"DATABASE_SSL_CA requires DATABASE_SSL_MODE=verify-full",
+		);
+	});
+	it.each([
+		"not a certificate",
+		"-----BEGIN CERTIFICATE-----\nmissing end marker",
+		"-----BEGIN CERTIFICATE-----\ninvalid certificate\n-----END CERTIFICATE-----",
+		`${ca}\ntrailing data`,
+	])("rejects malformed or incomplete PEM bundles", (invalidCa) => {
+		expect(() =>
+			databaseConnection({
+				DATABASE_URL: connectionString,
+				DATABASE_SSL_MODE: "verify-full",
+				DATABASE_SSL_CA: invalidCa,
+			}),
+		).toThrow("DATABASE_SSL_CA must contain valid PEM certificates");
 	});
 });

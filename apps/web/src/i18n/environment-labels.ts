@@ -12,6 +12,10 @@ export const environmentMessages = {
 		en: "Explicit PostgreSQL TLS policy: disable, verify-full, or no-verify; omitted preserves URL behavior.",
 		ja: "PostgreSQLのTLS方針です。disable、verify-full、no-verifyを指定でき、省略時は接続URLの設定を使用します。",
 	},
+	DATABASE_SSL_CA: {
+		en: "PEM certificate authority bundle for PostgreSQL only; requires DATABASE_SSL_MODE=verify-full.",
+		ja: "PostgreSQL接続専用のPEM形式の認証局証明書です。DATABASE_SSL_MODE=verify-fullと組み合わせて指定します。",
+	},
 	DB_POOL_MAX: {
 		en: "Application PostgreSQL pool limit per web or worker process (default 20).",
 		ja: "Webまたはワーカープロセスごとのアプリ用PostgreSQL接続数の上限です（既定値20）。",

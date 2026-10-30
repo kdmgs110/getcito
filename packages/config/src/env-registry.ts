@@ -49,6 +49,12 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Explicit PostgreSQL TLS policy: disable, verify-full, or no-verify; omitted preserves URL behavior.",
 	},
 	{
+		name: "DATABASE_SSL_CA",
+		scope: "server",
+		requiredBy: "optional",
+		description: "PEM certificate authority bundle for PostgreSQL only; requires DATABASE_SSL_MODE=verify-full.",
+	},
+	{
 		name: "DB_POOL_MAX",
 		scope: "server",
 		requiredBy: "optional",
