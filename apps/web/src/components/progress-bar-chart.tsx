@@ -1,3 +1,4 @@
+import { UI_LOCALE } from "@/i18n";
 import React from "react";
 import { cn } from "@workspace/ui/lib/utils";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@workspace/ui/components/tooltip";
@@ -81,13 +82,13 @@ export function ProgressBarChart({
 		if (customTotal !== undefined) {
 			return customTotal;
 		}
-		
+
 		if (percentageMode === "total") {
 			return items.reduce((sum, item) => sum + item.count, 0);
 		}
-		
+
 		// percentageMode === "max"
-		return Math.max(...items.map(item => item.count), 1);
+		return Math.max(...items.map((item) => item.count), 1);
 	}, [items, percentageMode, customTotal]);
 
 	const getItemColor = (item: ProgressBarItem): string => {
@@ -95,12 +96,12 @@ export function ProgressBarChart({
 		if (item.color) {
 			return item.color;
 		}
-		
+
 		// Category-based color
 		if (item.category && colorMapping[item.category]) {
 			return colorMapping[item.category];
 		}
-		
+
 		// Default color
 		return defaultColor;
 	};
@@ -120,55 +121,50 @@ export function ProgressBarChart({
 
 				return (
 					<div key={item.label} className="space-y-2">
-					<div className="flex items-center justify-between">
-						<div className="flex items-center gap-2 min-w-0 flex-1">
-							{showColorIndicator && (
-								<div 
-									className="w-2.5 h-2.5 rounded-full shrink-0" 
-									style={{ backgroundColor: color }} 
-								/>
-							)}
-							{item.tooltip ? (
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<span
-											className={cn(
-												"text-sm cursor-default",
-												isHighlighted ? "font-bold" : "font-medium",
-												truncateLabels && "truncate",
-												isClickable && "cursor-pointer hover:underline"
-											)}
-											onClick={item.onClick}
-										>
-											{item.label}
-										</span>
-									</TooltipTrigger>
-									<TooltipContent className="max-w-xs text-xs font-normal">{item.tooltip}</TooltipContent>
-								</Tooltip>
-							) : (
-								<span
-									className={cn(
-										"text-sm",
-										isHighlighted ? "font-bold" : "font-medium",
-										truncateLabels && "truncate",
-										isClickable && "cursor-pointer hover:underline"
-									)}
-									onClick={item.onClick}
-								>
-									{item.label}
-								</span>
-							)}
-							{item.icon}
-							{item.action}
-						</div>
+						<div className="flex items-center justify-between">
+							<div className="flex items-center gap-2 min-w-0 flex-1">
+								{showColorIndicator && (
+									<div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+								)}
+								{item.tooltip ? (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<span
+												className={cn(
+													"text-sm cursor-default",
+													isHighlighted ? "font-bold" : "font-medium",
+													truncateLabels && "truncate",
+													isClickable && "cursor-pointer hover:underline",
+												)}
+												onClick={item.onClick}
+											>
+												{item.label}
+											</span>
+										</TooltipTrigger>
+										<TooltipContent className="max-w-xs text-xs font-normal">{item.tooltip}</TooltipContent>
+									</Tooltip>
+								) : (
+									<span
+										className={cn(
+											"text-sm",
+											isHighlighted ? "font-bold" : "font-medium",
+											truncateLabels && "truncate",
+											isClickable && "cursor-pointer hover:underline",
+										)}
+										onClick={item.onClick}
+									>
+										{item.label}
+									</span>
+								)}
+								{item.icon}
+								{item.action}
+							</div>
 							<div className="flex items-center gap-2 ml-2 shrink-0">
-								<span className="text-sm">{item.count.toLocaleString()}</span>
+								<span className="text-sm">{item.count.toLocaleString(UI_LOCALE)}</span>
 								{item.suffix}
 							</div>
 						</div>
-						{item.subtitle && (
-							<p className="text-xs text-muted-foreground truncate -mt-1">{item.subtitle}</p>
-						)}
+						{item.subtitle && <p className="text-xs text-muted-foreground truncate -mt-1">{item.subtitle}</p>}
 						<div className={cn("relative w-full overflow-hidden rounded-full", trackColor, barHeight)}>
 							<div
 								className="h-full transition-all rounded-full"

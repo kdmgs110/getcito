@@ -1,3 +1,6 @@
+import { useHydrated } from "@/hooks/use-hydrated";
+import { authErrorMessage } from "@/i18n/settings-labels";
+import { t } from "@/i18n";
 /**
  * /auth/login - Login page
  *
@@ -61,12 +64,12 @@ function SSOLogin({ returnTo }: { returnTo?: string }) {
 			.then((result) => {
 				if (cancelled) return;
 				if (result.error) {
-					setError(result.error.message ?? "Failed to start sign-in");
+					setError(authErrorMessage(result.error, t("settings.failedToStartSignIn")));
 				}
 			})
 			.catch(() => {
 				if (!cancelled) {
-					setError("Something went wrong. Please try again.");
+					setError(t("settings.somethingWentWrongPleaseTryAgain"));
 				}
 			});
 
@@ -77,18 +80,18 @@ function SSOLogin({ returnTo }: { returnTo?: string }) {
 
 	if (error) {
 		return (
-			<FullPageCard title="Sign in">
+			<FullPageCard title={t("settings.signIn")}>
 				<Alert variant="destructive">
 					<AlertDescription>{error}</AlertDescription>
 				</Alert>
 				<Button className="w-full" onClick={() => window.location.reload()}>
-					Try Again
+					{t("settings.tryAgain")}
 				</Button>
 			</FullPageCard>
 		);
 	}
 
-	return <FullPageCard title="Signing in..." subtitle="Redirecting to your identity provider" />;
+	return <FullPageCard title={t("settings.signingIn")} subtitle={t("settings.redirectingToYourIdentityProvider")} />;
 }
 
 export function EmailPasswordLogin({
@@ -107,6 +110,7 @@ export function EmailPasswordLogin({
 	const [password, setPassword] = useState(isDemo ? demoPassword : "");
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+	const hydrated = useHydrated();
 
 	async function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
@@ -120,20 +124,23 @@ export function EmailPasswordLogin({
 			});
 
 			if (result.error) {
-				setError(result.error.message ?? "Invalid email or password");
+				setError(authErrorMessage(result.error, t("settings.invalidEmailOrPassword")));
 				setLoading(false);
 				return;
 			}
 
 			navigate({ to: safeReturnTo(returnTo) });
 		} catch {
-			setError("Something went wrong. Please try again.");
+			setError(t("settings.somethingWentWrongPleaseTryAgain"));
 			setLoading(false);
 		}
 	}
 
 	return (
-		<FullPageCard title="Sign in" subtitle={isDemo ? undefined : "Enter your email and password to continue"}>
+		<FullPageCard
+			title={t("settings.signIn")}
+			subtitle={isDemo ? undefined : t("settings.enterYourEmailAndPasswordToContinue")}
+		>
 			<form onSubmit={handleSubmit} className="space-y-4 w-full">
 				{isDemo && <DemoCredentialsCallout />}
 				{error && (
@@ -144,7 +151,7 @@ export function EmailPasswordLogin({
 				{!isDemo && (
 					<>
 						<div className="space-y-2">
-							<Label htmlFor="email">Email</Label>
+							<Label htmlFor="email">{t("settings.email")}</Label>
 							<Input
 								id="email"
 								type="email"
@@ -152,37 +159,39 @@ export function EmailPasswordLogin({
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
 								required
+								disabled={!hydrated || loading}
 								autoComplete="email"
 								autoFocus
 							/>
 						</div>
 						<div className="space-y-2">
-							<Label htmlFor="password">Password</Label>
+							<Label htmlFor="password">{t("settings.password")}</Label>
 							<Input
 								id="password"
 								type="password"
-								placeholder="Password"
+								placeholder={t("settings.password")}
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}
 								required
+								disabled={!hydrated || loading}
 								autoComplete="current-password"
 							/>
 						</div>
 					</>
 				)}
-				<Button type="submit" className="w-full" disabled={loading}>
-					{loading ? "Signing in..." : "Sign in"}
+				<Button type="submit" className="w-full" disabled={loading || !hydrated}>
+					{loading ? t("settings.signingIn") : t("settings.signIn")}
 				</Button>
 			</form>
 			{canRegister && (
 				<p className="text-center text-sm text-muted-foreground pt-4">
-					Don't have an account?{" "}
+					{t("settings.donTHaveAnAccount")}{" "}
 					<Link
 						to="/auth/register"
 						search={returnTo ? { returnTo } : {}}
 						className="text-primary hover:underline font-medium"
 					>
-						Create one
+						{t("settings.createOne")}
 					</Link>
 				</p>
 			)}
@@ -197,14 +206,14 @@ function DemoCredentialsCallout() {
 		<div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
 			<IconInfoCircle className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
 			<div className="space-y-2">
-				<p className="font-medium text-amber-900 dark:text-amber-100">Demo Account</p>
+				<p className="font-medium text-amber-900 dark:text-amber-100">{t("settings.demoAccount")}</p>
 				<dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-amber-900/90 dark:text-amber-100/80">
 					<div className="flex items-center gap-1.5">
-						<dt className="opacity-70">Email</dt>
+						<dt className="opacity-70">{t("settings.email")}</dt>
 						<dd className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[11px]">{demoEmail}</dd>
 					</div>
 					<div className="flex items-center gap-1.5">
-						<dt className="opacity-70">Password</dt>
+						<dt className="opacity-70">{t("settings.password")}</dt>
 						<dd className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[11px]">{demoPassword}</dd>
 					</div>
 				</dl>

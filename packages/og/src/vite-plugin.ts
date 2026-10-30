@@ -1,8 +1,11 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { resolve } from "node:path";
 import type { Plugin } from "vite";
 
 const EMBEDDED_BINARIES: Record<string, string> = {
+	"virtual:font/noto-sans-jp-400":
+		"@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-400-normal.woff2",
 	"virtual:takumi-wasm":
 		"@takumi-rs/wasm/takumi_wasm_bg.wasm",
 	"virtual:font/titan-one-400":
@@ -14,9 +17,13 @@ const EMBEDDED_BINARIES: Record<string, string> = {
 };
 
 export function embedBinaries(): Plugin {
-	const require = createRequire(import.meta.url);
+	let require = createRequire(import.meta.url);
 	return {
 		name: "embed-binaries",
+		configResolved(config) {
+			// Assets belong to the consuming app, whose dependency tree supplies them.
+			require = createRequire(resolve(config.root, "package.json"));
+		},
 		resolveId(id) {
 			if (id in EMBEDDED_BINARIES) return `\0${id}`;
 		},

@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 
 import { useLocation } from "@tanstack/react-router";
 
@@ -16,17 +17,20 @@ import { Link } from "@tanstack/react-router";
 
 /** Map of page segments to display names */
 const PAGE_NAMES: Record<string, string> = {
-	visibility: "Visibility",
-	"share-of-voice": "Share of Voice",
-	"query-fan-out": "Query Fan-Out",
-	opportunities: "Opportunities",
-	prompts: "Prompts",
-	citations: "Citations",
-	brand: "Brand",
-	competitors: "Competitors",
-	llms: "LLMs",
-	workflows: "Workflows",
-	tools: "Tools",
+	visibility: t("settings.visibility"),
+	"share-of-voice": t("settings.shareOfVoice"),
+	"query-fan-out": t("settings.queryFanOut"),
+	opportunities: t("settings.opportunities"),
+	prompts: t("settings.prompts"),
+	citations: t("settings.citations"),
+	brand: t("settings.brand"),
+	competitors: t("settings.competitors"),
+	llms: t("settings.llms"),
+	workflows: t("settings.workflows"),
+	tools: t("settings.tools"),
+	queue: t("settings.queue"),
+	usage: t("settings.apiUsage"),
+	settings: t("settings.settings"),
 };
 
 function getPageDisplayName(segment: string): string {
@@ -47,12 +51,12 @@ function AdminBreadcrumbs({ pathname }: { pathname: string }) {
 				<>
 					<BreadcrumbItem className="hidden md:block">
 						<BreadcrumbLink asChild>
-							<Link to="/reports">Reports</Link>
+							<Link to="/reports">{t("settings.reports")}</Link>
 						</BreadcrumbLink>
 					</BreadcrumbItem>
 					<BreadcrumbSeparator className="hidden md:block" />
 					<BreadcrumbItem>
-						<BreadcrumbPage>View Report</BreadcrumbPage>
+						<BreadcrumbPage>{t("settings.viewReport")}</BreadcrumbPage>
 					</BreadcrumbItem>
 				</>
 			);
@@ -61,11 +65,11 @@ function AdminBreadcrumbs({ pathname }: { pathname: string }) {
 		return (
 			<>
 				<BreadcrumbItem className="hidden md:block">
-					<span className="text-muted-foreground">Admin</span>
+					<span className="text-muted-foreground">{t("settings.admin")}</span>
 				</BreadcrumbItem>
 				<BreadcrumbSeparator className="hidden md:block" />
 				<BreadcrumbItem>
-					<BreadcrumbPage>Reports</BreadcrumbPage>
+					<BreadcrumbPage>{t("settings.reports")}</BreadcrumbPage>
 				</BreadcrumbItem>
 			</>
 		);
@@ -76,11 +80,11 @@ function AdminBreadcrumbs({ pathname }: { pathname: string }) {
 		return (
 			<>
 				<BreadcrumbItem className="hidden md:block">
-					<span className="text-muted-foreground">Admin</span>
+					<span className="text-muted-foreground">{t("settings.admin")}</span>
 				</BreadcrumbItem>
 				<BreadcrumbSeparator className="hidden md:block" />
 				<BreadcrumbItem>
-					<BreadcrumbPage>Brands</BreadcrumbPage>
+					<BreadcrumbPage>{t("settings.brands")}</BreadcrumbPage>
 				</BreadcrumbItem>
 			</>
 		);
@@ -91,7 +95,7 @@ function AdminBreadcrumbs({ pathname }: { pathname: string }) {
 	return (
 		<>
 			<BreadcrumbItem className="hidden md:block">
-				<span className="text-muted-foreground">Admin</span>
+				<span className="text-muted-foreground">{t("settings.admin")}</span>
 			</BreadcrumbItem>
 			<BreadcrumbSeparator className="hidden md:block" />
 			<BreadcrumbItem>
@@ -101,10 +105,18 @@ function AdminBreadcrumbs({ pathname }: { pathname: string }) {
 	);
 }
 
-function BrandBreadcrumbs({ pathname, brandId, brandName }: { pathname: string; brandId: string | undefined; brandName: string }) {
+function BrandBreadcrumbs({
+	pathname,
+	brandId,
+	brandName,
+}: {
+	pathname: string;
+	brandId: string | undefined;
+	brandName: string;
+}) {
 	// Extract the page segment from the path (e.g., /app/foo/prompts -> prompts)
 	const pathSegments = pathname.split("/");
-	const brandIndex = pathSegments.findIndex((segment) => segment === "app");
+	const brandIndex = pathSegments.indexOf("app");
 	const pageSegment = brandIndex >= 0 && pathSegments[brandIndex + 2] ? pathSegments[brandIndex + 2] : "";
 	const subSegment = brandIndex >= 0 && pathSegments[brandIndex + 3] ? pathSegments[brandIndex + 3] : "";
 
@@ -122,13 +134,19 @@ function BrandBreadcrumbs({ pathname, brandId, brandName }: { pathname: string; 
 	const isSettingsSubPage = pageSegment === "settings" && subSegment;
 
 	// Determine page name
-	const pageName = pageSegment ? getPageDisplayName(pageSegment) : "Overview";
+	const pageName = pageSegment ? getPageDisplayName(pageSegment) : t("settings.overview");
 
 	return (
 		<>
 			<BreadcrumbItem className="hidden md:block">
 				<BreadcrumbLink asChild>
-					{brandId ? <Link to="/app/$brand" params={{ brand: brandId }}>{brandName}</Link> : <span>{brandName}</span>}
+					{brandId ? (
+						<Link to="/app/$brand" params={{ brand: brandId }}>
+							{brandName}
+						</Link>
+					) : (
+						<span>{brandName}</span>
+					)}
 				</BreadcrumbLink>
 			</BreadcrumbItem>
 			<BreadcrumbSeparator className="hidden md:block" />
@@ -136,18 +154,24 @@ function BrandBreadcrumbs({ pathname, brandId, brandName }: { pathname: string; 
 				<>
 					<BreadcrumbItem className="hidden md:block">
 						<BreadcrumbLink asChild>
-							{brandId ? <Link to="/app/$brand/visibility" params={{ brand: brandId }}>Visibility</Link> : <span>Visibility</span>}
+							{brandId ? (
+								<Link to="/app/$brand/visibility" params={{ brand: brandId }}>
+									{t("settings.visibility")}
+								</Link>
+							) : (
+								<span>{t("settings.visibility")}</span>
+							)}
 						</BreadcrumbLink>
 					</BreadcrumbItem>
 					<BreadcrumbSeparator className="hidden md:block" />
 					<BreadcrumbItem>
-						<BreadcrumbPage>Prompt History</BreadcrumbPage>
+						<BreadcrumbPage>{t("settings.promptHistory")}</BreadcrumbPage>
 					</BreadcrumbItem>
 				</>
 			) : isSettingsSubPage ? (
 				<>
 					<BreadcrumbItem className="hidden md:block">
-						<span className="text-muted-foreground">Settings</span>
+						<span className="text-muted-foreground">{t("settings.settings")}</span>
 					</BreadcrumbItem>
 					<BreadcrumbSeparator className="hidden md:block" />
 					<BreadcrumbItem>
@@ -163,7 +187,7 @@ function BrandBreadcrumbs({ pathname, brandId, brandName }: { pathname: string; 
 					</BreadcrumbItem>
 					<BreadcrumbSeparator className="hidden md:block" />
 					<BreadcrumbItem>
-						<BreadcrumbPage>Edit</BreadcrumbPage>
+						<BreadcrumbPage>{t("settings.edit")}</BreadcrumbPage>
 					</BreadcrumbItem>
 				</>
 			) : (
@@ -194,7 +218,7 @@ export function SiteHeader() {
 							<BrandBreadcrumbs
 								pathname={pathname}
 								brandId={brandId}
-								brandName={brand?.name || "Dashboard"}
+								brandName={brand?.name || t("settings.dashboard")}
 							/>
 						)}
 					</BreadcrumbList>

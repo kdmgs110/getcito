@@ -7,10 +7,11 @@
  */
 import { chromium, type FullConfig } from "@playwright/test";
 import pg from "pg";
+import { testDatabaseUrl } from "./test-database";
 import { TEST_USER, TEST_BRAND_ID, TEST_BRAND_NAME } from "./seed";
 
 const AUTH_STATE_PATH = "e2e/.auth/user.json";
-const DATABASE_URL = "postgres://postgres:postgres@localhost:5432/getcito";
+const DATABASE_URL = testDatabaseUrl();
 
 export default async function globalSetup(config: FullConfig) {
 	const baseURL = config.projects[0]?.use?.baseURL || "http://localhost:1515";

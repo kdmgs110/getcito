@@ -1,7 +1,8 @@
+import { t, formatNumber } from "@/i18n";
 /**
  * /app/$brand/share-of-voice - Share of Voice
  *
- * "Who do the AI engines mention instead of you?" A leaderboard of competitor
+ * t("dashboard.whoDoTheAiEnginesMentionInsteadOf") A leaderboard of competitor
  * mention rates next to the brand's own, with the brand's overall share, a
  * donut of top competitors, and share of voice over time.
  */
@@ -30,8 +31,8 @@ export const Route = createFileRoute("/_authed/app/$brand/share-of-voice")({
 		const brandName = getBrandName(matches);
 		return {
 			meta: [
-				{ title: buildTitle("Share of Voice", { appName, brandName }) },
-				{ name: "description", content: "See how often AI engines mention you versus your competitors." },
+				{ title: buildTitle(t("dashboard.shareOfVoice"), { appName, brandName }) },
+				{ name: "description", content: t("dashboard.seeHowOftenAiEnginesMentionYouVersus") },
 			],
 		};
 	},
@@ -50,9 +51,9 @@ function currentShareOf(series: Array<{ share: number | null }>): number | null 
 }
 
 const TIPS = {
-	mentions: "Number of runs in which this brand was mentioned in the AI answer.",
-	share: "This brand's share of all brand + competitor mentions.",
-	prompts: "Number of distinct prompts this brand appeared in.",
+	mentions: t("dashboard.numberOfRunsInWhichThisBrandWas"),
+	share: t("dashboard.thisBrandSShareOfAllBrandCompetitor"),
+	prompts: t("dashboard.numberOfDistinctPromptsThisBrandAppearedIn"),
 };
 
 function ShareOfVoicePage() {
@@ -77,11 +78,8 @@ function ShareOfVoicePage() {
 
 	const infoContent = (
 		<>
-			<p className="mb-2">
-				Share of voice is how often each brand is mentioned in the AI answers to your prompts. Mentions are counted
-				per run, so the brand and competitor figures use the same unit and are directly comparable.
-			</p>
-			<p>Competitors are the ones you track in settings. Switch the model filter to compare engines.</p>
+			<p className="mb-2">{t("dashboard.shareOfVoiceIsHowOftenEachBrand")}</p>
+			<p>{t("dashboard.competitorsAreTheOnesYouTrackInSettings")}</p>
 		</>
 	);
 
@@ -107,7 +105,7 @@ function ShareOfVoicePage() {
 			<Card>
 				<CardContent className="pt-6">
 					<div className="text-muted-foreground text-center py-8">
-						No mention data yet for the selected filters. Mentions appear once your prompts have been run.
+						{t("dashboard.noMentionDataYetForTheSelectedFilters")}
 					</div>
 				</CardContent>
 			</Card>
@@ -120,7 +118,7 @@ function ShareOfVoicePage() {
 				<div className="grid gap-6 lg:grid-cols-2">
 					<Card>
 						<CardHeader>
-							<CardTitle>Share of Voice</CardTitle>
+							<CardTitle>{t("dashboard.shareOfVoice")}</CardTitle>
 						</CardHeader>
 						<CardContent className="flex items-center justify-between gap-4">
 							<div>
@@ -128,8 +126,11 @@ function ShareOfVoicePage() {
 									{currentShare !== null ? `${currentShare}%` : "—"}
 								</div>
 								<p className="text-sm text-muted-foreground mt-1 max-w-[18rem]">
-									{data.brandName} across {data.totalRuns.toLocaleString()} runs
-									{data.entries.length > 1 ? ` and ${data.entries.length - 1} competitors` : ""}.
+									{t("dashboard.brandRunsSummary", {
+										brand: data.brandName,
+										runs: formatNumber(data.totalRuns),
+										competitors: Math.max(0, data.entries.length - 1),
+									})}
 								</p>
 							</div>
 							<ShareOfVoiceDonut entries={data.entries} />
@@ -138,12 +139,12 @@ function ShareOfVoicePage() {
 
 					<Card>
 						<CardHeader>
-							<CardTitle>Share of Voice Trends</CardTitle>
+							<CardTitle>{t("dashboard.shareOfVoiceTrends")}</CardTitle>
 						</CardHeader>
 						<CardContent>
 							<TrendChart
 								data={data.shareTimeSeries.map((p) => ({ date: p.date, value: p.share }))}
-								label="Share of Voice"
+								label={t("dashboard.shareOfVoice")}
 								color="#2563eb"
 								className="aspect-auto h-[180px] w-full"
 							/>
@@ -153,22 +154,22 @@ function ShareOfVoicePage() {
 
 				<Card>
 					<CardHeader>
-						<CardTitle>Share of Voice Leaderboard</CardTitle>
+						<CardTitle>{t("dashboard.shareOfVoiceLeaderboard")}</CardTitle>
 					</CardHeader>
 					<CardContent>
 						<Table>
 							<TableHeader>
 								<TableRow>
 									<TableHead className="w-10">#</TableHead>
-									<TableHead>Brand</TableHead>
+									<TableHead>{t("dashboard.brand")}</TableHead>
 									<TableHead className="text-right">
-										<ColHead label="Mentions" tip={TIPS.mentions} right />
+										<ColHead label={t("dashboard.mentions")} tip={TIPS.mentions} right />
 									</TableHead>
 									<TableHead className="w-[34%]">
-										<ColHead label="Share" tip={TIPS.share} />
+										<ColHead label={t("dashboard.share")} tip={TIPS.share} />
 									</TableHead>
 									<TableHead className="text-right">
-										<ColHead label="Prompts" tip={TIPS.prompts} right />
+										<ColHead label={t("dashboard.prompts")} tip={TIPS.prompts} right />
 									</TableHead>
 								</TableRow>
 							</TableHeader>
@@ -184,31 +185,31 @@ function ShareOfVoicePage() {
 													{e.name}
 													{e.isBrand && (
 														<Badge variant="secondary" className="text-xs">
-															You
+															{t("dashboard.you")}
 														</Badge>
 													)}
 												</span>
 											</TableCell>
-											<TableCell className="text-right tabular-nums">{e.mentions.toLocaleString()}</TableCell>
-										<TableCell>
-											<div className="flex items-center gap-2">
-												<div className="bg-muted h-2 w-full overflow-hidden rounded-full">
-													<div
-														className="h-full rounded-full"
-														style={{
-															width: `${maxMentions > 0 ? (e.mentions / maxMentions) * 100 : 0}%`,
-															backgroundColor: barColors.get(e.name) ?? "#cbd5e1",
-														}}
-													/>
+											<TableCell className="text-right tabular-nums">{formatNumber(e.mentions)}</TableCell>
+											<TableCell>
+												<div className="flex items-center gap-2">
+													<div className="bg-muted h-2 w-full overflow-hidden rounded-full">
+														<div
+															className="h-full rounded-full"
+															style={{
+																width: `${maxMentions > 0 ? (e.mentions / maxMentions) * 100 : 0}%`,
+																backgroundColor: barColors.get(e.name) ?? "#cbd5e1",
+															}}
+														/>
+													</div>
+													<span className="tabular-nums text-sm text-muted-foreground w-10 text-right">
+														{formatPct(e.share)}
+													</span>
 												</div>
-												<span className="tabular-nums text-sm text-muted-foreground w-10 text-right">
-													{formatPct(e.share)}
-												</span>
-											</div>
-										</TableCell>
-										<TableCell className="text-right tabular-nums text-muted-foreground">{e.prompts}</TableCell>
-									</TableRow>
-								);
+											</TableCell>
+											<TableCell className="text-right tabular-nums text-muted-foreground">{e.prompts}</TableCell>
+										</TableRow>
+									);
 								})}
 							</TableBody>
 						</Table>
@@ -220,12 +221,17 @@ function ShareOfVoicePage() {
 
 	return (
 		<PageHeader
-			title="Share of Voice"
-			subtitle="How often AI engines mention you versus your competitors."
+			title={t("dashboard.shareOfVoice")}
+			subtitle={t("dashboard.howOftenAiEnginesMentionYouVersusYour")}
 			infoContent={infoContent}
 		>
 			<FilterSection>
-				<FilterBar availableTags={availableTags} availableModels={availableModels} showSearch={false} showModelSelector />
+				<FilterBar
+					availableTags={availableTags}
+					availableModels={availableModels}
+					showSearch={false}
+					showModelSelector
+				/>
 			</FilterSection>
 			<div className="space-y-6">{content}</div>
 		</PageHeader>

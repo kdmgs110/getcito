@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import type { ReactNode } from "react";
 import { Inbox } from "lucide-react";
 import { Button } from "@workspace/ui/components/button";
@@ -78,17 +79,10 @@ export function FilteredListShell({
 			<div className="border-2 border-dashed border-muted rounded-lg min-h-48 flex items-center justify-center">
 				<div className="text-center py-8 text-muted-foreground">
 					<Inbox className="h-12 w-12 mx-auto mb-4 opacity-50" />
-					<p className="mb-2">{noMatchesTitle ?? "No results match your filters."}</p>
-					<p className="text-sm mb-4">
-						{noMatchesDescription ?? "Try adjusting your search or filters."}
-					</p>
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={filters.clearFilters}
-						className="cursor-pointer"
-					>
-						Clear filters
+					<p className="mb-2">{noMatchesTitle ?? t("core.noResultsMatchYourFilters")}</p>
+					<p className="text-sm mb-4">{noMatchesDescription ?? t("core.tryAdjustingYourSearchOrFilters")}</p>
+					<Button variant="outline" size="sm" onClick={filters.clearFilters} className="cursor-pointer">
+						{t("core.clearFilters")}
 					</Button>
 				</div>
 			</div>

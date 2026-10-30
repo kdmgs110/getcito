@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
@@ -22,7 +23,7 @@ export default function FullPageCard({
 	children = undefined,
 	showBackButton = false,
 	backButtonHref = "/app",
-	backButtonText = "Go Back",
+	backButtonText = t("core.goBack"),
 	customBackButton,
 	className = "w-md",
 }: FullPageCardProps) {

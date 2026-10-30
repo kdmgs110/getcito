@@ -1,3 +1,4 @@
+import { APP_LANGUAGE, UI_LOCALE, t } from "@/i18n";
 /**
  * /admin/tools — Admin utility for running the onboarding analysis against an
  * arbitrary website without going through the wizard.
@@ -33,7 +34,7 @@ function AnalyzeBrandDialog() {
 
 	const handleAnalyze = async () => {
 		if (!website.trim()) {
-			setError("Please enter a website URL");
+			setError(t("reports.pleaseEnterAWebsiteUrl"));
 			return;
 		}
 		setError(null);
@@ -48,7 +49,7 @@ function AnalyzeBrandDialog() {
 			});
 			setResult(data);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "An error occurred");
+			setError(APP_LANGUAGE === "en" && err instanceof Error ? err.message : t("reports.anErrorOccurred"));
 		} finally {
 			setIsLoading(false);
 		}
@@ -81,21 +82,19 @@ function AnalyzeBrandDialog() {
 			<DialogTrigger asChild>
 				<Button variant="outline" className="cursor-pointer w-full">
 					<Sparkles className="h-4 w-4 mr-2" />
-					Analyze brand
+					{t("reports.analyzeBrand")}
 				</Button>
 			</DialogTrigger>
 			<DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
 				<DialogHeader>
-					<DialogTitle>Analyze brand</DialogTitle>
-					<DialogDescription>
-						Run the onboarding analysis for any website.
-					</DialogDescription>
+					<DialogTitle>{t("reports.analyzeBrand")}</DialogTitle>
+					<DialogDescription>{t("reports.runTheOnboardingAnalysisForAnyWebsite")}</DialogDescription>
 				</DialogHeader>
 
 				<div className="space-y-4 py-4">
 					<div className="grid grid-cols-2 gap-4">
 						<div className="space-y-2">
-							<Label htmlFor="analyze-website">Website URL</Label>
+							<Label htmlFor="analyze-website">{t("reports.websiteUrl")}</Label>
 							<Input
 								id="analyze-website"
 								placeholder="https://example.com"
@@ -105,10 +104,10 @@ function AnalyzeBrandDialog() {
 							/>
 						</div>
 						<div className="space-y-2">
-							<Label htmlFor="analyze-brand">Brand name (optional)</Label>
+							<Label htmlFor="analyze-brand">{t("reports.brandNameOptional")}</Label>
 							<Input
 								id="analyze-brand"
-								placeholder="Auto-detected from URL"
+								placeholder={t("reports.autoDetectedFromUrl")}
 								value={brandName}
 								onChange={(e) => setBrandName(e.target.value)}
 								disabled={isLoading}
@@ -120,10 +119,10 @@ function AnalyzeBrandDialog() {
 						{isLoading ? (
 							<>
 								<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-								Analyzing… (this may take a minute)
+								{t("reports.analyzingThisMayTakeAMinute")}
 							</>
 						) : (
-							"Analyze"
+							t("reports.analyze")
 						)}
 					</Button>
 
@@ -137,33 +136,33 @@ function AnalyzeBrandDialog() {
 									<Button variant="ghost" size="sm" onClick={handleCopyPrompts} className="cursor-pointer">
 										{copied ? (
 											<>
-												<Check className="h-4 w-4 mr-1" /> Copied
+												<Check className="h-4 w-4 mr-1" /> {t("reports.copied")}
 											</>
 										) : (
 											<>
-												<Copy className="h-4 w-4 mr-1" /> Copy prompts
+												<Copy className="h-4 w-4 mr-1" /> {t("reports.copyPrompts")}
 											</>
 										)}
 									</Button>
 									<Button variant="ghost" size="sm" onClick={handleCopy} className="cursor-pointer">
-										<Copy className="h-4 w-4 mr-1" /> Copy JSON
+										<Copy className="h-4 w-4 mr-1" /> {t("reports.copyJson")}
 									</Button>
 								</div>
 							</div>
 
 							<div className="grid grid-cols-2 gap-4 text-sm">
-								<Stat label="Competitors" value={result.competitors.length} />
-								<Stat label="Prompts" value={result.suggestedPrompts.length} />
+								<Stat label={t("reports.competitors")} value={result.competitors.length} />
+								<Stat label={t("reports.prompts")} value={result.suggestedPrompts.length} />
 							</div>
 
 							{result.additionalDomains.length > 0 && (
-								<TagSection title="Additional domains" items={result.additionalDomains} />
+								<TagSection title={t("reports.additionalDomains")} items={result.additionalDomains} />
 							)}
-							{result.aliases.length > 0 && <TagSection title="Aliases" items={result.aliases} />}
+							{result.aliases.length > 0 && <TagSection title={t("reports.aliases")} items={result.aliases} />}
 
 							{result.competitors.length > 0 && (
 								<div className="space-y-2">
-									<Label className="text-muted-foreground">Competitors</Label>
+									<Label className="text-muted-foreground">{t("reports.competitors")}</Label>
 									<div className="space-y-1 text-sm">
 										{result.competitors.map((c) => (
 											<div key={c.name} className="flex items-center gap-2">
@@ -177,7 +176,7 @@ function AnalyzeBrandDialog() {
 
 							{result.suggestedPrompts.length > 0 && (
 								<div className="space-y-2">
-									<Label className="text-muted-foreground">Prompts</Label>
+									<Label className="text-muted-foreground">{t("reports.prompts")}</Label>
 									<div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-1 text-sm">
 										{result.suggestedPrompts.map((p, i) => (
 											<div key={p.prompt} className="flex items-start gap-2 py-1 border-b last:border-0">
@@ -207,7 +206,7 @@ function Stat({ label, value }: { label: string; value: number }) {
 	return (
 		<div>
 			<Label className="text-muted-foreground">{label}</Label>
-			<p className="font-medium">{value.toLocaleString()}</p>
+			<p className="font-medium">{value.toLocaleString(UI_LOCALE)}</p>
 		</div>
 	);
 }
@@ -232,8 +231,8 @@ export const Route = createFileRoute("/_authed/admin/tools")({
 		const appName = getAppName(match);
 		return {
 			meta: [
-				{ title: `Tools · ${appName}` },
-				{ name: "description", content: "Brand onboarding analysis." },
+				{ title: `${t("reports.tools")} · ${appName}` },
+				{ name: "description", content: t("reports.brandOnboardingAnalysis") },
 			],
 		};
 	},
@@ -244,9 +243,9 @@ function ToolsPage() {
 	return (
 		<div className="space-y-8">
 			<div className="space-y-2">
-				<h1 className="text-3xl font-bold tracking-tight">Tools</h1>
+				<h1 className="text-3xl font-bold tracking-tight">{t("reports.tools")}</h1>
 				<p className="text-muted-foreground">
-					Run the onboarding analysis for any brand without creating it. Same pipeline as the wizard and
+					{t("reports.runTheOnboardingAnalysisForAnyBrandWithoutCreatingItSamePipeline")}
 					<code className="mx-1 rounded bg-muted px-1">POST /api/v1/tools/analyze</code>.
 				</p>
 			</div>
@@ -256,11 +255,10 @@ function ToolsPage() {
 					<CardHeader>
 						<CardTitle className="flex items-center gap-2">
 							<Sparkles className="h-5 w-5" />
-							Brand analysis
+							{t("reports.brandAnalysis")}
 						</CardTitle>
 						<CardDescription>
-							Analyze a website to discover its competitors, additional brand domains, aliases, and
-							suggested AI tracking prompts. Works with any configured LLM provider.
+							{t("reports.analyzeAWebsiteToDiscoverItsCompetitorsAdditionalBrandDomainsAliasesAnd")}
 						</CardDescription>
 					</CardHeader>
 					<CardContent>

@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useState } from "react";
 import { Input } from "@workspace/ui/components/input";
 import { Button } from "@workspace/ui/components/button";
@@ -37,7 +38,7 @@ export function TrackDomainPopover({
 
 	const handleError = (e: unknown) => {
 		setSaving(false);
-		setError("Something went wrong. Please try again.");
+		setError(t("dashboard.somethingWentWrongPleaseTryAgain"));
 		Sentry.captureException(e);
 	};
 
@@ -90,28 +91,28 @@ export function TrackDomainPopover({
 				<button
 					type="button"
 					className="shrink-0 p-1 rounded hover:bg-muted cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
-					title={`Track ${domain}`}
+					title={t("dashboard.trackDomain", { domain })}
 				>
 					<IconPlus className="h-3.5 w-3.5" />
 				</button>
 			</PopoverTrigger>
 			<PopoverContent className="w-72 p-3" align="end">
 				<div className="space-y-3">
-					<p className="text-xs font-medium">Track <strong>{domain}</strong></p>
+					<p className="text-xs font-medium">
+						{t("dashboard.track")} <strong>{domain}</strong>
+					</p>
 
-					{error && (
-						<p className="text-xs text-destructive bg-destructive/10 rounded px-2 py-1.5">{error}</p>
-					)}
+					{error && <p className="text-xs text-destructive bg-destructive/10 rounded px-2 py-1.5">{error}</p>}
 
 					<div className="space-y-1">
 						<div className="flex items-center gap-1">
-							<p className="text-[11px] text-muted-foreground">Add as brand domain</p>
+							<p className="text-[11px] text-muted-foreground">{t("dashboard.addAsBrandDomain")}</p>
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<IconInfoCircle className="h-3 w-3 text-muted-foreground cursor-help" />
 								</TooltipTrigger>
 								<TooltipContent className="max-w-xs text-xs font-normal">
-									Applies <strong>retroactively</strong> &mdash; all existing and future citations from this domain will be classified as your brand.
+									{t("dashboard.retroactiveBrand")}
 								</TooltipContent>
 							</Tooltip>
 						</div>
@@ -121,20 +122,20 @@ export function TrackDomainPopover({
 							disabled={saving}
 							className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted cursor-pointer disabled:opacity-50 transition-colors"
 						>
-							{brandName || "My brand"}
+							{brandName || t("dashboard.myBrand")}
 						</button>
 					</div>
 
 					{competitors.length > 0 && (
 						<div className="space-y-1">
 							<div className="flex items-center gap-1">
-								<p className="text-[11px] text-muted-foreground">Add to existing competitor</p>
+								<p className="text-[11px] text-muted-foreground">{t("dashboard.addToExistingCompetitor")}</p>
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<IconInfoCircle className="h-3 w-3 text-muted-foreground cursor-help" />
 									</TooltipTrigger>
 									<TooltipContent className="max-w-xs text-xs font-normal">
-										Applies <strong>retroactively</strong> &mdash; all existing and future citations from this domain will be classified under the selected competitor.
+										{t("dashboard.retroactiveCompetitor")}
 									</TooltipContent>
 								</Tooltip>
 							</div>
@@ -155,14 +156,19 @@ export function TrackDomainPopover({
 					)}
 
 					<div className="space-y-1.5">
-						<p className="text-[11px] text-muted-foreground">Or create new competitor:</p>
+						<p className="text-[11px] text-muted-foreground">{t("dashboard.orCreateNewCompetitor")}</p>
 						<div className="flex gap-1.5">
 							<Input
 								value={newName}
 								onChange={(e) => setNewName(e.target.value)}
-								placeholder="Competitor name"
+								placeholder={t("dashboard.competitorName")}
 								className="h-7 text-xs"
-								onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCreateNew(); } }}
+								onKeyDown={(e) => {
+									if (e.key === "Enter") {
+										e.preventDefault();
+										handleCreateNew();
+									}
+								}}
 								disabled={saving}
 							/>
 							<Button
@@ -171,7 +177,7 @@ export function TrackDomainPopover({
 								disabled={saving || !newName.trim()}
 								className="h-7 px-2 text-xs cursor-pointer shrink-0"
 							>
-								Add
+								{t("dashboard.add")}
 							</Button>
 						</div>
 					</div>

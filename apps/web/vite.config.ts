@@ -69,7 +69,8 @@ export default defineConfig({
 				"@opentelemetry/api",
 				"@prisma/instrumentation",
 			],
-			traceDeps: ["@takumi-rs/core", ...takumiNativeBindings],
+			// Takumi loads its WASM adapter through a runtime import that tracing cannot infer.
+			traceDeps: ["@takumi-rs/wasm", "@takumi-rs/core", ...takumiNativeBindings],
 			rollupConfig: {
 				external: ["fsevents"],
 			},

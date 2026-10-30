@@ -25,7 +25,7 @@ test.describe("Prompt Details Page", () => {
   test("page shows tab navigation", async ({ page }) => {
 
     // The page should have tabs: Mentions, Web Queries, Citations, LLM Responses
-    const tabs = ["Mentions", "Web Queries", "Citations", "LLM Responses"];
+    const tabs = [/Mentions|言及/, /Web Queries|検索クエリ/, /Citations|引用/, /LLM Responses|AIの回答|LLMの回答/];
 
     for (const tabName of tabs) {
       const tab = page.getByRole("tab", { name: tabName }).or(
@@ -41,23 +41,18 @@ test.describe("Prompt Details Page", () => {
     await expect(page.getByText(PROMPT_TEXT)).toBeVisible();
 
     // Click on "LLM Responses" tab
-    const responsesTab = page.getByRole("tab", { name: /LLM Responses/i }).or(
-      page.getByRole("button", { name: /LLM Responses/i })
+    const responsesTab = page.getByRole("tab", { name: /LLM Responses|AIの回答|LLMの回答/i }).or(
+      page.getByRole("button", { name: /LLM Responses|AIの回答|LLMの回答/i })
     ).or(
-      page.getByText("LLM Responses", { exact: true })
+      page.getByText(/LLM Responses|AIの回答|LLMの回答/, { exact: true })
     );
     await responsesTab.first().click();
 
     // The LLM Responses tab should show prompt run data from the database
     // Our seed data includes runs with model names
-    const pageContent = await page.textContent("body");
-    const hasRunContent =
-      pageContent?.includes("gpt-4o") ||
-      pageContent?.includes("claude") ||
-      pageContent?.includes("gemini") ||
-      pageContent?.includes("Response") ||
-      pageContent?.includes("response");
-    expect(hasRunContent).toBeTruthy();
+    // Wait for the response request, then verify the stored model/version is preserved.
+    await expect(page.locator("body")).toContainText(/gpt-4o|claude|gemini/i);
+
   });
 
   test("page shows prompt metadata", async ({ page }) => {

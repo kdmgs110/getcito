@@ -1,3 +1,4 @@
+import { t, UI_LOCALE } from "@/i18n";
 /**
  * Dependency-free term cloud. Sizes each term by sqrt(count) (so a 100× term
  * isn't 100× the height), colors it by frequency, and centers the biggest terms
@@ -38,7 +39,7 @@ export function WordCloud({
 	// center-weighted ordering below both assume descending counts.
 	const items = [...terms].sort((a, b) => b.count - a.count).slice(0, maxItems);
 	if (items.length === 0) {
-		return <div className="text-muted-foreground py-6 text-center text-sm">No terms for this period.</div>;
+		return <div className="text-muted-foreground py-6 text-center text-sm">{t("core.noTermsForThisPeriod")}</div>;
 	}
 
 	const counts = items.map((i) => i.count);
@@ -64,7 +65,7 @@ export function WordCloud({
 				return (
 					<span
 						key={it.term}
-						title={`${it.term} · ${it.count.toLocaleString()}`}
+						title={`${it.term} · ${it.count.toLocaleString(UI_LOCALE)}`}
 						className="font-semibold"
 						style={{ fontSize: Math.round(MIN_PX + t * (MAX_PX - MIN_PX)), color, opacity: 0.62 + t * 0.38 }}
 					>

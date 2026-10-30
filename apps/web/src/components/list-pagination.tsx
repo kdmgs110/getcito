@@ -1,3 +1,4 @@
+import { t, UI_LOCALE } from "@/i18n";
 import { useMemo, useState } from "react";
 
 const PAGER_BUTTON_CLASS =
@@ -23,7 +24,11 @@ export function ListPagination({ page, pageSize, totalItems, onPageChange }: Lis
 	return (
 		<div className="mt-3 flex items-center justify-between">
 			<span className="text-[11px] text-muted-foreground tabular-nums">
-				{start.toLocaleString()}–{end.toLocaleString()} of {totalItems.toLocaleString()}
+				{t("core.pagination", {
+					start: start.toLocaleString(UI_LOCALE),
+					end: end.toLocaleString(UI_LOCALE),
+					total: totalItems.toLocaleString(UI_LOCALE),
+				})}
 			</span>
 			<div className="flex items-center gap-1.5">
 				<button
@@ -32,7 +37,7 @@ export function ListPagination({ page, pageSize, totalItems, onPageChange }: Lis
 					disabled={page === 0}
 					className={PAGER_BUTTON_CLASS}
 				>
-					Previous
+					{t("core.previous")}
 				</button>
 				<button
 					type="button"
@@ -40,7 +45,7 @@ export function ListPagination({ page, pageSize, totalItems, onPageChange }: Lis
 					disabled={page >= totalPages - 1}
 					className={PAGER_BUTTON_CLASS}
 				>
-					Next
+					{t("core.next")}
 				</button>
 			</div>
 		</div>
@@ -55,9 +60,6 @@ export function usePagedList<T>(items: readonly T[], pageSize: number) {
 	const [rawPage, setPage] = useState(0);
 	const maxPage = Math.max(0, Math.ceil(items.length / pageSize) - 1);
 	const page = Math.min(rawPage, maxPage);
-	const pageItems = useMemo(
-		() => items.slice(page * pageSize, (page + 1) * pageSize),
-		[items, page, pageSize],
-	);
+	const pageItems = useMemo(() => items.slice(page * pageSize, (page + 1) * pageSize), [items, page, pageSize]);
 	return { page, setPage, pageItems, pageSize, totalItems: items.length };
 }

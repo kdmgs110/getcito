@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Separator } from "@workspace/ui/components/separator";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@workspace/ui/components/tooltip";
@@ -20,19 +21,15 @@ export function ContentGapsCard({
 		<Card className="h-full flex flex-col">
 			<CardHeader>
 				<CardTitle className="flex items-center gap-1.5">
-					Content Gaps
+					{t("dashboard.contentGaps")}
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<IconInfoCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
 						</TooltipTrigger>
-						<TooltipContent className="max-w-xs text-sm font-normal">
-							Prompts where competitors are cited but your brand isn&apos;t — opportunities to improve your citation presence.
-						</TooltipContent>
+						<TooltipContent className="max-w-xs text-sm font-normal">{t("dashboard.contentGapHelp")}</TooltipContent>
 					</Tooltip>
 				</CardTitle>
-				<CardDescription>
-					Prompts where competitors are cited but your brand isn&apos;t
-				</CardDescription>
+				<CardDescription>{t("dashboard.contentGapDescription")}</CardDescription>
 			</CardHeader>
 			<Separator />
 			<CardContent className="flex-1 flex flex-col">
@@ -49,10 +46,15 @@ export function ContentGapsCard({
 							</div>
 							<div className="min-w-0 flex-1">
 								<div className="flex items-center gap-1.5">
-									<span className="text-sm font-medium truncate text-foreground group-hover:underline">{prompt.value}</span>
+									<span className="text-sm font-medium truncate text-foreground group-hover:underline">
+										{prompt.value}
+									</span>
 								</div>
 								<p className="text-xs text-muted-foreground mt-0.5">
-									{prompt.uniqueCompetitors} {prompt.uniqueCompetitors === 1 ? "competitor" : "competitors"} cited {prompt.competitorCitationCount} {prompt.competitorCitationCount === 1 ? "time" : "times"} &mdash; your brand cited 0 times
+									{t("dashboard.contentGapCounts", {
+										competitors: prompt.uniqueCompetitors,
+										count: prompt.competitorCitationCount,
+									})}
 								</p>
 							</div>
 						</Link>

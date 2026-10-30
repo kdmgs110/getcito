@@ -8,9 +8,12 @@
  *
  * Usage: tsx seed.ts
  */
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import pg from "pg";
+import { testDatabaseUrl } from "./test-database";
 
-const DATABASE_URL = "postgres://postgres:postgres@localhost:5432/getcito";
+const DATABASE_URL = testDatabaseUrl();
 
 // ---------------------------------------------------------------------------
 // Fixed IDs for test fixtures (so tests can reference them directly)
@@ -23,6 +26,7 @@ export const TEST_USER = {
 
 export const TEST_BRAND_ID = "default";
 export const TEST_BRAND_NAME = "Test Organization";
+export const TEST_REPORT_ID = "00000000-0000-0000-0000-300000000001";
 export const TEST_BRAND_WEBSITE = "https://example.com";
 
 export const PROMPT_IDS = {
@@ -357,6 +361,20 @@ async function seed() {
     }
     console.log(`  Created ${citationCount} citations (Postgres)`);
 
+    await client.query(
+      `INSERT INTO reports (id, brand_name, brand_website, status, progress, raw_output, completed_at)
+       VALUES ($1, $2, $3, 'completed', 100, $4, NOW())`,
+      [TEST_REPORT_ID, TEST_BRAND_NAME, TEST_BRAND_WEBSITE, JSON.stringify({
+        competitors: competitorData.map(c => ({ name: c.name, domain: c.domains[0] })),
+        prompts: promptData.map(p => ({ value: p.value })),
+        promptRuns: promptData.map(p => ({
+          promptValue: p.value,
+          runs: promptRuns.filter(run => run.promptId === p.id),
+        })),
+      })],
+    );
+
+
     console.log("\nE2E database seeding complete!");
     console.log(`  Brand: ${TEST_BRAND_ID} (${TEST_BRAND_NAME})`);
     console.log(`  Prompts: ${promptData.length}`);
@@ -367,7 +385,8 @@ async function seed() {
   }
 }
 
-seed().catch((err) => {
+// Importing fixture IDs in auth setup must never erase database contents.
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) seed().catch((err) => {
   console.error("Seeding failed:", err);
   process.exit(1);
 });

@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { Badge } from "@workspace/ui/components/badge";
 import { BaseChart } from "./base-chart";
 import { DEFAULT_APP_ICON, DEFAULT_APP_NAME } from "@workspace/config/constants";
@@ -59,11 +60,7 @@ export function ChartExportPreview({
 				style={{ height: HEADER_H, marginBottom: GAP_HEADER_CARD }}
 				className="flex items-center justify-between px-10 gap-6 shrink-0"
 			>
-				<h2
-					className="font-semibold text-gray-900 truncate flex-1 min-w-0"
-					style={{ fontSize: 22 }}
-					title={promptName}
-				>
+				<h2 className="font-semibold text-gray-900 truncate flex-1 min-w-0" style={{ fontSize: 22 }} title={promptName}>
 					{promptName}
 				</h2>
 				{visibility !== null && (
@@ -72,7 +69,7 @@ export function ChartExportPreview({
 						className={`${getBadgeClassName(visibility)} shrink-0`}
 						style={{ fontSize: 16, padding: "4px 14px" }}
 					>
-						{visibility}% Visibility
+						{t("core.visibilityValue", { value: visibility })}
 					</Badge>
 				)}
 			</div>
@@ -102,21 +99,25 @@ export function ChartExportPreview({
 					{isWhitelabel && hasCustomIcon && (
 						<img
 							src={branding.icon}
-							alt={`${name} logo`}
+							alt={t("core.logoAlt", { name })}
 							style={{ width: 28, height: 28 }}
 							className="object-contain"
 							crossOrigin="anonymous"
 						/>
 					)}
 					{isWhitelabel ? (
-						<span style={{ fontSize: 18 }} className="text-gray-500 font-semibold">{name}</span>
+						<span style={{ fontSize: 18 }} className="text-gray-500 font-semibold">
+							{name}
+						</span>
 					) : (
 						<span className="font-titan-one font-normal lowercase text-blue-600" style={{ fontSize: 24 }}>
 							Getcito
 						</span>
 					)}
 				</div>
-				<span style={{ fontSize: 18 }} className="text-gray-400 font-medium">{domain}</span>
+				<span style={{ fontSize: 18 }} className="text-gray-400 font-medium">
+					{domain}
+				</span>
 			</div>
 		</div>
 	);

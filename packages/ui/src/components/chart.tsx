@@ -1,4 +1,5 @@
-"use client"
+"use client";
+import { APP_FORMAT_LOCALE } from "@workspace/ui/lib/i18n";
 
 import * as React from "react"
 import * as RechartsPrimitive from "recharts"
@@ -241,7 +242,7 @@ function ChartTooltipContent({
                     </div>
                     {item.value && (
                       <span className="text-foreground font-mono font-medium tabular-nums">
-                        {item.value.toLocaleString()}
+                        {item.value.toLocaleString(APP_FORMAT_LOCALE)}
                       </span>
                     )}
                   </div>

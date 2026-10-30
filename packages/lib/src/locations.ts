@@ -1,5 +1,10 @@
 import { BRIGHTDATA_COUNTRIES } from "./brightdata-locations";
 
+/** Country codes for localized display labels; provider-facing market values are unchanged. */
+export function marketCountryCode(market: string): string | undefined {
+	return BRIGHTDATA_COUNTRIES[market]?.toUpperCase();
+}
+
 /**
  * Location names DataForSEO accepts as `location_name`. Sending anything else
  * makes their API reject the task rather than fall back to a default, so the

@@ -241,7 +241,7 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		name: "VITE_APP_LOCALE",
 		scope: "client",
 		requiredBy: "optional",
-		description: "BCP 47 locale used for application date and number formatting.",
+		description: "BCP 47 locale for dates, numbers, and UI language. Defaults to ja-JP; ja/ja-* selects Japanese, other locales select English.",
 	},
 	{
 		name: "VITE_APP_NAME",

@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 /**
  * Date-range picker for the "custom range" timeframe option.
  *
@@ -47,7 +48,7 @@ export function CustomRangeCalendar({
 		<div className="flex w-64 flex-col gap-3 p-3">
 			<div className="flex flex-col gap-1">
 				<label htmlFor={`${id}-from`} className="text-xs text-muted-foreground">
-					From
+					{t("core.from")}
 				</label>
 				<Input
 					id={`${id}-from`}
@@ -60,7 +61,7 @@ export function CustomRangeCalendar({
 			</div>
 			<div className="flex flex-col gap-1">
 				<label htmlFor={`${id}-to`} className="text-xs text-muted-foreground">
-					To
+					{t("core.to")}
 				</label>
 				<Input
 					id={`${id}-to`}
@@ -78,7 +79,7 @@ export function CustomRangeCalendar({
 				disabled={!isValid}
 				onClick={() => isValid && onApply(formatCustomLookback(from, to))}
 			>
-				Apply
+				{t("core.apply")}
 			</Button>
 		</div>
 	);

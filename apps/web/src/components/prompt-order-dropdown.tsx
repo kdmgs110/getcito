@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowUpDown } from "lucide-react";
 import {
@@ -8,12 +9,17 @@ import {
 	DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 import { FilterTriggerButton } from "@/components/filter-bar";
-import {
-	PROMPT_ORDER_OPTIONS,
-	DEFAULT_PROMPT_ORDER,
-	coercePromptOrder,
-	type PromptOrder,
-} from "@/lib/prompt-order";
+import { PROMPT_ORDER_OPTIONS, DEFAULT_PROMPT_ORDER, coercePromptOrder, type PromptOrder } from "@/lib/prompt-order";
+
+const orderLabels: Record<PromptOrder, string> = {
+	default: t("settings.orderDefault"),
+	"brand-desc": t("settings.orderBrandDesc"),
+	"brand-asc": t("settings.orderBrandAsc"),
+	"competitor-desc": t("settings.orderCompetitorDesc"),
+	"competitor-asc": t("settings.orderCompetitorAsc"),
+	"prompt-asc": t("settings.orderPromptAsc"),
+	"prompt-desc": t("settings.orderPromptDesc"),
+};
 
 /** Sort control for the prompts list (#60). Reads/writes the `order` URL key
  *  the visibility route declares in its `validateSearch`. Like the filter-bar
@@ -40,10 +46,7 @@ export function PromptOrderDropdown() {
 
 	// The button reads "Sort" in the default state and otherwise echoes the
 	// chosen order's menu label (arrows and all).
-	const label =
-		selected === DEFAULT_PROMPT_ORDER
-			? "Sort"
-			: (PROMPT_ORDER_OPTIONS.find((o) => o.value === selected)?.label ?? "Sort");
+	const label = selected === DEFAULT_PROMPT_ORDER ? t("settings.sort") : orderLabels[selected];
 
 	return (
 		<DropdownMenu>
@@ -58,7 +61,7 @@ export function PromptOrderDropdown() {
 				<DropdownMenuRadioGroup value={selected} onValueChange={(v) => setOrder(v as PromptOrder)}>
 					{PROMPT_ORDER_OPTIONS.map((o) => (
 						<DropdownMenuRadioItem key={o.value} value={o.value} className="cursor-pointer whitespace-nowrap">
-							{o.label}
+							{orderLabels[o.value]}
 						</DropdownMenuRadioItem>
 					))}
 				</DropdownMenuRadioGroup>

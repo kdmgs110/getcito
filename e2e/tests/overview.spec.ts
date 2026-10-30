@@ -11,12 +11,13 @@ const BRAND_ID = "default";
 test.describe("Overview Page", () => {
   test("home page lands on the brand switcher and the default brand is reachable", async ({ page }) => {
     await page.goto("/");
-    // Local mode supports multiple brands, so / -> /app shows the switcher
-    // rather than auto-redirecting through to a brand.
-    await page.waitForURL(/\/app(?:\/)?$/, { timeout: 30_000 });
-    const brandLink = page.locator(`a[href="/app/${BRAND_ID}"]`).first();
-    await expect(brandLink).toBeVisible({ timeout: 15_000 });
-    await brandLink.click();
+    // Local mode opens its single organization; multi-org deployments show the switcher.
+    await page.waitForURL(/\/app(?:\/default)?(?:\/)?$/, { timeout: 30_000 });
+    if (new URL(page.url()).pathname.replace(/\/$/, "") === "/app") {
+      const brandLink = page.locator(`a[href="/app/${BRAND_ID}"]`).first();
+      await expect(brandLink).toBeVisible({ timeout: 15_000 });
+      await brandLink.click();
+    }
     await page.waitForURL(new RegExp(`/app/${BRAND_ID}$`));
     expect(page.url()).toContain(`/app/${BRAND_ID}`);
   });
@@ -42,7 +43,8 @@ test.describe("Overview Page", () => {
   test("sidebar navigation links work", async ({ page }) => {
     await page.goto(`/app/${BRAND_ID}`);
 
-    // Wait for sidebar to be fully rendered before clicking
+    // Wait for client data to render before exercising hydrated router links.
+    await expect(page.getByText(/last updated|最終更新/i).first()).toBeVisible();
     const visibilityLink = page.locator(`a[href="/app/${BRAND_ID}/visibility"][data-sidebar="menu-button"]`);
     await expect(visibilityLink).toBeVisible({ timeout: 15_000 });
 
@@ -70,6 +72,7 @@ test.describe("Overview Page", () => {
 
     // Wait for route loader to complete (sidebar renders after loader finishes)
     await expect(page.locator(`a[href="/app/${BRAND_ID}"][data-sidebar="menu-button"]`)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/last updated|最終更新/i).first()).toBeVisible();
 
     // In local mode, admin access is granted by default
     const adminLink = page.locator('a[href*="/admin"]').first();
@@ -83,6 +86,6 @@ test.describe("Overview Page", () => {
   test("settings pages are accessible", async ({ page }) => {
     await page.goto(`/app/${BRAND_ID}/settings/brand`);
     // Should show brand settings page
-    await expect(page.getByText(/brand/i).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/brand|ブランド/i).first()).toBeVisible({ timeout: 15_000 });
   });
 });

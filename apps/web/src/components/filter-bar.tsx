@@ -1,3 +1,4 @@
+import { t, UI_LOCALE } from "@/i18n";
 import { useSearch } from "@tanstack/react-router";
 import { getModelMeta } from "@workspace/lib/providers/models";
 import { Button } from "@workspace/ui/components/button";
@@ -64,17 +65,17 @@ export function iconForModel(model: string, className = "size-3.5") {
 }
 
 export function labelForModel(model: string): string {
-	if (model === ALL_MODELS_VALUE) return "All models";
+	if (model === ALL_MODELS_VALUE) return t("core.allModels");
 	return getModelMeta(model).label;
 }
 
 const LOOKBACK_OPTIONS: { value: LookbackPeriod; label: string }[] = [
-	{ value: "1w", label: "Last 7 days" },
-	{ value: "1m", label: "Last 30 days" },
-	{ value: "3m", label: "Last 3 months" },
-	{ value: "6m", label: "Last 6 months" },
-	{ value: "1y", label: "Last 12 months" },
-	{ value: "all", label: "All time" },
+	{ value: "1w", label: t("core.last7Days") },
+	{ value: "1m", label: t("core.last30Days") },
+	{ value: "3m", label: t("core.last3Months") },
+	{ value: "6m", label: t("core.last6Months") },
+	{ value: "1y", label: t("core.last12Months") },
+	{ value: "all", label: t("core.allTime") },
 ];
 
 function getLookbackLabel(lookback: LookbackPeriod): string {
@@ -232,7 +233,7 @@ export function LookbackDropdown() {
 							}`}
 						>
 							<CalendarIcon className="size-3.5 text-muted-foreground" />
-							Custom range…
+							{t("core.customRange")}
 						</button>
 					</div>
 				)}
@@ -266,26 +267,26 @@ export function TagsDropdown({ availableTags }: { availableTags: readonly string
 			<PopoverTrigger asChild>
 				<FilterTriggerButton
 					icon={<TagIcon className="size-3.5" />}
-					label="Tags"
+					label={t("core.tags")}
 					active={selected.length > 0}
 					badgeCount={selected.length > 0 ? selected.length : undefined}
 				/>
 			</PopoverTrigger>
 			<PopoverContent align="start" className="w-64 p-0" onOpenAutoFocus={(e) => e.preventDefault()}>
 				<div className="flex items-center justify-between px-3 h-10 border-b">
-					<span className="font-medium text-sm">Tags</span>
+					<span className="font-medium text-sm">{t("core.tags")}</span>
 					{selected.length > 0 && (
 						<button
 							type="button"
 							onClick={() => commit([])}
 							className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
 						>
-							Clear
+							{t("core.clear")}
 						</button>
 					)}
 				</div>
 				{availableTags.length === 0 ? (
-					<p className="text-sm text-muted-foreground py-6 text-center">No tags available</p>
+					<p className="text-sm text-muted-foreground py-6 text-center">{t("core.noTagsAvailable")}</p>
 				) : (
 					<div className="py-1 max-h-64 overflow-y-auto">
 						{availableTags.map((tag) => {
@@ -328,7 +329,7 @@ export function TagsDropdown({ availableTags }: { availableTags: readonly string
 // setState) to avoid flashing back when the URL echo races with typing.
 // ------------------------------------------------------------------
 
-export function SearchInput({ placeholder = "Search prompts..." }: { placeholder?: string }) {
+export function SearchInput({ placeholder = t("core.searchPrompts") }: { placeholder?: string }) {
 	const urlValue = useSearch({ strict: false, select: (s) => s.q });
 	const setFilters = useFilterNavigate();
 	const value = urlValue ?? "";
@@ -391,7 +392,7 @@ export function SearchInput({ placeholder = "Search prompts..." }: { placeholder
 					type="button"
 					onClick={clear}
 					className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-					aria-label="Clear search"
+					aria-label={t("core.clearSearch")}
 				>
 					<X className="h-3.5 w-3.5" />
 				</button>
@@ -414,8 +415,9 @@ export function ResultCount({ count, total }: { count: number | undefined; total
 	const showTotal = total !== undefined && total !== count;
 	return (
 		<span className="text-xs text-muted-foreground tabular-nums ml-1">
-			{count.toLocaleString()}
-			{showTotal && ` of ${total.toLocaleString()}`} {count === 1 && !showTotal ? "result" : "results"}
+			{showTotal
+				? t("core.resultsTotal", { count: count.toLocaleString(UI_LOCALE), total: total.toLocaleString(UI_LOCALE) })
+				: t("core.results", { count: count.toLocaleString(UI_LOCALE) })}
 		</span>
 	);
 }

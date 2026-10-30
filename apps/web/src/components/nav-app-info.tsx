@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { IconBrandGithub, IconWorld } from "@tabler/icons-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 
@@ -35,7 +36,7 @@ export function NavAppInfo() {
 							<IconBrandGithub className="size-4" />
 						</a>
 					</TooltipTrigger>
-					<TooltipContent>View on GitHub</TooltipContent>
+					<TooltipContent>{t("settings.viewOnGithub")}</TooltipContent>
 				</Tooltip>
 			</div>
 		</div>

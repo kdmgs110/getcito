@@ -7,7 +7,7 @@
  */
 export const APP_TIMEZONE =
 	import.meta.env.VITE_APP_TIMEZONE?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-export const APP_LOCALE = import.meta.env.VITE_APP_LOCALE?.trim() || undefined;
+export const APP_LOCALE = import.meta.env.VITE_APP_LOCALE?.trim() || "ja-JP";
 
 /** Format an absolute instant (a stored timestamp) in the app's timezone. */
 export function formatDateTime(value: Date | string | number, options: Intl.DateTimeFormatOptions = {}): string {

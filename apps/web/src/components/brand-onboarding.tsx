@@ -1,3 +1,5 @@
+import { settingsError } from "@/i18n/settings-labels";
+import { t } from "@/i18n";
 
 import { useState } from "react";
 import { Button } from "@workspace/ui/components/button";
@@ -34,35 +36,32 @@ export default function BrandOnboarding({ brandId, brandName }: BrandOnboardingP
 			await router.invalidate();
 			await navigate({ to: "/app/$brand", params: { brand: brandId } });
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "An error occurred");
+			setError(settingsError(err, t("settings.anErrorOccurred")));
 		} finally {
 			setIsLoading(false);
 		}
 	};
 
 	return (
-		<FullPageCard title={`Setup ${brandName}`} subtitle="Configure your brand to get started" showBackButton={true}>
+		<FullPageCard
+			title={t("settings.setupBrand", { brand: brandName })}
+			subtitle={t("settings.configureYourBrandToGetStarted")}
+			showBackButton={true}
+		>
 			<form action={handleSubmit} className="space-y-4">
 				<input type="hidden" name="brandId" value={brandId} />
 				<input type="hidden" name="brandName" value={brandName} />
 
 				<div className="space-y-2">
-					<Label htmlFor="website">Website</Label>
-					<Input
-						id="website"
-						name="website"
-						type="text"
-						placeholder="example.com"
-						required
-						disabled={isLoading}
-					/>
-					<p className="text-xs text-muted-foreground">Enter your brand's website</p>
+					<Label htmlFor="website">{t("settings.website")}</Label>
+					<Input id="website" name="website" type="text" placeholder="example.com" required disabled={isLoading} />
+					<p className="text-xs text-muted-foreground">{t("settings.enterYourBrandSWebsite")}</p>
 				</div>
 
 				{error && <p className="text-sm text-destructive">{error}</p>}
 
 				<Button type="submit" className="w-full" disabled={isLoading}>
-					{isLoading ? "Setting up..." : "Complete Setup"}
+					{isLoading ? t("settings.settingUp") : t("settings.completeSetup")}
 				</Button>
 			</form>
 		</FullPageCard>

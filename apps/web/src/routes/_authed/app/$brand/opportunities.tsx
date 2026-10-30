@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 /**
  * /app/$brand/opportunities — AI-generated opportunities.
  *
@@ -23,8 +24,8 @@ export const Route = createFileRoute("/_authed/app/$brand/opportunities")({
 		const brandName = getBrandName(matches);
 		return {
 			meta: [
-				{ title: buildTitle("Opportunities", { appName, brandName }) },
-				{ name: "description", content: "AI-generated opportunities to earn more AI citations." },
+				{ title: buildTitle(t("dashboard.opportunities"), { appName, brandName }) },
+				{ name: "description", content: t("dashboard.opportunitiesDescription") },
 			],
 		};
 	},
@@ -35,28 +36,23 @@ function OpportunitiesPage() {
 	const { brand: brandId } = Route.useParams();
 	const { data, isLoading, isError } = useOpportunities(brandId);
 
-	const infoContent = "Recommendations based on your visibility and citation metrics. Refreshed weekly.";
+	const infoContent = t("dashboard.recommendationsRefresh");
 
 	let content: React.ReactNode;
 	if (isLoading) {
 		content = <LoadingState />;
 	} else if (isError) {
-		content = <EmptyCard>Couldn't generate recommendations right now. Reload the page to try again.</EmptyCard>;
+		content = <EmptyCard>{t("dashboard.couldnTGenerateRecommendationsRightNowReloadThe")}</EmptyCard>;
 	} else if (!data || data.reason === "insufficient-data" || !data.report) {
-		content = (
-			<EmptyCard>
-				We need a bit more tracking data before we can recommend opportunities — check back once your prompts have run
-				for a few days.
-			</EmptyCard>
-		);
+		content = <EmptyCard>{t("dashboard.weNeedABitMoreTrackingDataBefore")}</EmptyCard>;
 	} else {
 		content = <OpportunitiesReport report={data.report} brandId={brandId} />;
 	}
 
 	return (
 		<PageHeader
-			title="Opportunities"
-			subtitle="What to create, pitch, and seed to earn more AI citations — generated from your tracked answer data."
+			title={t("dashboard.opportunities")}
+			subtitle={t("dashboard.whatToCreatePitchAndSeedToEarn")}
 			infoContent={infoContent}
 		>
 			<div className="space-y-6">{content}</div>
@@ -77,7 +73,7 @@ function LoadingState() {
 		<div className="space-y-6">
 			<div className="flex items-center gap-2 text-sm text-muted-foreground">
 				<IconLoader2 className="size-4 animate-spin" />
-				Analyzing your citation landscape and drafting your opportunities…
+				{t("dashboard.analyzingYourCitationLandscapeAndDraftingYourOpportunities")}
 			</div>
 			<div className="space-y-2">
 				<Skeleton className="h-6 w-2/3" />

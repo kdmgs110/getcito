@@ -105,7 +105,7 @@ export function renderOgImage({
 				"div",
 				{
 					style: {
-						fontFamily: "Geist Sans",
+						fontFamily: "Geist Sans, Noto Sans JP",
 						fontSize: 80,
 						fontWeight: 500,
 						color: "#1e293b",
@@ -119,7 +119,7 @@ export function renderOgImage({
 				"div",
 				{
 					style: {
-						fontFamily: "Geist Sans",
+						fontFamily: "Geist Sans, Noto Sans JP",
 						fontSize: 44,
 						color: "#64748b",
 						textWrap: "balance",

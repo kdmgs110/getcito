@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import * as Sentry from "@sentry/tanstackstart-react";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { useEffect } from "react";
@@ -6,7 +7,11 @@ import FullPageCard from "./components/full-page-card";
 
 export function NotFound() {
 	return (
-		<FullPageCard title="404 Not Found" subtitle="The page you're looking for doesn't exist." showBackButton={true} />
+		<FullPageCard
+			title={t("core.404NotFound")}
+			subtitle={t("core.thePageYoureLookingForDoesntExist")}
+			showBackButton={true}
+		/>
 	);
 }
 
@@ -33,8 +38,8 @@ export function DefaultErrorComponent({ error }: ErrorComponentProps) {
 
 	return (
 		<FullPageCard
-			title="Something went wrong"
-			subtitle="An unexpected error occurred while loading this page."
+			title={t("core.somethingWentWrong")}
+			subtitle={t("core.anUnexpectedErrorOccurredWhileLoadingThisPage")}
 			showBackButton={true}
 		/>
 	);

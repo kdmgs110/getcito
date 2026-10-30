@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 /**
  * /app/$brand/settings/prompts - Prompt management page
  *
@@ -60,8 +61,8 @@ export const Route = createFileRoute("/_authed/app/$brand/settings/prompts")({
 		const brandName = getBrandName(matches);
 		return {
 			meta: [
-				{ title: buildTitle("Prompts", { appName, brandName }) },
-				{ name: "description", content: "Add, edit, or remove tracked prompts." },
+				{ title: buildTitle(t("settings.prompts"), { appName, brandName }) },
+				{ name: "description", content: t("settings.addEditOrRemoveTrackedPrompts") },
 			],
 		};
 	},
@@ -82,8 +83,8 @@ function PromptsSettingsPage() {
 			brandId={brandId}
 			brandName={brand?.name}
 			brandWebsite={brand?.website}
-			pageTitle="Prompts"
-			pageDescription="Add, edit, or remove your brand tracking keywords and prompts"
+			pageTitle={t("settings.prompts")}
+			pageDescription={t("settings.addEditOrRemoveYourBrandTrackingKeywordsAnd")}
 		/>
 	);
 }
