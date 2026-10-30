@@ -23,7 +23,6 @@ PG_BOSS_POOL_MAX=2
 WORKER_PROMPT_CONCURRENCY=1
 WORKER_REPORT_CONCURRENCY=1
 WORKER_ANALYSIS_CONCURRENCY=1
-NODE_OPTIONS=--max-old-space-size=320
 ```
 
 The two dynos can use at most `2 * (4 + 2) = 12` pooled connections, leaving eight
@@ -31,10 +30,12 @@ for releases and administration. Do not enable Preboot or
 scale up without recalculating that total. These limits are per process, and the
 three concurrency limits are per queue, not a single global semaphore. Provider
 fan-out and native allocations can still increase memory; check runtime metrics
-after a representative report and lower concurrency if needed. `heroku-postbuild`
-overrides the heap limit to 4096MB only while building; the 512MB runtime dynos
-retain their smaller configured limit. The worker Procfile command directly
-executes Node with the production tsx import hook to avoid a resident pnpm process.
+after a representative report and lower concurrency if needed. Each Procfile
+command sets Node's heap limit to 320MB directly for the runtime process. Leave
+the global `NODE_OPTIONS` config var unset so dependency installation can use the
+build environment's memory. `heroku-postbuild` sets a 4096MB heap limit only while
+building. The worker Procfile command directly executes Node with the production
+tsx import hook to avoid a resident pnpm process.
 
 `DATABASE_SSL_MODE` is optional. When omitted, the existing connection URL policy
 is preserved. Supported explicit policies are `verify-full` (verify certificate),
