@@ -81,12 +81,21 @@ export async function seedTrafficFixtures() {
 		};
 		const fetchedAt = new Date().toISOString();
 		async function cache(kind: "overview" | "pages" | "detail", input: unknown, payload: unknown) {
-			const key = trafficCacheKey(kind, connection, { ...(input as Record<string, unknown>), hostname: TRAFFIC_HOST, hostnames: [TRAFFIC_HOST] });
-			await client.query(
-				`INSERT INTO traffic_query_cache(cache_key,brand_id,connection_revision,payload,expires_at)
-				VALUES($1,$2,$3,$4,NOW()+INTERVAL '6 hours') ON CONFLICT(cache_key) DO UPDATE SET payload=EXCLUDED.payload,expires_at=EXCLUDED.expires_at`,
-				[key, TRAFFIC_BRAND_ID, revision, JSON.stringify(payload)],
-			);
+			// Rows now carry a domain into page details; also support direct links
+			// that rely on the selected domain without an explicit detailHostname.
+			for (const detailHostname of kind === "detail" ? [undefined, TRAFFIC_HOST] : [undefined]) {
+				const key = trafficCacheKey(kind, connection, {
+					...(input as Record<string, unknown>),
+					hostname: TRAFFIC_HOST,
+					hostnames: [TRAFFIC_HOST],
+					...(detailHostname ? { detailHostname } : {}),
+				});
+				await client.query(
+					`INSERT INTO traffic_query_cache(cache_key,brand_id,connection_revision,payload,expires_at)
+					VALUES($1,$2,$3,$4,NOW()+INTERVAL '6 hours') ON CONFLICT(cache_key) DO UPDATE SET payload=EXCLUDED.payload,expires_at=EXCLUDED.expires_at`,
+					[key, TRAFFIC_BRAND_ID, revision, JSON.stringify(payload)],
+				);
+			}
 		}
 		const scopes: { conditions: Condition[]; selected: typeof pages }[] = [
 			{ conditions: [], selected: pages },

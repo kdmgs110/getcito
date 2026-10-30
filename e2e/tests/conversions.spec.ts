@@ -30,14 +30,14 @@ test.describe("AI conversions", () => {
 		});
 		await expect(period.locator("tbody tr")).toHaveCount(28);
 		const totals = period.locator("tfoot tr");
-		await expect(totals.locator("td")).toHaveText(["112", "280", "56", "10.00%"]);
+		await expect(totals.locator("td")).toHaveText(["112", "280", "560", "56", "10.00%"]);
 		// Four events from twenty sessions is not the two converting sessions / twenty (10%).
 		await expect(
 			page.getByText(`${text("AI CVセッション", "AI converting sessions")}: 56`, { exact: true }),
 		).toBeVisible();
 		await page.getByRole("tab", { name: text("月別", "Monthly"), exact: true }).click();
 		await expect(period.locator("tbody tr")).toHaveCount(1);
-		await expect(totals.locator("td")).toHaveText(["112", "280", "56", "10.00%"]);
+		await expect(totals.locator("td")).toHaveText(["112", "280", "560", "56", "10.00%"]);
 		await page.getByRole("tab", { name: text("週別", "Weekly"), exact: true }).click();
 		await expect(period.locator("tbody tr")).toHaveCount(5);
 		await page.getByRole("button", { name: `${text("推移を見る", "View trend")}: /`, exact: true }).click();
@@ -148,7 +148,7 @@ test.describe("AI conversions", () => {
 		const period = page.locator("section").filter({
 			has: page.getByRole("heading", { name: text("期間別のコンバージョン", "Conversions by period"), exact: true }),
 		});
-		await expect(period.locator("tfoot td")).toHaveText(["112", "280", "—", "—"]);
+		await expect(period.locator("tfoot td")).toHaveText(["112", "280", "—", "—", "—"]);
 		await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 	});
 });
