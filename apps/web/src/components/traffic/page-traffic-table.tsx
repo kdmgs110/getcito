@@ -105,7 +105,7 @@ export function PageTrafficTable({
 							].map((label, i) => (
 								<th
 									key={label}
-									className={`whitespace-nowrap border-b px-2 py-3 font-medium ${i === 0 ? "text-left" : "text-right"}`}
+									className={`border-b px-2 py-3 font-medium leading-relaxed ${i === 0 ? "whitespace-nowrap text-left" : "min-w-20 text-right"}`}
 								>
 									{label}
 								</th>

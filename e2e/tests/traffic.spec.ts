@@ -27,6 +27,11 @@ test.describe("GA4 traffic analysis", () => {
 		).toBeVisible();
 		const engineer = pageList.getByRole("rowheader").filter({ hasText: "エンジニアのフリーランス案件" });
 		await expect(engineer).toContainText("https://example.com/job_listings/engineer/");
+		expect(
+			await pageList.locator("table").evaluate((table) =>
+				table.getBoundingClientRect().width <= (table.parentElement?.clientWidth ?? 0) + 1,
+			),
+		).toBe(true);
 		const title = engineer.locator("span").first();
 		const url = engineer.locator("span").last();
 		expect((await title.boundingBox())?.y).toBeLessThan((await url.boundingBox())?.y ?? 0);
