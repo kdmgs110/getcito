@@ -53,6 +53,19 @@ export async function requireOrgAccess(userId: string, orgId: string): Promise<v
 	}
 }
 
+/** Brand integrations and shared analysis views may only be changed by managers. */
+export async function checkOrgManageAccess(userId: string, orgId: string): Promise<boolean> {
+	const [userRow] = await db.select({ role: user.role }).from(user).where(eq(user.id, userId)).limit(1);
+	if (userRow?.role === "admin") return true;
+	const [membership] = await db.select({ role: member.role }).from(member)
+		.where(and(eq(member.userId, userId), eq(member.organizationId, orgId))).limit(1);
+	return membership?.role.split(",").some((role) => role.trim() === "owner" || role.trim() === "admin") ?? false;
+}
+
+export async function requireOrgManageAccess(userId: string, orgId: string): Promise<void> {
+	if (!(await checkOrgManageAccess(userId, orgId))) throw new Error("ANALYTICS_FORBIDDEN");
+}
+
 export async function listUserOrganizations(
 	userId: string,
 ): Promise<{ id: string; name: string; targetMarket?: string | null; author?: string | null }[]> {

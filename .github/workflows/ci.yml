@@ -1,0 +1,87 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    # Pin the OS: Playwright 1.60 does not support Ubuntu 26.04 yet.
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: getcito_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DEPLOYMENT_MODE: local
+      VITE_DEPLOYMENT_MODE: local
+      APP_URL: http://localhost:3000
+      VITE_APP_URL: http://localhost:3000
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/getcito_test
+      BETTER_AUTH_SECRET: ci-only-not-a-production-secret-000000000000
+      SCRAPE_TARGETS: chatgpt:openai-api:gpt-4o-mini:online
+      OPENAI_API_KEY: ci-placeholder
+      ANTHROPIC_API_KEY: ci-placeholder
+      DATAFORSEO_LOGIN: ci-placeholder
+      DATAFORSEO_PASSWORD: ci-placeholder
+      DISABLE_TELEMETRY: "1"
+      VITE_APP_LOCALE: ja-JP
+      GOOGLE_ANALYTICS_CLIENT_ID: e2e-client
+      GOOGLE_ANALYTICS_CLIENT_SECRET: e2e-secret
+      GOOGLE_ANALYTICS_REDIRECT_URI: http://localhost:3000/api/analytics/google/callback
+      ANALYTICS_TOKEN_ENCRYPTION_KEY: "0101010101010101010101010101010101010101010101010101010101010101"
+      BASE_URL: http://localhost:3000
+      E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/getcito_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - name: Lint traffic analysis
+        working-directory: apps/web
+        run: pnpm exec biome lint src/components/traffic src/server/traffic*.ts src/routes/api/analytics 'src/routes/_authed/app/$brand/traffic.tsx' src/i18n/messages/traffic.ts
+      - name: Lint shared analytics
+        run: pnpm exec biome lint packages/lib/src/analytics
+      - run: pnpm build
+      - run: pnpm --filter @workspace/lib exec drizzle-kit migrate
+      - run: pnpm --filter e2e seed
+      - run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - name: Start application
+        run: |
+          PORT=3000 HOST=127.0.0.1 node apps/web/.output/server/index.mjs > /tmp/getcito-e2e.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "$BASE_URL" > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/getcito-e2e.log
+          exit 1
+      - name: Traffic browser tests
+        run: pnpm --filter e2e exec playwright test tests/traffic.spec.ts --workers=1
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: traffic-browser-diagnostics
+          path: |
+            e2e/test-results/
+            e2e/playwright-report/
+            /tmp/getcito-e2e.log

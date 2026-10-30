@@ -55,6 +55,30 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Session cookie encryption secret.",
 	},
 	{
+		name: "GOOGLE_ANALYTICS_CLIENT_ID",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Google OAuth web client ID for the optional GA4 traffic integration.",
+	},
+	{
+		name: "GOOGLE_ANALYTICS_CLIENT_SECRET",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Google OAuth web client secret for the optional GA4 traffic integration.",
+	},
+	{
+		name: "GOOGLE_ANALYTICS_REDIRECT_URI",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Absolute OAuth callback URL registered for the GA4 traffic integration.",
+	},
+	{
+		name: "ANALYTICS_TOKEN_ENCRYPTION_KEY",
+		scope: "server",
+		requiredBy: "optional",
+		description: "32-byte encryption key for server-side GA4 refresh tokens (64 hexadecimal characters).",
+	},
+	{
 		name: "AUTH0_DOMAIN",
 		scope: "server",
 		requiredBy: "optional",

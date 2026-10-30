@@ -1,0 +1,1 @@
+ALTER TABLE "ga4_connections" ADD COLUMN "measurement_mode" text DEFAULT 'landing_sessions' NOT NULL;

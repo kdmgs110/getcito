@@ -1,0 +1,667 @@
+import { useEffect, useId, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BookmarkPlus, ChartNoAxesCombined, RefreshCw } from "lucide-react";
+import {
+	aggregateTrafficPoints,
+	AI_CLASSIFICATION_VERSION,
+	ANALYTICS_MEASUREMENT_VERSION,
+	FILTER_SCHEMA_VERSION,
+	defaultTrafficRange,
+	normalizeConditions,
+	type TrafficCondition,
+	type SavedTrafficView,
+} from "@workspace/lib/analytics";
+import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
+import { t, UI_LOCALE } from "@/i18n";
+import { getTrafficConnectionFn, getTrafficOverviewFn, getTrafficPagesFn } from "@/server/traffic";
+import {
+	deleteTrafficViewFn,
+	listTrafficViewsFn,
+	reorderTrafficViewsFn,
+	saveTrafficViewFn,
+} from "@/server/traffic-saved-views";
+import { ConditionEditor } from "./condition-editor";
+import { ConnectionSettings } from "./connection-settings";
+import { PageTrafficDetail } from "./page-traffic-detail";
+import { PageTrafficTable } from "./page-traffic-table";
+import { QualityNotices } from "./quality-notices";
+import {
+	MeasurementNotice,
+	TrafficMeasurementContext,
+	trafficMeasurementLabels,
+	useTrafficMeasurement,
+} from "./traffic-measurement";
+import { SavedViewDialog, type ViewDialogState } from "./saved-view-dialog";
+import { SavedViewManager } from "./saved-view-manager";
+import { SavedViewSwitcher } from "./saved-view-switcher";
+import { TrafficCard, TrafficError, TrafficLoading, trafficError } from "./shared";
+import { GrainToggle, TrafficChart, TrafficKpis, TrafficPeriodTable } from "./traffic-chart";
+import {
+	resolveViewConditions,
+	duplicateViewDraft,
+	sameConditions,
+	scopeChange,
+	validDateRange,
+	viewStorageKey,
+	type TrafficSearch,
+} from "./traffic-state";
+
+function FilterForm({
+	conditions,
+	hostname,
+	canManage,
+	onApply,
+	onSave,
+}: {
+	conditions: TrafficCondition[];
+	hostname: string;
+	canManage: boolean;
+	onApply: (value: TrafficCondition[]) => void;
+	onSave: () => void;
+}) {
+	const measurement = useTrafficMeasurement();
+	const [draft, setDraft] = useState(conditions);
+	const [error, setError] = useState<string>();
+	const dirty = !sameConditions(draft, conditions);
+	function apply() {
+		setError(undefined);
+		try {
+			onApply(normalizeConditions(draft, hostname));
+		} catch {
+			setError(t("traffic.conditionInvalid"));
+		}
+	}
+	return (
+		<TrafficCard
+			title={measurement.targetPages}
+			action={
+				canManage && (
+					<Button size="sm" variant="outline" disabled={dirty} onClick={onSave}>
+						<BookmarkPlus className="size-4" />
+						{t("traffic.registerCurrent")}
+					</Button>
+				)
+			}
+		>
+			<form
+				aria-label={measurement.targetPages}
+				onSubmit={(event) => {
+					event.preventDefault();
+					apply();
+				}}
+			>
+				<ConditionEditor value={draft} onChange={setDraft} />
+				<div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+					<Button
+						variant="ghost"
+						type="button"
+						size="sm"
+						onClick={() => {
+							setDraft([]);
+							setError(undefined);
+							onApply([]);
+						}}
+					>
+						{t("traffic.clear")}
+					</Button>
+					<Button size="sm" type="submit">
+						{t("traffic.apply")}
+					</Button>
+				</div>
+				{dirty && canManage && <p className="mt-2 text-xs text-muted-foreground">{t("traffic.pendingApply")}</p>}
+				{error && (
+					<p className="mt-2 text-sm text-destructive" role="alert">
+						{error}
+					</p>
+				)}
+			</form>
+		</TrafficCard>
+	);
+}
+function DateRangeForm({
+	from,
+	to,
+	timeZone,
+	onApply,
+}: {
+	from: string;
+	to: string;
+	timeZone: string;
+	onApply: (from: string, to: string) => void;
+}) {
+	const id = useId();
+	const [start, setStart] = useState(from);
+	const [end, setEnd] = useState(to);
+	const [error, setError] = useState(false);
+	return (
+		<form
+			aria-label={t("traffic.period")}
+			className="flex flex-wrap items-end gap-2"
+			onSubmit={(e) => {
+				e.preventDefault();
+				const valid = validDateRange(start, end);
+				setError(!valid);
+				if (valid) onApply(start, end);
+			}}
+		>
+			<label htmlFor={`${id}-from`} className="space-y-1 text-xs text-muted-foreground">
+				{t("traffic.from")}
+				<Input
+					id={`${id}-from`}
+					type="date"
+					value={start}
+					onChange={(e) => setStart(e.target.value)}
+					required
+					className="mt-1 w-36 text-foreground"
+				/>
+			</label>
+			<label htmlFor={`${id}-to`} className="space-y-1 text-xs text-muted-foreground">
+				{t("traffic.to")}
+				<Input
+					id={`${id}-to`}
+					type="date"
+					value={end}
+					onChange={(e) => setEnd(e.target.value)}
+					required
+					className="mt-1 w-36 text-foreground"
+				/>
+			</label>
+			<Button variant="outline" type="submit" size="sm">
+				{t("traffic.apply")}
+			</Button>
+			<Button
+				variant="ghost"
+				type="button"
+				size="sm"
+				onClick={() => {
+					const range = defaultTrafficRange(timeZone);
+					setStart(range.from);
+					setEnd(range.to);
+					setError(false);
+					onApply(range.from, range.to);
+				}}
+			>
+				{t("traffic.last28")}
+			</Button>
+			{error && (
+				<p role="alert" className="w-full text-xs text-destructive">
+					{t("traffic.dateInvalid")}
+				</p>
+			)}
+		</form>
+	);
+}
+
+export function TrafficAnalysis({
+	brandId,
+	search,
+	onSearch,
+}: {
+	brandId: string;
+	search: TrafficSearch;
+	onSearch: (patch: Partial<TrafficSearch>, replace?: boolean) => void | Promise<void>;
+}) {
+	const client = useQueryClient();
+	const [settings, setSettings] = useState(false);
+	const [manager, setManager] = useState(false);
+	const [viewDialog, setViewDialog] = useState<ViewDialogState>();
+	const [notice, setNotice] = useState<string>();
+	const [actionError, setActionError] = useState<string>();
+	const [preferencesReady, setPreferencesReady] = useState(false);
+	const initialized = useRef(false);
+	const detailReturnFocus = useRef<HTMLElement | null>(null);
+	const [savedFromDetail, setSavedFromDetail] = useState<SavedTrafficView>();
+	const connection = useQuery({
+		queryKey: ["traffic-connection", brandId],
+		queryFn: () => getTrafficConnectionFn({ data: { brandId } }),
+		staleTime: 30000,
+		retry: false,
+		refetchOnWindowFocus: false,
+	});
+	const views = useQuery({
+		queryKey: ["traffic-views", brandId],
+		queryFn: () => listTrafficViewsFn({ data: { brandId } }),
+		enabled: !!connection.data,
+		staleTime: 30000,
+		retry: false,
+		refetchOnWindowFocus: false,
+	});
+	const status = connection.data;
+	const scope = resolveViewConditions(search, views.data ?? [], status?.hostname ?? "");
+	const selected = scope.view;
+	const conditions = scope.conditions;
+	const dirty = !!selected && !sameConditions(conditions, selected.conditions);
+	const timeZone = status?.timeZone ?? "UTC";
+	const measurementMode = status?.measurementMode ?? "landing_sessions";
+	const measurement = trafficMeasurementLabels(measurementMode);
+	const range = defaultTrafficRange(timeZone);
+	const from = search.from ?? range.from;
+	const to = search.to ?? range.to;
+	const grain = search.grain ?? "day";
+	const chart = search.chart ?? "total";
+	const dateValid = validDateRange(from, to);
+	const request = { brandId, from, to, conditions };
+	const enabled =
+		!!status?.configured &&
+		!!status?.connected &&
+		!!status.connectionRevision &&
+		!status.needsReconnect &&
+		preferencesReady &&
+		!scope.invalidView &&
+		dateValid &&
+		!views.isError;
+	const overview = useQuery({
+		queryKey: [
+			"traffic-overview",
+			status?.propertyId,
+			status?.hostname,
+			status?.connectionRevision,
+			measurementMode,
+			ANALYTICS_MEASUREMENT_VERSION,
+			AI_CLASSIFICATION_VERSION,
+			FILTER_SCHEMA_VERSION,
+			request,
+		],
+		queryFn: () => getTrafficOverviewFn({ data: request }),
+		enabled,
+		staleTime: 30 * 60000,
+		retry: false,
+		refetchOnWindowFocus: false,
+	});
+	const pagesRequest = {
+		...request,
+		page: search.page ?? 1,
+		pageSize: search.pageSize ?? 10,
+		pageSearch: search.pageSearch ?? "",
+		pageScope: search.pageScope ?? ("ai" as const),
+	};
+	const pages = useQuery({
+		queryKey: [
+			"traffic-pages",
+			status?.propertyId,
+			status?.hostname,
+			status?.connectionRevision,
+			measurementMode,
+			ANALYTICS_MEASUREMENT_VERSION,
+			AI_CLASSIFICATION_VERSION,
+			FILTER_SCHEMA_VERSION,
+			pagesRequest,
+		],
+		queryFn: () => getTrafficPagesFn({ data: pagesRequest }),
+		enabled,
+		staleTime: 30 * 60000,
+		retry: false,
+		refetchOnWindowFocus: false,
+	});
+	useEffect(() => {
+		if (!status || !views.data || initialized.current) return;
+		initialized.current = true;
+		if (!search.viewId && !search.conditions) {
+			try {
+				const previous = localStorage.getItem(viewStorageKey(status.userId, brandId));
+				if (previous && views.data.some((view) => view.id === previous && view.hostname === status.hostname))
+					onSearch({ viewId: previous }, true);
+			} catch {
+				/* Storage can be disabled by the browser. */
+			}
+		}
+		setPreferencesReady(true);
+	}, [status, views.data, brandId, search.viewId, search.conditions, onSearch]);
+	useEffect(() => {
+		if (status && views.data && scope.invalidView) {
+			setNotice(t("traffic.invalidView"));
+			onSearch(scopeChange({ viewId: undefined, conditions: undefined }), true);
+		}
+	}, [status, views.data, scope.invalidView, onSearch]);
+	useEffect(() => {
+		if (!status || !preferencesReady || scope.invalidView) return;
+		try {
+			if (search.viewId) localStorage.setItem(viewStorageKey(status.userId, brandId), search.viewId);
+			else localStorage.removeItem(viewStorageKey(status.userId, brandId));
+		} catch {
+			/* Optional preference only. */
+		}
+	}, [status, preferencesReady, scope.invalidView, search.viewId, brandId]);
+	const selectView = (id?: string) => {
+		setNotice(undefined);
+		return onSearch(scopeChange({ viewId: id, conditions: undefined, ga4: undefined }));
+	};
+	const refreshViews = async () => {
+		await client.invalidateQueries({ queryKey: ["traffic-views", brandId] });
+	};
+	async function saveView(value: { name: string; conditions: TrafficCondition[] }, initial?: ViewDialogState) {
+		if (!status) return;
+		const saved = await saveTrafficViewFn({
+			data: {
+				brandId,
+				hostname: status.hostname,
+				...value,
+				...(initial?.view ? { id: initial.view.id, revision: initial.view.revision } : {}),
+			},
+		});
+		await refreshViews();
+		if (initial?.keepDetail) setSavedFromDetail(saved);
+		else await selectView(saved.id);
+		setNotice(t("traffic.savedSuccess"));
+	}
+	async function saveChanges() {
+		if (!selected) return;
+		setActionError(undefined);
+		try {
+			await saveView({ name: selected.name, conditions }, { view: selected, name: selected.name, conditions });
+		} catch (e) {
+			setActionError(trafficError(e));
+		}
+	}
+	async function connectionChanged() {
+		onSearch(scopeChange({}));
+		await client.invalidateQueries({
+			predicate: (query) => typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("traffic-"),
+		});
+	}
+	if (connection.isPending)
+		return (
+			<div className="min-w-0">
+				<TrafficLoading />
+			</div>
+		);
+	if (connection.isError || !status)
+		return (
+			<div className="min-w-0">
+				<TrafficError error={connection.error} retry={() => connection.refetch()} />
+			</div>
+		);
+	return (
+		<TrafficMeasurementContext.Provider value={measurementMode}>
+			<div className="min-w-0 space-y-5">
+				<header className="flex flex-wrap items-start justify-between gap-4">
+					<div>
+						<h1 className="text-balance text-2xl font-semibold">{t("traffic.title")}</h1>
+						<p className="mt-2 text-pretty text-sm text-muted-foreground">{t("traffic.description")}</p>
+					</div>
+					<div className="flex items-center gap-3">
+						{status.connected && (
+							<span className="flex items-center gap-2 text-xs">
+								<span className="size-2 rounded-full bg-emerald-500" />
+								{t("traffic.connected")}
+							</span>
+						)}
+						<Button variant="outline" size="sm" onClick={() => setSettings(true)}>
+							{t("traffic.settings")}
+						</Button>
+					</div>
+				</header>
+				{search.ga4 && (search.ga4 !== "connected" || !status.connected) && (
+					<p role="status" className="rounded-lg border p-3 text-sm">
+						{t(search.ga4 === "connected" ? "traffic.oauthSuccess" : "traffic.oauthError")}
+					</p>
+				)}
+				{notice && (
+					<p role="status" className="rounded-lg border p-3 text-sm">
+						{notice}
+					</p>
+				)}
+				{actionError && (
+					<p role="alert" className="text-sm text-destructive">
+						{actionError}
+					</p>
+				)}
+				<div className="flex flex-wrap items-end justify-between gap-4">
+					<div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
+						<div>
+							<p className="mb-1 text-xs text-muted-foreground">{t("traffic.site")}</p>
+							<p className="font-medium">{status.hostname || "—"}</p>
+						</div>
+						<div>
+							<p className="mb-1 text-xs text-muted-foreground">{t("traffic.property")}</p>
+							<p>{status.propertyName ?? "—"}</p>
+						</div>
+					</div>
+					<DateRangeForm
+						key={`${from}-${to}`}
+						from={from}
+						to={to}
+						timeZone={timeZone}
+						onApply={(start, end) => onSearch(scopeChange({ from: start, to: end }))}
+					/>
+				</div>
+				{status.connected && <MeasurementNotice mode={measurementMode} />}
+				{views.isError ? (
+					<TrafficError error={views.error} retry={() => views.refetch()} />
+				) : (
+					<SavedViewSwitcher
+						views={views.data ?? []}
+						hostname={status.hostname}
+						selected={selected}
+						dirty={dirty}
+						canManage={status.canManage}
+						onSelect={selectView}
+						onCreate={() =>
+							setViewDialog({ name: "", conditions: [{ mode: "include", operator: "exact", value: "/" }] })
+						}
+						onManage={() => setManager(true)}
+						onSave={saveChanges}
+						onRestore={() => onSearch(scopeChange({ conditions: undefined }))}
+					/>
+				)}
+				{!status.configured || !status.connected || status.needsReconnect ? (
+					<TrafficCard>
+						<div className="mx-auto max-w-xl space-y-4 py-10 text-center">
+							<ChartNoAxesCombined className="mx-auto size-10 text-muted-foreground" />
+							<h2 className="text-balance text-xl font-semibold">
+								{status.needsReconnect ? t("traffic.reauth") : t("traffic.notConnected")}
+							</h2>
+							<p className="text-pretty text-sm leading-relaxed text-muted-foreground">
+								{t("traffic.connectDescription")}
+							</p>
+							{!status.canManage ? (
+								<p className="text-sm">{t("traffic.ownerRequired")}</p>
+							) : !status.configured ? (
+								<>
+									<p className="text-sm">{t("traffic.configRequired")}</p>
+									<Button variant="outline" onClick={() => setSettings(true)}>
+										{t("traffic.settings")}
+									</Button>
+								</>
+							) : (
+								<Button onClick={() => setSettings(true)}>
+									{status.oauthConnected && !status.needsReconnect
+										? t("traffic.chooseProperty")
+										: status.needsReconnect
+											? t("traffic.reconnect")
+											: t("traffic.connect")}
+								</Button>
+							)}
+						</div>
+					</TrafficCard>
+				) : (
+					<>
+						<FilterForm
+							key={`${status.hostname}:${JSON.stringify(conditions)}`}
+							conditions={conditions}
+							hostname={status.hostname}
+							canManage={status.canManage}
+							onApply={(parsed) =>
+								onSearch(
+									scopeChange({
+										conditions:
+											selected && sameConditions(parsed, selected.conditions) ? undefined : JSON.stringify(parsed),
+									}),
+								)
+							}
+							onSave={() => setViewDialog({ name: "", conditions })}
+						/>
+						{!dateValid && (
+							<p role="alert" className="text-sm text-destructive">
+								{t("traffic.dateInvalid")}
+							</p>
+						)}
+						{enabled && overview.isPending && <TrafficLoading />}
+						{overview.isError && <TrafficError error={overview.error} retry={() => overview.refetch()} />}
+						{overview.data && enabled && (
+							<>
+								<div className="flex flex-wrap items-center justify-between gap-3">
+									<p className="text-xs text-muted-foreground">
+										{from} – {to} · {timeZone}
+									</p>
+									<div className="flex items-center gap-2">
+										<GrainToggle value={grain} onChange={(v) => onSearch({ grain: v })} />
+										<Button
+											variant="ghost"
+											size="icon"
+											aria-label={t("traffic.retry")}
+											disabled={overview.isFetching}
+											onClick={() => {
+												void overview.refetch();
+												void pages.refetch();
+											}}
+										>
+											<RefreshCw className="size-4" />
+										</Button>
+									</div>
+								</div>
+								{overview.isFetching && (
+									<p role="status" className="text-xs text-muted-foreground">
+										{t("traffic.updating")}
+									</p>
+								)}
+								<TrafficKpis totals={overview.data.totals} />
+								<QualityNotices warnings={overview.data.warnings} />
+								{overview.data.totals.total === 0 && (
+									<div className="rounded-lg bg-muted/30 p-4 text-sm">
+										<p className="font-medium">{t("traffic.noData")}</p>
+										<p className="mt-1 text-muted-foreground">{t("traffic.noDataHelp")}</p>
+									</div>
+								)}
+								<TrafficChart
+									points={aggregateTrafficPoints(overview.data.points, grain, from, to)}
+									chart={chart}
+									onChartChange={(value) => onSearch({ chart: value })}
+								/>
+								<TrafficPeriodTable
+									data={overview.data}
+									grain={grain}
+									from={from}
+									to={to}
+									onGrainChange={(v) => onSearch({ grain: v })}
+								/>
+							</>
+						)}
+						{enabled && pages.isPending && <TrafficLoading />}
+						{pages.isError && <TrafficError error={pages.error} retry={() => pages.refetch()} />}
+						{pages.data && enabled && (
+							<>
+								<QualityNotices warnings={pages.data.warnings} />
+								<PageTrafficTable
+									key={`${search.pageSearch ?? ""}:${search.pageScope ?? "ai"}`}
+									data={pages.data}
+									query={search.pageSearch ?? ""}
+									pageScope={search.pageScope ?? "ai"}
+									pageSize={search.pageSize ?? 10}
+									grain={grain}
+									from={from}
+									to={to}
+									onSearch={(value) => onSearch({ pageSearch: value || undefined, page: undefined })}
+									onScope={(value) => onSearch({ pageScope: value, page: undefined })}
+									onPageSize={(value) => onSearch({ pageSize: value as 5 | 10 | 25 | 50, page: undefined })}
+									onPage={(value) => onSearch({ page: value })}
+									onDetail={(path) => {
+										detailReturnFocus.current =
+											document.activeElement instanceof HTMLElement ? document.activeElement : null;
+										setSavedFromDetail(undefined);
+										onSearch({ detail: path });
+									}}
+								/>
+							</>
+						)}
+					</>
+				)}
+				<footer className="space-y-2 text-pretty text-xs leading-relaxed text-muted-foreground">
+					<p>{measurement.measurementNote}</p>
+					<p>{t("traffic.provisional")}</p>
+					{overview.data && (
+						<p>
+							{t("traffic.lastFetched")}:{" "}
+							{new Intl.DateTimeFormat(UI_LOCALE, { dateStyle: "short", timeStyle: "short", timeZone }).format(
+								new Date(overview.data.fetchedAt),
+							)}{" "}
+							· {timeZone}
+						</p>
+					)}
+				</footer>
+				{settings && (
+					<ConnectionSettings
+						brandId={brandId}
+						status={status}
+						onClose={() => setSettings(false)}
+						onChanged={connectionChanged}
+					/>
+				)}
+				{viewDialog && (
+					<SavedViewDialog
+						key={viewDialog.view?.id ?? viewDialog.name}
+						initial={viewDialog}
+						hostname={status.hostname}
+						onClose={() => setViewDialog(undefined)}
+						onSave={(value) => saveView(value, viewDialog)}
+					/>
+				)}
+				{manager && (
+					<SavedViewManager
+						views={views.data ?? []}
+						hostname={status.hostname}
+						timeZone={timeZone}
+						canManage={status.canManage}
+						onClose={() => setManager(false)}
+						onOpen={(view) => {
+							selectView(view.id);
+							setManager(false);
+						}}
+						onEdit={(view) => {
+							setManager(false);
+							setViewDialog({ view, name: view.name, conditions: view.conditions });
+						}}
+						onDuplicate={(view) => {
+							setManager(false);
+							setViewDialog(duplicateViewDraft(view, t("traffic.copyName", { name: view.name })));
+						}}
+						onDelete={async (view) => {
+							await deleteTrafficViewFn({ data: { brandId, id: view.id, revision: view.revision } });
+							if (view.id === selected?.id) await selectView();
+							await refreshViews();
+						}}
+						onReorder={async (ids) => {
+							await reorderTrafficViewsFn({ data: { brandId, ids } });
+							await refreshViews();
+						}}
+					/>
+				)}
+				{search.detail?.startsWith("/") && enabled && (
+					<PageTrafficDetail
+						key={search.detail}
+						request={request}
+						path={search.detail}
+						hostname={status.hostname}
+						timeZone={timeZone}
+						initialGrain={grain}
+						connectionKey={`${status.propertyId}:${status.hostname}:${status.connectionRevision}`}
+						measurementMode={measurementMode}
+						returnFocus={detailReturnFocus.current}
+						registeredView={savedFromDetail}
+						onOpenRegistered={selectView}
+						canManage={status.canManage}
+						onClose={() => onSearch({ detail: undefined })}
+						onRegister={() =>
+							setViewDialog({
+								name: (search.detail ?? "").slice(0, 60),
+								conditions: [{ mode: "include", operator: "exact", value: search.detail ?? "" }],
+								keepDetail: true,
+							})
+						}
+					/>
+				)}
+			</div>
+		</TrafficMeasurementContext.Provider>
+	);
+}

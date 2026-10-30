@@ -100,6 +100,8 @@ export function AppSidebar({
 			);
 		}
 
+		dashboardItems.splice(Math.min(3, dashboardItems.length), 0, { title: t("traffic.title"), url: "/traffic", icon: IconTimeline });
+
 		groups.push({
 			label: t("settings.dashboard"),
 			items: dashboardItems,

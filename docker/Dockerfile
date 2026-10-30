@@ -103,12 +103,16 @@ CMD ["node", ".output/server/index.mjs"]
 
 # Migration stage — runs drizzle-kit migrate then exits
 FROM base AS migrate
-WORKDIR /app
-
-COPY --from=builder /app ./
 WORKDIR /app/packages/lib
 
-CMD ["npx", "drizzle-kit", "migrate"]
+# Migrations do not need the web build or the monorepo's full dependency tree.
+# Keep these versions aligned with pnpm-lock.yaml.
+RUN npm install --no-save --package-lock=false --ignore-scripts \
+    drizzle-kit@0.31.10 drizzle-orm@0.45.2 pg@8.21.0
+COPY packages/lib/drizzle.config.ts ./drizzle.config.ts
+COPY packages/lib/src/db/migrations ./src/db/migrations
+
+CMD ["node", "node_modules/drizzle-kit/bin.cjs", "migrate"]
 
 # Worker stage
 FROM base AS worker
