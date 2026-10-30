@@ -133,3 +133,13 @@ USER worker
 ENTRYPOINT ["/entrypoint.sh"]
 WORKDIR /app/apps/worker
 CMD ["npx", "tsx", "src/index.ts"]
+
+# Cloudflare Containers: one lifecycle for the web app and pg-boss worker.
+# PostgreSQL remains external; container disk is ephemeral.
+FROM worker AS cloudflare
+WORKDIR /app
+EXPOSE 3000 3001
+CMD ["node", "/app/deployment/cloudflare/supervisor.mjs"]
+
+# Preserve the original default build target for existing consumers.
+FROM worker AS default

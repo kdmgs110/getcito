@@ -1,0 +1,102 @@
+name: Cloudflare adapter
+
+on:
+  pull_request:
+    paths:
+      - deployment/cloudflare/**
+      - docker/Dockerfile
+      - .dockerignore
+      - .github/workflows/cloudflare.yml
+  push:
+    branches: [master]
+    paths:
+      - deployment/cloudflare/**
+      - docker/Dockerfile
+      - .dockerignore
+      - .github/workflows/cloudflare.yml
+
+permissions:
+  contents: read
+
+jobs:
+  adapter:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: deployment/cloudflare
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: deployment/cloudflare/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm lint
+      - run: pnpm validate
+      - run: pnpm build
+
+  container:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: getcito_cloudflare_test
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/getcito_cloudflare_test
+      BETTER_AUTH_SECRET: container-ci-only-not-a-production-secret-00000000
+      APP_URL: https://getcito.example.org
+      VITE_APP_URL: https://getcito.example.org
+      DEPLOYMENT_MODE: local
+      VITE_DEPLOYMENT_MODE: local
+      SCRAPE_TARGETS: chatgpt:openai-api:gpt-4o-mini:online
+      OPENAI_API_KEY: ci-placeholder
+      ANTHROPIC_API_KEY: ci-placeholder
+      DATAFORSEO_LOGIN: ci-placeholder
+      DATAFORSEO_PASSWORD: ci-placeholder
+      DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/lib exec drizzle-kit migrate
+      - name: Build the production architecture
+        run: docker build --platform linux/amd64 --target cloudflare --build-arg VITE_APP_URL -f docker/Dockerfile -t getcito-cloudflare:ci .
+      - name: Confirm an empty database cannot expose a bootstrap page
+        run: |
+          docker run -d --name getcito-empty --network host -e DATABASE_URL getcito-cloudflare:ci
+          test "$(docker wait getcito-empty)" = 1
+          docker logs getcito-empty 2>&1 | grep -q 'Bootstrap it privately before deployment'
+      - run: node deployment/cloudflare/scripts/seed-integration-admin.mjs
+      - name: Start web and background worker together
+        run: |
+          docker run -d --name getcito-ready --network host \
+            -e DATABASE_URL -e BETTER_AUTH_SECRET -e APP_URL -e VITE_APP_URL \
+            -e DEPLOYMENT_MODE -e VITE_DEPLOYMENT_MODE -e SCRAPE_TARGETS \
+            -e OPENAI_API_KEY -e ANTHROPIC_API_KEY -e DATAFORSEO_LOGIN \
+            -e DATAFORSEO_PASSWORD -e DISABLE_TELEMETRY getcito-cloudflare:ci
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent http://127.0.0.1:3001/__container/health; then
+              node deployment/cloudflare/scripts/check-proxied-auth.mjs
+              docker stop --time 40 getcito-ready
+              test "$(docker inspect --format '{{.State.ExitCode}}' getcito-ready)" = 0
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs getcito-ready
+          exit 1
+      - name: Diagnostics
+        if: failure()
+        run: docker logs getcito-ready 2>&1 || true
