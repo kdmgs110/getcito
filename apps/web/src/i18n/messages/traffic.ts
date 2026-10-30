@@ -1,5 +1,6 @@
 export const trafficMessages = {
 	"traffic.pageIdentity": { en: "Page title / URL", ja: "ページタイトル / URL" },
+	"traffic.openPageInNewTab": { en: "Open {url} in a new tab", ja: "{url} を新しいタブで開く" },
 	"traffic.titleUnavailable": { en: "Title unavailable", ja: "タイトル未取得" },
 	"traffic.pageTitlesUnavailable": {
 		en: "Some page titles could not be retrieved. Traffic counts are still available.",

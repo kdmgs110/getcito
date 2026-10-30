@@ -119,11 +119,21 @@ export function PageTrafficTable({
 									<span className="block break-words font-semibold leading-relaxed">
 										{row.title || t("traffic.titleUnavailable")}
 									</span>
-									<span className="mt-1 block break-all text-xs leading-relaxed text-muted-foreground">
-										{hostname && row.path.startsWith("/")
-											? `https://${hostname}${row.path}`
-											: measurement.unavailablePath}
-									</span>
+									{hostname && row.path.startsWith("/") ? (
+										<a
+											href={`https://${hostname}${row.path}`}
+											target="_blank"
+											rel="noopener noreferrer"
+											aria-label={t("traffic.openPageInNewTab", { url: `https://${hostname}${row.path}` })}
+											className="mt-1 block break-all rounded-sm text-xs leading-relaxed text-muted-foreground underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+										>
+											{`https://${hostname}${row.path}`}
+										</a>
+									) : (
+										<span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+											{measurement.unavailablePath}
+										</span>
+									)}
 								</th>
 								<td className="border-b px-2 py-3 text-right font-medium">{formatNumber(row.ai)}</td>
 								<td className="border-b px-2 py-3 text-right">{formatNumber(row.total)}</td>

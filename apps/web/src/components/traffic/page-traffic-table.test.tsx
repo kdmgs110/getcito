@@ -54,6 +54,9 @@ describe("entry-page identity presentation", () => {
 		const url = `https://freelance.example.com${path}`;
 		expect(html).toContain(title);
 		expect(html).toContain(url);
+		expect(html).toContain(`href="${url}"`);
+		expect(html).toContain('target="_blank"');
+		expect(html).toContain('rel="noopener noreferrer"');
 		expect(html.indexOf(title)).toBeLessThan(html.indexOf(url));
 		expect(html).not.toContain("truncate");
 		expect(html).toContain(">13</td>");
@@ -69,6 +72,7 @@ describe("entry-page identity presentation", () => {
 		expect(html).toContain("https://freelance.example.com/");
 		expect(html).toContain(t("traffic.observed.unavailablePath"));
 		expect(html).not.toContain("https://freelance.example.com(not set)");
+		expect(html.match(/<a /g)).toHaveLength(1);
 	});
 	it("explains a title lookup failure without implying traffic counts were lost", () => {
 		const html = renderToStaticMarkup(<QualityNotices warnings={["page_titles_unavailable"]} />);

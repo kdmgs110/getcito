@@ -33,7 +33,10 @@ test.describe("GA4 traffic analysis", () => {
 			),
 		).toBe(true);
 		const title = engineer.locator("span").first();
-		const url = engineer.locator("span").last();
+		const url = engineer.getByRole("link");
+		await expect(url).toHaveAttribute("href", "https://example.com/job_listings/engineer/");
+		await expect(url).toHaveAttribute("target", "_blank");
+		await expect(url).toHaveAttribute("rel", "noopener noreferrer");
 		expect((await title.boundingBox())?.y).toBeLessThan((await url.boundingBox())?.y ?? 0);
 		await expect(
 			pageList.getByRole("rowheader").filter({ hasText: text("タイトル未取得", "Title unavailable") }),
