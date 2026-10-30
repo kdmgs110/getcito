@@ -289,6 +289,8 @@ function DashboardPage() {
 		return (
 			<div className="space-y-6 max-w-2xl p-4">
 				<PromptWizard
+					key={brandId}
+					autoStart={clientConfig?.mode !== "local"}
 					onComplete={() => {
 						const template = clientConfig?.branding.onboardingRedirectUrlTemplate;
 						if (template) {

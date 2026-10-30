@@ -66,6 +66,11 @@ jobs:
         run: pnpm exec biome lint src/components/traffic/conversion* src/server/conversion*.ts src/i18n/messages/conversions.ts
       - name: Lint shared analytics
         run: pnpm exec biome lint packages/lib/src/analytics
+      - name: Lint brand creation and switching
+        working-directory: apps/web
+        run: pnpm exec biome lint src/components/brand-switcher.tsx src/components/app-sidebar.tsx src/components/prompt-wizard.tsx src/lib/brand-navigation*.ts src/lib/brand-creation*.ts src/i18n/brand-labels.ts src/i18n/brand-creation-labels.ts src/routes/_authed/app/new.tsx src/routes/_authed/app/index.tsx 'src/routes/_authed/app/$brand/index.tsx' src/server/brands*.ts
+      - name: Lint brand provisioning
+        run: pnpm exec biome lint packages/lib/src/db/provisioning*.ts
       - run: pnpm build
       - run: pnpm --filter @workspace/lib exec drizzle-kit migrate
       - run: pnpm --filter e2e seed
@@ -79,8 +84,8 @@ jobs:
           done
           cat /tmp/getcito-e2e.log
           exit 1
-      - name: Traffic and conversion browser tests
-        run: pnpm --filter e2e exec playwright test tests/traffic.spec.ts tests/conversions.spec.ts --workers=1
+      - name: Traffic, conversion, and brand browser tests
+        run: pnpm --filter e2e exec playwright test tests/traffic.spec.ts tests/conversions.spec.ts tests/brands.spec.ts --workers=1
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

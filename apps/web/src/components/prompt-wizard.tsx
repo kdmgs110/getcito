@@ -31,9 +31,11 @@ import { trackEvent } from "@/lib/posthog";
 import { CompetitorsEditor, newCompetitorEntry, type CompetitorEntry } from "@/components/competitors-editor";
 import { PromptsListEditor, newPromptEntry, type EditablePrompt } from "@/components/prompts-list-editor";
 import { WebLogo } from "./web-logo";
+import { brandCreationText as ct } from "@/i18n/brand-creation-labels";
 
 interface PromptWizardProps {
 	onComplete: () => void;
+	autoStart?: boolean;
 }
 
 /** Brand analysis runs in the worker (LLM + web search, ~1 min); the client polls for the result. */
@@ -84,7 +86,7 @@ const EditableTagsInput = memo(
 );
 EditableTagsInput.displayName = "EditableTagsInput";
 
-export default function PromptWizard({ onComplete }: PromptWizardProps) {
+export default function PromptWizard({ onComplete, autoStart = true }: PromptWizardProps) {
 	const { brand } = useBrand();
 	const queryClient = useQueryClient();
 	const router = useRouter();
@@ -238,11 +240,11 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 
 	// Auto-start analysis when component mounts
 	useEffect(() => {
-		if (phase === "idle" && !hasAutoAnalyzed.current && brand?.website && brand?.id) {
+		if (autoStart && phase === "idle" && !hasAutoAnalyzed.current && brand?.website && brand?.id) {
 			hasAutoAnalyzed.current = true;
 			handleAnalyze();
 		}
-	}, [brand?.website, brand?.id, phase, handleAnalyze]);
+	}, [autoStart, brand?.website, brand?.id, phase, handleAnalyze]);
 
 	// Update phase state to respect isAnalyzingBrand
 	useEffect(() => {
@@ -340,6 +342,19 @@ export default function PromptWizard({ onComplete }: PromptWizardProps) {
 			setIsSaving(false);
 		}
 	}, [brand, data, queryClient, router, onComplete, STORAGE_KEY]);
+
+	if (phase === "idle" && !autoStart && !error) {
+		return (
+			<div className="space-y-4 rounded-xl border bg-card p-6">
+				<h2 className="text-xl font-semibold">{ct("setupTitle")}</h2>
+				<p className="text-sm leading-relaxed text-muted-foreground">{ct("setupDescription")}</p>
+				<Button onClick={handleAnalyze}>
+					<Play className="size-4" />
+					{ct("startAnalysis")}
+				</Button>
+			</div>
+		);
+	}
 
 	if (phase === "idle" || phase === "analyzing") {
 		return (
