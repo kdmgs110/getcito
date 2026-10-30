@@ -381,6 +381,8 @@ Under Docker Compose, the `db-migrate` service runs migrations automatically bef
 
 Getcito supports multiple deployment models via Docker Compose. Below are the comprehensive guides for deploying Getcito locally, as a demo, or as a fully white-labeled instance.
 
+For Cloudflare, the [Containers deployment adapter](deployment/cloudflare/README.md) runs the web app and background worker together with an existing external PostgreSQL database. It requires Workers Paid and usage charges; it is not a free static-site deployment.
+
 ### 1. Local Deployment
 
 The local deployment builds and runs the full stack (PostgreSQL, automatic migrations, web dashboard, background worker, and Adminer DB UI) from source.

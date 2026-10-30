@@ -97,3 +97,11 @@ e2e/artifacts
 
 docker-compose.whitelabel.yml
 
+# Wrangler development secrets, authentication state, and local verification data
+.dev.vars*
+**/.dev.vars*
+.wrangler
+**/.wrangler
+.local
+**/.local
+
