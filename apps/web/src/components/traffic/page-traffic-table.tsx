@@ -1,15 +1,16 @@
-import { useState } from "react";
-import { Search } from "lucide-react";
 import type { TrafficGrain, TrafficPages } from "@workspace/lib/analytics";
 import { aggregateTrafficPoints } from "@workspace/lib/analytics";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
+import { Search } from "lucide-react";
+import { useState } from "react";
 import { formatNumber, t } from "@/i18n";
-import { Composition, formatRatio, Sparkline } from "./traffic-chart";
 import { TrafficCard } from "./shared";
+import { Composition, formatRatio, Sparkline } from "./traffic-chart";
 import { useTrafficMeasurement } from "./traffic-measurement";
 export function PageTrafficTable({
 	data,
+	hostname,
 	query,
 	pageScope,
 	pageSize,
@@ -23,6 +24,7 @@ export function PageTrafficTable({
 	onDetail,
 }: {
 	data: TrafficPages;
+	hostname: string;
 	query: string;
 	pageScope: "ai" | "all";
 	pageSize: number;
@@ -33,7 +35,7 @@ export function PageTrafficTable({
 	onScope: (v: "ai" | "all") => void;
 	onPageSize: (v: number) => void;
 	onPage: (v: number) => void;
-	onDetail: (path: string) => void;
+	onDetail: (path: string, hostname?: string) => void;
 }) {
 	const measurement = useTrafficMeasurement();
 	const [search, setSearch] = useState(query);
@@ -93,7 +95,7 @@ export function PageTrafficTable({
 					<thead className="text-xs text-muted-foreground">
 						<tr>
 							{[
-								measurement.path,
+								t("traffic.pageIdentity"),
 								`${measurement.ai}${pageScope === "ai" ? " ↓" : ""}`,
 								`${measurement.total}${pageScope === "all" ? " ↓" : ""}`,
 								measurement.ratio,
@@ -103,7 +105,7 @@ export function PageTrafficTable({
 							].map((label, i) => (
 								<th
 									key={label}
-									className={`whitespace-nowrap border-b px-2 py-3 font-medium ${i === 0 ? "text-left" : "text-right"}`}
+									className={`border-b px-2 py-3 font-medium leading-relaxed ${i === 0 ? "whitespace-nowrap text-left" : "min-w-20 text-right"}`}
 								>
 									{label}
 								</th>
@@ -112,11 +114,28 @@ export function PageTrafficTable({
 					</thead>
 					<tbody>
 						{data.rows.map((row) => (
-							<tr key={row.path} className="hover:bg-muted/40">
-								<th scope="row" className="max-w-72 border-b px-2 py-3 text-left font-normal">
-									<span className="block truncate" title={row.path}>
-										{row.path === "(not set)" || !row.path ? measurement.unavailablePath : row.path}
+							<tr key={`${row.hostname ?? hostname}:${row.path}`} className="hover:bg-muted/40">
+								<th scope="row" className="w-[42%] min-w-64 max-w-lg border-b px-2 py-4 text-left font-normal">
+									<span className="block break-words font-semibold leading-relaxed">
+										{row.title || t("traffic.titleUnavailable")}
 									</span>
+									{(row.hostname ?? hostname) && row.path.startsWith("/") ? (
+										<a
+											href={`https://${row.hostname ?? hostname}${row.path}`}
+											target="_blank"
+											rel="noopener noreferrer"
+											aria-label={t("traffic.openPageInNewTab", {
+												url: `https://${row.hostname ?? hostname}${row.path}`,
+											})}
+											className="mt-1 block break-all rounded-sm text-xs leading-relaxed text-muted-foreground underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+										>
+											{`https://${row.hostname ?? hostname}${row.path}`}
+										</a>
+									) : (
+										<span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+											{measurement.unavailablePath}
+										</span>
+									)}
 								</th>
 								<td className="border-b px-2 py-3 text-right font-medium">{formatNumber(row.ai)}</td>
 								<td className="border-b px-2 py-3 text-right">{formatNumber(row.total)}</td>
@@ -132,7 +151,7 @@ export function PageTrafficTable({
 										<Button
 											variant="link"
 											size="sm"
-											onClick={() => onDetail(row.path)}
+											onClick={() => onDetail(row.path, row.hostname ?? hostname)}
 											aria-label={`${t("traffic.viewTrend")}: ${row.path}`}
 										>
 											{t("traffic.viewTrend")} ›

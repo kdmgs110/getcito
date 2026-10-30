@@ -1,4 +1,3 @@
-import { t } from "@/i18n";
 import {
 	IconBuilding,
 	IconBuildings,
@@ -19,7 +18,6 @@ import {
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import type { BrandWithPrompts } from "@workspace/lib/db/schema";
-
 import {
 	Sidebar,
 	SidebarContent,
@@ -31,11 +29,13 @@ import {
 	useSidebar,
 } from "@workspace/ui/components/sidebar";
 import type * as React from "react";
+import { BrandSwitcher } from "@/components/brand-switcher";
 import { DemoModePill } from "@/components/demo-mode-pill";
 import { Logo } from "@/components/logo";
 import { NavAppInfo } from "@/components/nav-app-info";
 import { type NavGroup, NavMain } from "@/components/nav-main";
 import { NavUser } from "@/components/nav-user";
+import { t } from "@/i18n";
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 	isAdmin?: boolean;
@@ -100,7 +100,11 @@ export function AppSidebar({
 			);
 		}
 
-		dashboardItems.splice(Math.min(3, dashboardItems.length), 0, { title: t("traffic.title"), url: "/traffic", icon: IconTimeline });
+		dashboardItems.splice(Math.min(3, dashboardItems.length), 0, {
+			title: t("traffic.title"),
+			url: "/traffic",
+			icon: IconTimeline,
+		});
 
 		groups.push({
 			label: t("settings.dashboard"),
@@ -206,6 +210,7 @@ export function AppSidebar({
 						</SidebarMenuButton>
 					</SidebarMenuItem>
 				</SidebarMenu>
+				{brand && !adminOnly && <BrandSwitcher brand={brand} />}
 			</SidebarHeader>
 			<SidebarContent>
 				<NavMain groups={groups} />

@@ -23,6 +23,8 @@ const isoDate = z
 export const trafficRequestSchema = z
 	.object({
 		brandId: z.string().min(1).max(200),
+		hostname: z.string().min(1).max(253).optional(),
+		detailHostname: z.string().min(1).max(253).optional(),
 		from: isoDate,
 		to: isoDate,
 		conditions: trafficConditionsSchema.default([]),
@@ -58,8 +60,8 @@ export function validateTrafficRegex(value: string): void {
 	}
 }
 
-export function normalizeConditions(conditions: TrafficCondition[], hostname: string): TrafficCondition[] {
-	const site = normalizeHostname(hostname);
+export function normalizeConditions(conditions: TrafficCondition[], hostname: string | string[]): TrafficCondition[] {
+	const sites = (Array.isArray(hostname) ? hostname : [hostname]).map(normalizeHostname);
 	const parsed = trafficConditionsSchema.parse(conditions);
 	return parsed.map((condition) => {
 		let value = condition.value;
@@ -67,8 +69,9 @@ export function normalizeConditions(conditions: TrafficCondition[], hostname: st
 			validateTrafficRegex(value);
 		} else {
 			if (/^https?:\/\//i.test(value)) {
+				if (sites.length > 1) throw new Error("Select a domain before filtering by a full URL");
 				const url = new URL(value);
-				if (normalizeHostname(url.hostname) !== site || url.port || url.username || url.password) {
+				if (!sites.includes(normalizeHostname(url.hostname)) || url.port || url.username || url.password) {
 					throw new Error("URL must belong to the selected website");
 				}
 				value = url.pathname;
@@ -110,6 +113,14 @@ export function stringFilter(
 export function andFilters(...expressions: (GAFilterExpression | undefined)[]): GAFilterExpression {
 	const existing = expressions.filter((e): e is GAFilterExpression => !!e);
 	return existing.length === 1 ? existing[0] : { andGroup: { expressions: existing } };
+}
+/** A single union filter avoids summing the same cross-domain session twice. */
+export function hostnameFilter(hostnames: string[]): GAFilterExpression {
+	if (!hostnames.length) throw new Error("Select at least one website");
+	const values = [...new Set(hostnames.map(normalizeHostname))].sort();
+	return values.length === 1
+		? stringFilter("hostName", values[0], "EXACT", false)
+		: { filter: { fieldName: "hostName", inListFilter: { values, caseSensitive: false } } };
 }
 export function escapeRegex(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

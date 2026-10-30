@@ -82,7 +82,7 @@ export function trafficCacheKey(
 		.update(
 			JSON.stringify(
 				canonical({
-					version: 1,
+					version: kind === "pages" ? 2 : 1,
 					classificationVersion: AI_CLASSIFICATION_VERSION,
 					filterSchemaVersion: FILTER_SCHEMA_VERSION,
 					measurementVersion: ANALYTICS_MEASUREMENT_VERSION,

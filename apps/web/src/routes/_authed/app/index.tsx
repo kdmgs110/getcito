@@ -1,24 +1,39 @@
-import { displayMarket } from "@/i18n/settings-labels";
 import { t } from "@/i18n";
+import { displayMarket } from "@/i18n/settings-labels";
+
 /**
  * /app - Brand switcher page
  *
- * In single-org mode (local/demo): redirects to the default org
- * In multi-org mode (whitelabel): shows brand switcher
+ * Local and whitelabel deployments show accessible brands. Read-only demo
+ * deployments retain the single-brand redirect.
  */
 
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { IconArrowRight, IconBuilding, IconPlus } from "@tabler/icons-react";
+import { createFileRoute, Link, redirect, useRouter } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { db } from "@workspace/lib/db/db";
+import { brands } from "@workspace/lib/db/schema";
 import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { syncAuth0UserById } from "@workspace/whitelabel/auth-hooks";
+import { inArray } from "drizzle-orm";
+import { useState } from "react";
 import FullPageCard from "@/components/full-page-card";
+import { bt } from "@/i18n/brand-labels";
 import { listUserOrganizations, requireAuthSession } from "@/lib/auth/helpers";
+import { brandDomain } from "@/lib/brand-navigation";
 import { getDeployment } from "@/lib/config/server";
 
 const getOrganizations = createServerFn({ method: "GET" }).handler(
 	async (): Promise<{
-		organizations: { id: string; name: string; targetMarket?: string | null; author?: string | null }[];
+		organizations: {
+			id: string;
+			name: string;
+			website?: string | null;
+			targetMarket?: string | null;
+			author?: string | null;
+		}[];
 		supportsMultiOrg: boolean;
 		canCreateBrands: boolean;
 	}> => {
@@ -35,8 +50,20 @@ const getOrganizations = createServerFn({ method: "GET" }).handler(
 		}
 
 		const organizations = await listUserOrganizations(session.user.id);
+		const websites = organizations.length
+			? await db
+					.select({ id: brands.id, website: brands.website })
+					.from(brands)
+					.where(
+						inArray(
+							brands.id,
+							organizations.map((org) => org.id),
+						),
+					)
+			: [];
+		const websiteById = new Map(websites.map((row) => [row.id, row.website]));
 		return {
-			organizations,
+			organizations: organizations.map((org) => ({ ...org, website: websiteById.get(org.id) })),
 			supportsMultiOrg: deployment.features.supportsMultiOrg,
 			canCreateBrands: deployment.features.canCreateBrands,
 		};
@@ -57,6 +84,7 @@ function OrgSwitcherSkeleton() {
 
 export const Route = createFileRoute("/_authed/app/")({
 	pendingComponent: OrgSwitcherSkeleton,
+	errorComponent: BrandListError,
 	loader: async () => {
 		const result = await getOrganizations();
 
@@ -70,42 +98,83 @@ export const Route = createFileRoute("/_authed/app/")({
 	component: BrandSwitcherPage,
 });
 
+function BrandListError() {
+	const router = useRouter();
+	return (
+		<FullPageCard title={bt("list")}>
+			<div role="alert" className="space-y-4 text-center">
+				<p>{bt("error")}</p>
+				<Button
+					onClick={() => {
+						void router.invalidate();
+					}}
+				>
+					{bt("retry")}
+				</Button>
+			</div>
+		</FullPageCard>
+	);
+}
+
 function BrandSwitcherPage() {
 	const { organizations, canCreateBrands } = Route.useLoaderData();
+	const [query, setQuery] = useState("");
+	const filtered = organizations.filter((org) =>
+		`${org.name} ${org.website || ""}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+	);
 
 	return (
-		<FullPageCard title={t("settings.brandSwitcher")} subtitle={t("settings.selectABrandToGetStarted")}>
-			<div className="flex flex-col space-y-3 min-w-[250px] sm:min-w-[300px]">
-				{organizations.length > 0 ? (
-					organizations.map((org) => (
-						<Button key={org.id} asChild variant="secondary" className="h-auto py-3 justify-start">
-							<Link
-								to="/app/$brand"
-								params={{ brand: org.id }}
-								className="flex flex-col items-start text-left w-full gap-1"
-							>
-								<span className="font-semibold text-base">{org.name}</span>
-								{(org.targetMarket || org.author) && (
-									<span className="text-xs text-muted-foreground font-normal">
-										{[
-											org.targetMarket && t("settings.marketLabel", { market: displayMarket(org.targetMarket) }),
-											org.author && t("settings.authorLabel", { author: org.author }),
-										]
-											.filter(Boolean)
-											.join(" • ")}
-									</span>
-								)}
+		<FullPageCard title={bt("list")} subtitle={bt("listDescription")} className="w-full max-w-2xl">
+			<div className="space-y-4">
+				<div className="flex flex-col gap-3 sm:flex-row">
+					<Input
+						aria-label={bt("search")}
+						placeholder={bt("search")}
+						value={query}
+						onChange={(event) => setQuery(event.target.value)}
+						className="flex-1"
+					/>
+					{canCreateBrands && (
+						<Button asChild>
+							<Link to="/app/new">
+								<IconPlus className="size-4" />
+								{bt("add")}
 							</Link>
 						</Button>
-					))
-				) : (
-					<p className="text-muted-foreground text-center">{t("settings.noBrandsAvailable")}</p>
-				)}
-				{canCreateBrands && (
-					<Button asChild variant="outline" className="h-auto py-3 mt-4">
-						<Link to="/app/new">{t("settings.createNewBrand")}</Link>
-					</Button>
-				)}
+					)}
+				</div>
+				<div className="max-h-[60dvh] space-y-2 overflow-y-auto">
+					{filtered.length > 0 ? (
+						filtered.map((org) => (
+							<Button key={org.id} asChild variant="outline" className="h-auto min-h-20 w-full justify-start py-3">
+								<Link to="/app/$brand" params={{ brand: org.id }} className="flex items-center gap-3 text-left">
+									<IconBuilding className="size-5 shrink-0 text-muted-foreground" />
+									<div className="min-w-0 flex-1 space-y-1">
+										<div className="truncate text-base font-semibold">{org.name}</div>
+										{org.website && (
+											<div className="truncate text-xs text-muted-foreground">{brandDomain(org.website)}</div>
+										)}
+										{(org.targetMarket || org.author) && (
+											<span className="text-xs text-muted-foreground font-normal">
+												{[
+													org.targetMarket && t("settings.marketLabel", { market: displayMarket(org.targetMarket) }),
+													org.author && t("settings.authorLabel", { author: org.author }),
+												]
+													.filter(Boolean)
+													.join(" • ")}
+											</span>
+										)}
+									</div>
+									<IconArrowRight className="size-4 shrink-0 text-muted-foreground" />
+								</Link>
+							</Button>
+						))
+					) : (
+						<p className="py-8 text-center text-sm text-muted-foreground">
+							{query ? bt("noResults") : t("settings.noBrandsAvailable")}
+						</p>
+					)}
+				</div>
 			</div>
 		</FullPageCard>
 	);

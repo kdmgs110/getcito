@@ -7,16 +7,14 @@
  * provisioning path — the public demo box is just a read-only view over
  * that already-bootstrapped data.
  *
- * Everything here is one-shot: the better-auth `user.create.before` hook
- * rejects any signup when a user already exists, so these inserts only
- * ever run once against a given database. The SQL is plain INSERTs (no
- * upsert, no existence checks) to make that intent obvious — a second
- * call is a bug and should fail at the database layer rather than
- * silently rewriting rows.
+ * Initial signup is one-shot: better-auth rejects signup once a user exists.
+ * Additional brands are separately provisioned with request identities so
+ * network retries cannot produce duplicate organizations or partial brands.
  */
-import { count, eq, or } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { and, count, eq, sql } from "drizzle-orm";
 import { db } from "./db";
-import { member, organization, user } from "./schema";
+import { brands, member, organization, user } from "./schema";
 
 /**
  * Number of users in the database.
@@ -33,10 +31,8 @@ export async function countUsers(): Promise<number> {
 /**
  * The single organization created in local mode.
  *
- * Hardcoded because local mode has exactly one org per install, the user
- * never sees or interacts with this identity (they pick a brand in the
- * onboarding wizard, which is what the UI actually surfaces), and a
- * stable id makes URLs like `/app/default` predictable.
+ * Keep the initial organization stable so existing `/app/default` URLs
+ * continue working. Additional brands receive independent organizations.
  */
 const LOCAL_ORG = {
 	id: "default",
@@ -87,48 +83,49 @@ export function slugifyOrgName(name: string): string {
 	return slug || "brand";
 }
 
-/**
- * Slugs that would collide with sibling routes under `/app/$brand`. A
- * user-named brand that slugifies to one of these gets a numeric suffix
- * instead so the URL stays unambiguous.
- */
-const RESERVED_ORG_SLUGS = new Set(["new"]);
-
-async function findUniqueOrgId(baseSlug: string): Promise<string> {
-	let candidate = baseSlug;
-	let suffix = 2;
-	for (;;) {
-		const isReserved = RESERVED_ORG_SLUGS.has(candidate);
-		const conflict = isReserved
-			? [{ id: candidate }]
-			: await db
-					.select({ id: organization.id })
-					.from(organization)
-					.where(or(eq(organization.id, candidate), eq(organization.slug, candidate)))
-					.limit(1);
-		if (conflict.length === 0) return candidate;
-		candidate = `${baseSlug}-${suffix}`;
-		suffix++;
+export class BrandCreationConflictError extends Error {
+	constructor() {
+		super("BRAND_CREATION_REQUEST_CONFLICT");
 	}
 }
 
-/**
- * Provision an additional organization for an existing local-mode user — used
- * by the multi-brand "create new brand" flow. The id is a slug derived from
- * `name`, with a numeric suffix on collision, and is reused as the org slug
- * so that URLs and the org row stay in sync.
- *
- * The brand row itself is the caller's responsibility; provisioning only
- * handles the auth-level (org + admin membership) bits.
- */
-export async function provisionAdditionalLocalOrg(input: {
+/** User-scoped request identities make retries idempotent without changing existing brand URLs. */
+export function localBrandId(userId: string, requestId: string): string {
+	return `brand-${createHash("sha256")
+		.update(JSON.stringify([userId, requestId]))
+		.digest("hex")}`;
+}
+
+/** Create all three rows atomically. The transaction lock also serializes concurrent retries. */
+export async function provisionAdditionalLocalBrand(input: {
 	userId: string;
 	name: string;
+	website: string;
+	targetMarket?: string | null;
+	targetLanguage?: string | null;
+	additionalDomains?: string[];
+	requestId: string;
 }): Promise<{ orgId: string }> {
-	const baseSlug = `${input.userId}-${slugifyOrgName(input.name)}`;
-	const orgId = await findUniqueOrgId(baseSlug);
+	const orgId = localBrandId(input.userId, input.requestId);
 
 	await db.transaction(async (tx) => {
+		await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${orgId}, 0))`);
+		const existing = await tx.query.brands.findFirst({ where: eq(brands.id, orgId) });
+		if (existing) {
+			const membership = await tx.query.member.findFirst({
+				where: and(eq(member.organizationId, orgId), eq(member.userId, input.userId)),
+			});
+			if (
+				!membership ||
+				existing.name !== input.name ||
+				existing.website !== input.website ||
+				existing.targetMarket !== (input.targetMarket || null) ||
+				existing.targetLanguage !== (input.targetLanguage || null)
+			)
+				throw new BrandCreationConflictError();
+			return;
+		}
+
 		await tx.insert(organization).values({
 			id: orgId,
 			name: input.name,
@@ -142,6 +139,16 @@ export async function provisionAdditionalLocalOrg(input: {
 			userId: input.userId,
 			role: "admin",
 			createdAt: new Date(),
+		});
+
+		await tx.insert(brands).values({
+			id: orgId,
+			name: input.name,
+			website: input.website,
+			targetMarket: input.targetMarket || null,
+			targetLanguage: input.targetLanguage || null,
+			enabled: true,
+			...(input.additionalDomains?.length ? { additionalDomains: input.additionalDomains } : {}),
 		});
 	});
 

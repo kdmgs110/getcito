@@ -82,6 +82,39 @@ export const ga4OAuthStates = pgTable(
 	(table) => [index("ga4_oauth_states_expiry_idx").on(table.expiresAt)],
 ).enableRLS();
 
+/** Local reporting goals only; this table never writes configuration to Google. */
+export const conversionGoals = pgTable(
+	"conversion_goals",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		brandId: text("brand_id")
+			.notNull()
+			.references(() => brands.id, { onDelete: "cascade" }),
+		propertyId: text("property_id").notNull(),
+		hostname: text("hostname").notNull(),
+		eventName: text("event_name").notNull(),
+		displayName: text("display_name").notNull(),
+		enabled: boolean("enabled").default(true).notNull(),
+		ga4Name: text("ga4_name").notNull(),
+		ga4CreateTime: timestamp("ga4_create_time", { withTimezone: true }),
+		countingMethod: text("counting_method").notNull(),
+		revision: integer("revision").default(1).notNull(),
+		createdBy: text("created_by").notNull(),
+		updatedBy: text("updated_by").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("conversion_goals_brand_property_host_event_idx").on(
+			table.brandId,
+			table.propertyId,
+			table.hostname,
+			table.eventName,
+		),
+		index("conversion_goals_brand_idx").on(table.brandId),
+	],
+).enableRLS();
+
 export const trafficSavedViews = pgTable(
 	"traffic_saved_views",
 	{
@@ -94,6 +127,8 @@ export const trafficSavedViews = pgTable(
 		normalizedName: text("normalized_name").notNull(),
 		conditions: jsonb("conditions").$type<TrafficCondition[]>().notNull(),
 		filterSchemaVersion: integer("filter_schema_version").default(1).notNull(),
+		conversionGoalId: uuid("conversion_goal_id").references(() => conversionGoals.id, { onDelete: "set null" }),
+		analysisTab: text("analysis_tab").$type<"traffic" | "conversions">().default("traffic").notNull(),
 		sortOrder: integer("sort_order").default(0).notNull(),
 		revision: integer("revision").default(1).notNull(),
 		createdBy: text("created_by").notNull(),

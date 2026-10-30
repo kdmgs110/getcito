@@ -9,12 +9,13 @@ import { evaluateRequireCanCreateBrands } from "@/lib/auth/policies";
 import { getDeployment } from "@/lib/config/server";
 import { db } from "@workspace/lib/db/db";
 import { brands, prompts, competitors, type BrandWithPrompts, type Brand } from "@workspace/lib/db/schema";
-import { provisionAdditionalLocalOrg } from "@workspace/lib/db/provisioning";
+import { BrandCreationConflictError, provisionAdditionalLocalBrand } from "@workspace/lib/db/provisioning";
 import { eq, and, count, sql } from "drizzle-orm";
 import { MAX_COMPETITORS } from "@workspace/lib/constants";
 import { cleanAndValidateDomain } from "@/lib/domain-categories";
 import { validateWebsiteUrl } from "@/lib/brand-website";
 import { normalizeBrandUpdate } from "@/lib/brand-settings";
+import { normalizeBrandCreation, type BrandCreationResult } from "@/lib/brand-creation";
 import { deleteBrandCascade } from "@/server/brand-cascade";
 import { parseScrapeTargets, selectTargetsForBrand } from "@workspace/lib/providers";
 import type { ModelConfig } from "@workspace/lib/providers";
@@ -200,48 +201,37 @@ export const createBrandFn = createServerFn({ method: "POST" })
 export const createBrandWithOrgFn = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
-			brandName: z.string().min(1).max(100),
-			website: z.string().min(1),
+			brandName: z.string(),
+			website: z.string(),
 			targetMarket: z.string().optional(),
 			targetLanguage: z.string().optional(),
+			requestId: z.string().optional(),
 		}),
 	)
-	.handler(async ({ data }) => {
-		const session = await requireAuthSession();
+	.handler(async ({ data }): Promise<BrandCreationResult> => {
+		const session = await requireAuthSession().catch(() => null);
+		if (!session) return { ok: false, error: { code: "AUTH_REQUIRED" } };
 		const deployment = getDeployment();
 
 		if (evaluateRequireCanCreateBrands(deployment.features.canCreateBrands) === "deny") {
-			throw new Error("Brand creation is not allowed in this deployment");
+			return { ok: false, error: { code: "FORBIDDEN" } };
 		}
 
-		const urlValidation = validateWebsiteUrl(data.website);
-		if (!urlValidation.isValid) {
-			throw new Error(urlValidation.error);
+		const normalized = normalizeBrandCreation(data);
+		if (!normalized.ok) return normalized;
+		try {
+			const { orgId } = await provisionAdditionalLocalBrand({
+				...normalized.value,
+				userId: session.user.id,
+				requestId: data.requestId || crypto.randomUUID(),
+				additionalDomains: getDefaultBrandDomains(),
+			});
+			return { ok: true, brandId: orgId };
+		} catch (error) {
+			if (error instanceof BrandCreationConflictError) return { ok: false, error: { code: "REQUEST_CONFLICT" } };
+			console.error("[brands] Brand creation transaction failed", error);
+			return { ok: false, error: { code: "SAVE_FAILED" } };
 		}
-
-		const trimmedName = data.brandName.trim();
-		if (!trimmedName) {
-			throw new Error("Brand name must be a non-empty string");
-		}
-
-		const { orgId } = await provisionAdditionalLocalOrg({
-			userId: session.user.id,
-			name: trimmedName,
-		});
-
-		const defaultDomains = getDefaultBrandDomains();
-
-		await db.insert(brands).values({
-			id: orgId,
-			name: trimmedName,
-			website: urlValidation.formattedUrl,
-			targetMarket: data.targetMarket,
-			targetLanguage: data.targetLanguage,
-			enabled: true,
-			...(defaultDomains.length > 0 && { additionalDomains: defaultDomains }),
-		});
-
-		return { brandId: orgId };
 	});
 
 /**

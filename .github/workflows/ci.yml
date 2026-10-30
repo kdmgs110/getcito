@@ -48,6 +48,7 @@ jobs:
       ANALYTICS_TOKEN_ENCRYPTION_KEY: "0101010101010101010101010101010101010101010101010101010101010101"
       BASE_URL: http://localhost:3000
       E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/getcito_test
+      E2E_ANALYTICS_PRELOAD: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -60,27 +61,35 @@ jobs:
       - name: Lint traffic analysis
         working-directory: apps/web
         run: pnpm exec biome lint src/components/traffic src/server/traffic*.ts src/routes/api/analytics 'src/routes/_authed/app/$brand/traffic.tsx' src/i18n/messages/traffic.ts
+      - name: Lint conversion analysis
+        working-directory: apps/web
+        run: pnpm exec biome lint src/components/traffic/conversion* src/server/conversion*.ts src/i18n/messages/conversions.ts
       - name: Lint shared analytics
         run: pnpm exec biome lint packages/lib/src/analytics
+      - name: Lint brand creation and switching
+        working-directory: apps/web
+        run: pnpm exec biome lint src/components/brand-switcher.tsx src/components/app-sidebar.tsx src/components/prompt-wizard.tsx src/lib/brand-navigation*.ts src/lib/brand-creation*.ts src/i18n/brand-labels.ts src/i18n/brand-creation-labels.ts src/routes/_authed/app/new.tsx src/routes/_authed/app/index.tsx 'src/routes/_authed/app/$brand/index.tsx' src/server/brands*.ts
+      - name: Lint brand provisioning
+        run: pnpm exec biome lint packages/lib/src/db/provisioning*.ts
       - run: pnpm build
       - run: pnpm --filter @workspace/lib exec drizzle-kit migrate
       - run: pnpm --filter e2e seed
       - run: pnpm --filter e2e exec playwright install --with-deps chromium
       - name: Start application
         run: |
-          PORT=3000 HOST=127.0.0.1 node apps/web/.output/server/index.mjs > /tmp/getcito-e2e.log 2>&1 &
+          PORT=3000 HOST=127.0.0.1 node --import ./e2e/analytics-preload.mjs apps/web/.output/server/index.mjs > /tmp/getcito-e2e.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl --fail --silent "$BASE_URL" > /dev/null; then exit 0; fi
             sleep 1
           done
           cat /tmp/getcito-e2e.log
           exit 1
-      - name: Traffic browser tests
-        run: pnpm --filter e2e exec playwright test tests/traffic.spec.ts --workers=1
+      - name: Traffic, conversion, and brand browser tests
+        run: pnpm --filter e2e exec playwright test tests/traffic.spec.ts tests/conversions.spec.ts tests/brands.spec.ts --workers=1
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: traffic-browser-diagnostics
+          name: analytics-browser-diagnostics
           path: |
             e2e/test-results/
             e2e/playwright-report/

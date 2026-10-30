@@ -33,10 +33,10 @@ const counts = (ai: number, total: number, chatgpt = 0, perplexity = 0, gemini =
 	other: 0,
 });
 const pages = [
-	{ path: "/", daily: counts(4, 40, 3, 1) },
-	{ path: "/job_listings/engineer/", daily: counts(3, 30, 2, 0, 1) },
-	{ path: "/job_listings/", daily: counts(2, 20, 1, 1) },
-	{ path: "/job_listings/marketing/", daily: counts(1, 10, 0, 0, 0, 1) },
+	{ path: "/", title: "フリーランス案件を探す", daily: counts(4, 40, 3, 1) },
+	{ path: "/job_listings/engineer/", title: "エンジニアのフリーランス案件", daily: counts(3, 30, 2, 0, 1) },
+	{ path: "/job_listings/", title: "フリーランス案件一覧", daily: counts(2, 20, 1, 1) },
+	{ path: "/job_listings/marketing/", title: null, daily: counts(1, 10, 0, 0, 0, 1) },
 ];
 const sum = (daily: ReturnType<typeof counts>) =>
 	Object.fromEntries(Object.entries(daily).map(([k, v]) => [k, v * 28]));
@@ -81,12 +81,21 @@ export async function seedTrafficFixtures() {
 		};
 		const fetchedAt = new Date().toISOString();
 		async function cache(kind: "overview" | "pages" | "detail", input: unknown, payload: unknown) {
-			const key = trafficCacheKey(kind, connection, input);
-			await client.query(
-				`INSERT INTO traffic_query_cache(cache_key,brand_id,connection_revision,payload,expires_at)
-				VALUES($1,$2,$3,$4,NOW()+INTERVAL '6 hours') ON CONFLICT(cache_key) DO UPDATE SET payload=EXCLUDED.payload,expires_at=EXCLUDED.expires_at`,
-				[key, TRAFFIC_BRAND_ID, revision, JSON.stringify(payload)],
-			);
+			// Rows now carry a domain into page details; also support direct links
+			// that rely on the selected domain without an explicit detailHostname.
+			for (const detailHostname of kind === "detail" ? [undefined, TRAFFIC_HOST] : [undefined]) {
+				const key = trafficCacheKey(kind, connection, {
+					...(input as Record<string, unknown>),
+					hostname: TRAFFIC_HOST,
+					hostnames: [TRAFFIC_HOST],
+					...(detailHostname ? { detailHostname } : {}),
+				});
+				await client.query(
+					`INSERT INTO traffic_query_cache(cache_key,brand_id,connection_revision,payload,expires_at)
+					VALUES($1,$2,$3,$4,NOW()+INTERVAL '6 hours') ON CONFLICT(cache_key) DO UPDATE SET payload=EXCLUDED.payload,expires_at=EXCLUDED.expires_at`,
+					[key, TRAFFIC_BRAND_ID, revision, JSON.stringify(payload)],
+				);
+			}
 		}
 		const scopes: { conditions: Condition[]; selected: typeof pages }[] = [
 			{ conditions: [], selected: pages },
@@ -128,6 +137,7 @@ export async function seedTrafficFixtures() {
 							{
 								rows: matches.map((p) => ({
 									path: p.path,
+									title: p.title,
 									...sum(p.daily),
 									trend: dates.map((date) => ({ date, ...p.daily })),
 								})),

@@ -1,11 +1,29 @@
 export const trafficMessages = {
+	"traffic.domainFilter": { en: "Domain", ja: "ドメイン" },
+	"traffic.allDomains": { en: "All domains", ja: "全ドメイン" },
+	"traffic.invalidDomain": {
+		en: "Choose a domain registered to this brand.",
+		ja: "ブランドに登録されているドメインを選択してください。",
+	},
+	"traffic.domainSavedViewsHelp": {
+		en: "Showing all registered domains. Choose a domain to use or save a view, or filter by a full URL. Path conditions apply across domains.",
+		ja: "登録ドメインをまとめて集計しています。登録済みビューの利用・保存やフルURLでの絞り込みは、ドメインを選択すると行えます。パス条件は全ドメインに適用されます。",
+	},
+
+	"traffic.pageIdentity": { en: "Page title / URL", ja: "ページタイトル / URL" },
+	"traffic.openPageInNewTab": { en: "Open {url} in a new tab", ja: "{url} を新しいタブで開く" },
+	"traffic.titleUnavailable": { en: "Title unavailable", ja: "タイトル未取得" },
+	"traffic.pageTitlesUnavailable": {
+		en: "Some page titles could not be retrieved. Traffic counts are still available.",
+		ja: "一部のページタイトルを取得できませんでした。トラフィック数は引き続き確認できます。",
+	},
 	"traffic.observed.noticeTitle": {
-		en: "Session starts recorded on this website",
-		ja: "このサイトのセッション開始（計測分）を表示しています",
+		en: "Session starts recorded on the selected domains",
+		ja: "選択ドメインのセッション開始（計測分）を表示しています",
 	},
 	"traffic.observed.noticeDescription": {
-		en: "Counts session starts where session_start was recorded on this website. Missing start events are excluded, so these counts may differ from GA4's standard total sessions.",
-		ja: "このサイトでsession_startを計測したセッション開始数。開始イベント欠落分を含まないため、GA4標準の全セッション数とは一致しない場合があります。",
+		en: "Counts session starts where session_start was recorded on the selected domains. Missing start events are excluded, so these counts may differ from GA4's standard total sessions.",
+		ja: "選択ドメインでsession_startを計測したセッション開始数。開始イベント欠落分を含まないため、GA4標準の全セッション数とは一致しない場合があります。",
 	},
 	"traffic.observed.ai": { en: "AI session starts (recorded)", ja: "AIセッション開始（計測分）" },
 	"traffic.observed.total": { en: "All session starts (recorded)", ja: "全セッション開始（計測分）" },
@@ -19,8 +37,8 @@ export const trafficMessages = {
 		ja: "開始ページ別のセッション開始（計測分）",
 	},
 	"traffic.observed.pageTableHelp": {
-		en: "Uses the selected period and URL conditions. Grouped by the page where session_start was recorded on this website.",
-		ja: "選択期間・URL条件を反映｜このサイトでsession_startを計測した開始ページで集計",
+		en: "Uses the selected period and URL conditions. Grouped by the domain and page where session_start was recorded.",
+		ja: "選択期間・URL条件を反映｜session_startを計測したドメイン・開始ページで集計",
 	},
 	"traffic.observed.path": { en: "Start-page path", ja: "開始ページパス" },
 	"traffic.observed.allPaths": { en: "All recorded start pages", ja: "すべての開始ページ（計測分）" },

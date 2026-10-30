@@ -44,8 +44,18 @@ function compatibleFields() {
 		metricCompatibilities: [{ metricMetadata: { apiName: "sessions" }, compatibility: "COMPATIBLE" }],
 	};
 }
-type Request = { dimensions: { name: string }[]; offset?: number; limit?: number; dimensionFilter?: unknown };
-function mockReports(handler: (request: Request) => Response) {
+type Request = {
+	dimensions: { name: string }[];
+	metrics: { name: string }[];
+	dateRanges: { startDate: string; endDate: string }[];
+	offset?: number;
+	limit?: number;
+	dimensionFilter?: unknown;
+};
+function mockReports(
+	handler: (request: Request) => Response,
+	titles: (request: Request) => Response = () => json({ rows: [], rowCount: 0 }),
+) {
 	const requests: Request[] = [];
 	vi.stubGlobal(
 		"fetch",
@@ -53,6 +63,7 @@ function mockReports(handler: (request: Request) => Response) {
 			const request = JSON.parse(options.body as string) as Request;
 			requests.push(request);
 			if (request.dimensions[0].name === "hostName") return json({ rows: [row(["example.com"], 100)], rowCount: 1 });
+			if (request.dimensions.some(({ name }) => name === "pageTitle")) return titles(request);
 			return handler(request);
 		}),
 	);
@@ -60,6 +71,96 @@ function mockReports(handler: (request: Request) => Response) {
 }
 
 describe("GA4 traffic reports", () => {
+	it("queries a deduplicated host union once for each combined total rather than adding host sessions", async () => {
+		const requests: Request[] = [];
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (_url: string, init: RequestInit) => {
+				const request = JSON.parse(init.body as string) as Request;
+				requests.push(request);
+				return json({
+					rows:
+						request.dimensions.length === 1
+							? [row(["20261001"], 12)]
+							: [row(["20261001", "chatgpt.com", "referral", "Referral"], 3)],
+					rowCount: 1,
+				});
+			}),
+		);
+		const result = await fetchTrafficOverview({
+			...input,
+			hostnames: ["content.example.com", "example.com", "example.com"],
+		});
+		expect(result.totals).toMatchObject({ ai: 3, total: 12 });
+		expect(requests).toHaveLength(2);
+		expect(result.warnings).toContain("observed_session_start");
+		for (const request of requests) {
+			expect(JSON.stringify(request.dimensionFilter)).toContain(
+				'"fieldName":"hostName","inListFilter":{"values":["content.example.com","example.com"],"caseSensitive":false}',
+			);
+			expect(JSON.stringify(request.dimensionFilter)).toContain('"value":"session_start"');
+			expect(request.dimensions.some(({ name }) => name === "hostName")).toBe(false);
+		}
+	});
+	it("keeps identical paths and their titles separate across combined hosts", async () => {
+		const requests: Request[] = [];
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (_url: string, init: RequestInit) => {
+				const request = JSON.parse(init.body as string) as Request;
+				requests.push(request);
+				const names = request.dimensions.map(({ name }) => name);
+				if (names.includes("pageTitle"))
+					return json({
+						rows: [row(["/", "Main home", "example.com"], 20), row(["/", "Content home", "content.example.com"], 40)],
+						rowCount: 2,
+					});
+				if (names.length === 2)
+					return json({ rows: [row(["/", "example.com"], 3), row(["/", "content.example.com"], 2)], rowCount: 2 });
+				if (names.length === 3)
+					return json({
+						rows: [row(["/", "20261001", "example.com"], 12), row(["/", "20261001", "content.example.com"], 8)],
+						rowCount: 2,
+					});
+				return json({
+					rows: [
+						row(["/", "20261001", "chatgpt.com", "referral", "Referral", "example.com"], 3),
+						row(["/", "20261001", "claude.ai", "referral", "Referral", "content.example.com"], 2),
+					],
+					rowCount: 2,
+				});
+			}),
+		);
+		const report = await fetchTrafficPages({
+			...input,
+			hostnames: ["example.com", "content.example.com"],
+			page: 1,
+			pageSize: 5,
+			pageSearch: "",
+			pageScope: "ai",
+		});
+		expect(report.rows.map(({ hostname, path, title, ai, total }) => ({ hostname, path, title, ai, total }))).toEqual([
+			{ hostname: "example.com", path: "/", title: "Main home", ai: 3, total: 12 },
+			{ hostname: "content.example.com", path: "/", title: "Content home", ai: 2, total: 8 },
+		]);
+		expect(report.rows[0].trend[0]).toMatchObject({ ai: 3, total: 12 });
+		expect(report.rows[1].trend[0]).toMatchObject({ ai: 2, total: 8 });
+		expect(report.warnings).toEqual(["observed_session_start"]);
+		expect(requests).toHaveLength(4);
+		expect(requests[0].dimensions).toEqual([{ name: "pagePath" }, { name: "hostName" }]);
+	});
+	it("rejects an ambiguous full URL in a combined path filter before querying GA4", async () => {
+		const fetch = vi.fn();
+		vi.stubGlobal("fetch", fetch);
+		await expect(
+			fetchTrafficOverview({
+				...input,
+				hostnames: ["example.com", "content.example.com"],
+				conditions: [{ mode: "include", operator: "exact", value: "https://example.com/" }],
+			}),
+		).rejects.toThrow("Select a domain");
+		expect(fetch).not.toHaveBeenCalled();
+	});
 	it("joins identical-scope daily totals and AI providers without double counting", async () => {
 		const requests = mockReports((request) =>
 			request.dimensions.length === 1
@@ -231,12 +332,12 @@ describe("GA4 traffic reports", () => {
 		expect(result.rows[0]).toMatchObject({ path: "/jobs/a", ai: 3, total: 12 });
 		expect(result.rows[0].trend[0]).toMatchObject({ date: "2026-10-01", ai: 3, total: 12 });
 		expect(result.warnings).toContain("observed_session_start");
-		expect(requests).toHaveLength(3);
+		expect(requests).toHaveLength(4);
 		expect(requests[0].dimensions).toEqual([{ name: "pagePath" }]);
 		expect(JSON.stringify(requests[0])).toContain(
 			'"fieldName":"pagePath","stringFilter":{"matchType":"CONTAINS","value":"/jobs"',
 		);
-		for (const request of requests) {
+		for (const request of requests.filter((request) => request.metrics[0].name === "sessions")) {
 			expect(request.dimensions[0].name).toBe("pagePath");
 			expect(JSON.stringify(request)).not.toContain("landingPage");
 			expect(JSON.stringify(request.dimensionFilter)).toContain('"value":"session_start"');
@@ -258,6 +359,120 @@ describe("GA4 traffic reports", () => {
 		expect(fetch).not.toHaveBeenCalled();
 	});
 });
+describe("GA4 ranked page titles", () => {
+	const paths = ["/jobs/a", "/jobs/b", "/untitled"];
+	const pageInput = { ...input, page: 1, pageSize: 5, pageSearch: "", pageScope: "ai" as const };
+	function trafficRows(request: Request): Response {
+		if (request.dimensions.length === 1)
+			return json({ rows: paths.map((path) => row([path], 2)), rowCount: paths.length });
+		if (request.dimensions.length === 2)
+			return json({ rows: paths.map((path) => row([path, "20261001"], 8)), rowCount: paths.length });
+		return json({
+			rows: paths.map((path) => row([path, "20261001", "chatgpt.com", "referral", "Referral"], 2)),
+			rowCount: paths.length,
+		});
+	}
+	it("selects frequent valid page-view titles with stable ties without changing session ranks or counts", async () => {
+		const requests = mockReports(trafficRows, () => {
+			const rows = [
+				row([paths[0], "Z title"], 5),
+				row([paths[0], "A title"], 5),
+				row([paths[0], "(not set)"], 100),
+				row([paths[0], "(OTHER)"], 100),
+				row([paths[0], "  "], 100),
+				row([paths[1], " 主題 "], 3),
+				row([paths[1], "主題"], 4),
+				row([paths[1], "旧題"], 6),
+				row([paths[2], ""], 200),
+				row(["/not-ranked", "Must not attach"], 999),
+			];
+			return json({ rows, rowCount: rows.length });
+		});
+		const result = await fetchTrafficPages(pageInput);
+		expect(result.rows.map(({ path, title, ai, total }) => ({ path, title, ai, total }))).toEqual([
+			{ path: paths[0], title: "A title", ai: 2, total: 8 },
+			{ path: paths[1], title: "主題", ai: 2, total: 8 },
+			{ path: paths[2], title: null, ai: 2, total: 8 },
+		]);
+		expect(result.warnings).toEqual([]);
+		expect(result.totalRows).toBe(3);
+		expect(result.rows.every((row) => row.trend[0].ai === 2 && row.trend[0].total === 8)).toBe(true);
+		const titleRequest = requests.at(-1);
+		expect(titleRequest).toMatchObject({
+			dimensions: [{ name: "pagePath" }, { name: "pageTitle" }],
+			metrics: [{ name: "eventCount" }],
+			dateRanges: [{ startDate: input.from, endDate: input.to }],
+			limit: 5000,
+		});
+		expect(JSON.stringify(titleRequest)).not.toContain("landingPage");
+		expect(JSON.stringify(titleRequest)).not.toContain("sessionSource");
+		expect(titleRequest?.dimensionFilter).toEqual({
+			andGroup: {
+				expressions: [
+					{
+						filter: {
+							fieldName: "hostName",
+							stringFilter: { matchType: "EXACT", value: "example.com", caseSensitive: false },
+						},
+					},
+					{
+						filter: { fieldName: "platform", stringFilter: { matchType: "EXACT", value: "web", caseSensitive: false } },
+					},
+					{
+						filter: {
+							fieldName: "eventName",
+							stringFilter: { matchType: "EXACT", value: "page_view", caseSensitive: true },
+						},
+					},
+					{ filter: { fieldName: "pagePath", inListFilter: { values: paths, caseSensitive: true } } },
+				],
+			},
+		});
+		for (const request of requests.filter((r) => r.metrics[0].name === "sessions"))
+			expect(request.dimensions.some(({ name }) => name === "pageTitle")).toBe(false);
+	});
+	it("reads page_view titles independently of observed session_start event filters", async () => {
+		const requests = mockReports(trafficRows, () => json({ rows: [row([paths[0], "応募一覧"], 9)], rowCount: 1 }));
+		const result = await fetchTrafficPages({ ...pageInput, measurementMode: "observed_session_start" });
+		expect(result.rows[0]).toMatchObject({ title: "応募一覧", ai: 2, total: 8 });
+		const titleRequest = requests.find((r) => r.metrics[0].name === "eventCount");
+		expect(JSON.stringify(titleRequest)).toContain('"value":"page_view"');
+		expect(JSON.stringify(titleRequest)).not.toContain("session_start");
+		for (const request of requests.filter((r) => r.metrics[0].name === "sessions"))
+			expect(JSON.stringify(request)).toContain('"value":"session_start"');
+	});
+	it("leaves missing titles null without marking successful metadata as unavailable", async () => {
+		mockReports(trafficRows);
+		const result = await fetchTrafficPages(pageInput);
+		expect(result.rows.every((row) => row.title === null)).toBe(true);
+		expect(result.warnings).not.toContain("page_titles_unavailable");
+	});
+	it.each([400, 401, 403])("keeps successful session results when optional titles fail with %i", async (status) => {
+		mockReports(trafficRows, () => json({ error: "private detail" }, status));
+		const result = await fetchTrafficPages(pageInput);
+		expect(result.rows.map(({ title, ai, total }) => ({ title, ai, total }))).toEqual(
+			paths.map(() => ({ title: null, ai: 2, total: 8 })),
+		);
+		expect(result.warnings).toEqual(["page_titles_unavailable"]);
+	});
+	it.each([
+		{ rows: [row([paths[0], "Potentially incomplete"], 100)], rowCount: 5001 },
+		{ rows: [row([paths[0], "Thresholded"], 100)], rowCount: 1, metadata: { subjectToThresholding: true } },
+		{ rows: [row([paths[0], "Truncated"], 100)], rowCount: 1, metadata: { dataTruncationReasons: ["ROW_LIMIT"] } },
+	])("declines partial or quality-limited title metadata without changing metrics %#", async (response) => {
+		const requests = mockReports(trafficRows, () => json(response));
+		const result = await fetchTrafficPages(pageInput);
+		expect(result.rows.every((row) => row.title === null && row.ai === 2 && row.total === 8)).toBe(true);
+		expect(result.warnings).toEqual(["page_titles_unavailable"]);
+		expect(requests.filter((r) => r.metrics[0].name === "eventCount")).toHaveLength(1);
+	});
+	it("does not request titles for an empty ranked page", async () => {
+		const requests = mockReports(() => json({ rows: [], rowCount: 0 }));
+		expect((await fetchTrafficPages(pageInput)).rows).toEqual([]);
+		expect(requests.some((r) => r.metrics[0].name === "eventCount")).toBe(false);
+	});
+});
+
 describe("GA4 property discovery", () => {
 	it.each([
 		"landing_sessions",

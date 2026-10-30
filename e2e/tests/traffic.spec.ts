@@ -3,7 +3,7 @@ import { seedTrafficFixtures, TRAFFIC_BRAND_ID, TRAFFIC_FROM, TRAFFIC_TO } from 
 
 const ja = !process.env.VITE_APP_LOCALE || /^ja(?:-|$)/i.test(process.env.VITE_APP_LOCALE);
 const text = (japanese: string, english: string) => (ja ? japanese : english);
-const path = `/app/${TRAFFIC_BRAND_ID}/traffic?from=${TRAFFIC_FROM}&to=${TRAFFIC_TO}`;
+const path = `/app/${TRAFFIC_BRAND_ID}/traffic?hostname=example.com&from=${TRAFFIC_FROM}&to=${TRAFFIC_TO}`;
 
 test.describe("GA4 traffic analysis", () => {
 	test.describe.configure({ mode: "serial" });
@@ -19,6 +19,28 @@ test.describe("GA4 traffic analysis", () => {
 		await expect(page.locator(`a[href='/app/${TRAFFIC_BRAND_ID}/traffic'][data-sidebar='menu-button']`)).toBeVisible();
 		await expect(page.getByText("280", { exact: true }).first()).toBeVisible();
 		await expect(page.getByText("2,800", { exact: true }).first()).toBeVisible();
+		const pageList = page.locator("section").filter({
+			has: page.getByRole("heading", { name: text("ページ別トラフィック", "Traffic by page"), exact: true }),
+		});
+		await expect(
+			pageList.getByRole("columnheader", { name: text("ページタイトル / URL", "Page title / URL") }),
+		).toBeVisible();
+		const engineer = pageList.getByRole("rowheader").filter({ hasText: "エンジニアのフリーランス案件" });
+		await expect(engineer).toContainText("https://example.com/job_listings/engineer/");
+		expect(
+			await pageList.locator("table").evaluate((table) =>
+				table.getBoundingClientRect().width <= (table.parentElement?.clientWidth ?? 0) + 1,
+			),
+		).toBe(true);
+		const title = engineer.locator("span").first();
+		const url = engineer.getByRole("link");
+		await expect(url).toHaveAttribute("href", "https://example.com/job_listings/engineer/");
+		await expect(url).toHaveAttribute("target", "_blank");
+		await expect(url).toHaveAttribute("rel", "noopener noreferrer");
+		expect((await title.boundingBox())?.y).toBeLessThan((await url.boundingBox())?.y ?? 0);
+		await expect(
+			pageList.getByRole("rowheader").filter({ hasText: text("タイトル未取得", "Title unavailable") }),
+		).toContainText("https://example.com/job_listings/marketing/");
 		await page
 			.getByRole("tab", { name: text("月別", "Monthly"), exact: true })
 			.first()
@@ -88,9 +110,8 @@ test.describe("GA4 traffic analysis", () => {
 		await page.getByRole("button", { name: text("登録", "Register"), exact: true }).click();
 		let dialog = page.getByRole("dialog");
 		await dialog.getByLabel(text("登録名", "View name"), { exact: true }).fill("E2Eホーム");
-		await expect(dialog.getByRole("textbox", { name: text("ページパス 1", "Page path 1"), exact: true })).toHaveValue(
-			"/",
-		);
+		await dialog.getByRole("button", { name: text("条件を追加", "Add condition"), exact: true }).click();
+		await dialog.getByRole("textbox", { name: text("ページパス 1", "Page path 1"), exact: true }).fill("/");
 		await dialog.getByRole("button", { name: text("登録して表示", "Save and display"), exact: true }).click();
 		await expect(page.getByRole("tab", { name: "E2Eホーム", exact: true })).toHaveAttribute("data-state", "active");
 		await expect(page.getByText("112", { exact: true }).first()).toBeVisible();

@@ -1,18 +1,19 @@
-import { useEffect, useId, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, ChartNoAxesCombined, RefreshCw } from "lucide-react";
 import {
-	aggregateTrafficPoints,
 	AI_CLASSIFICATION_VERSION,
 	ANALYTICS_MEASUREMENT_VERSION,
-	FILTER_SCHEMA_VERSION,
+	aggregateTrafficPoints,
 	defaultTrafficRange,
+	FILTER_SCHEMA_VERSION,
 	normalizeConditions,
-	type TrafficCondition,
 	type SavedTrafficView,
+	type TrafficCondition,
 } from "@workspace/lib/analytics";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
+import { Tabs, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
+import { BookmarkPlus, ChartNoAxesCombined, RefreshCw } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { t, UI_LOCALE } from "@/i18n";
 import { getTrafficConnectionFn, getTrafficOverviewFn, getTrafficPagesFn } from "@/server/traffic";
 import {
@@ -23,39 +24,44 @@ import {
 } from "@/server/traffic-saved-views";
 import { ConditionEditor } from "./condition-editor";
 import { ConnectionSettings } from "./connection-settings";
+import { ConversionAnalysis } from "./conversion-analysis";
 import { PageTrafficDetail } from "./page-traffic-detail";
 import { PageTrafficTable } from "./page-traffic-table";
 import { QualityNotices } from "./quality-notices";
-import {
-	MeasurementNotice,
-	TrafficMeasurementContext,
-	trafficMeasurementLabels,
-	useTrafficMeasurement,
-} from "./traffic-measurement";
 import { SavedViewDialog, type ViewDialogState } from "./saved-view-dialog";
 import { SavedViewManager } from "./saved-view-manager";
 import { SavedViewSwitcher } from "./saved-view-switcher";
 import { TrafficCard, TrafficError, TrafficLoading, trafficError } from "./shared";
 import { GrainToggle, TrafficChart, TrafficKpis, TrafficPeriodTable } from "./traffic-chart";
 import {
-	resolveViewConditions,
+	MeasurementNotice,
+	TrafficMeasurementContext,
+	trafficMeasurementLabels,
+	useTrafficMeasurement,
+} from "./traffic-measurement";
+import {
 	duplicateViewDraft,
+	newViewDraft,
+	resolveViewConditions,
 	sameConditions,
 	scopeChange,
+	type TrafficSearch,
+	trafficDomainScopeKey,
 	validDateRange,
 	viewStorageKey,
-	type TrafficSearch,
 } from "./traffic-state";
 
 function FilterForm({
 	conditions,
+	title,
 	hostname,
 	canManage,
 	onApply,
 	onSave,
 }: {
 	conditions: TrafficCondition[];
-	hostname: string;
+	title?: string;
+	hostname: string | string[];
 	canManage: boolean;
 	onApply: (value: TrafficCondition[]) => void;
 	onSave: () => void;
@@ -74,7 +80,7 @@ function FilterForm({
 	}
 	return (
 		<TrafficCard
-			title={measurement.targetPages}
+			title={title ?? measurement.targetPages}
 			action={
 				canManage && (
 					<Button size="sm" variant="outline" disabled={dirty} onClick={onSave}>
@@ -85,7 +91,7 @@ function FilterForm({
 			}
 		>
 			<form
-				aria-label={measurement.targetPages}
+				aria-label={title ?? measurement.targetPages}
 				onSubmit={(event) => {
 					event.preventDefault();
 					apply();
@@ -228,12 +234,26 @@ export function TrafficAnalysis({
 		refetchOnWindowFocus: false,
 	});
 	const status = connection.data;
-	const scope = resolveViewConditions(search, views.data ?? [], status?.hostname ?? "");
+	const hostname = search.hostname ?? views.data?.find((view) => view.id === search.viewId)?.hostname ?? "all";
+	const combined = hostname === "all";
+	const domainScopeKey = trafficDomainScopeKey(status?.availableSites ?? [], hostname);
+	const domainValid = combined || !!status?.availableSites.includes(hostname);
+	const scope = resolveViewConditions(search, views.data ?? [], hostname);
 	const selected = scope.view;
 	const conditions = scope.conditions;
-	const dirty = !!selected && !sameConditions(conditions, selected.conditions);
+	const analysisTab = search.analysisTab ?? selected?.analysisTab ?? "traffic";
+	const conversionGoalId = search.conversionGoalId ?? selected?.conversionGoalId ?? undefined;
+	const effectiveSearch = { ...search, hostname, analysisTab, conversionGoalId };
+	const dirty =
+		!!selected &&
+		(!sameConditions(conditions, selected.conditions) ||
+			analysisTab !== (selected.analysisTab ?? "traffic") ||
+			(conversionGoalId === "all" ? null : (conversionGoalId ?? null)) !== (selected.conversionGoalId ?? null));
 	const timeZone = status?.timeZone ?? "UTC";
-	const measurementMode = status?.measurementMode ?? "landing_sessions";
+	const measurementMode =
+		(combined && (status?.availableSites.length ?? 0) > 1) || (!combined && hostname !== status?.hostname)
+			? "observed_session_start"
+			: (status?.measurementMode ?? "landing_sessions");
 	const measurement = trafficMeasurementLabels(measurementMode);
 	const range = defaultTrafficRange(timeZone);
 	const from = search.from ?? range.from;
@@ -241,7 +261,7 @@ export function TrafficAnalysis({
 	const grain = search.grain ?? "day";
 	const chart = search.chart ?? "total";
 	const dateValid = validDateRange(from, to);
-	const request = { brandId, from, to, conditions };
+	const request = { brandId, hostname, from, to, conditions };
 	const enabled =
 		!!status?.configured &&
 		!!status?.connected &&
@@ -249,11 +269,13 @@ export function TrafficAnalysis({
 		!status.needsReconnect &&
 		preferencesReady &&
 		!scope.invalidView &&
+		domainValid &&
 		dateValid &&
 		!views.isError;
 	const overview = useQuery({
 		queryKey: [
 			"traffic-overview",
+			domainScopeKey,
 			status?.propertyId,
 			status?.hostname,
 			status?.connectionRevision,
@@ -264,7 +286,7 @@ export function TrafficAnalysis({
 			request,
 		],
 		queryFn: () => getTrafficOverviewFn({ data: request }),
-		enabled,
+		enabled: enabled && analysisTab === "traffic",
 		staleTime: 30 * 60000,
 		retry: false,
 		refetchOnWindowFocus: false,
@@ -279,6 +301,7 @@ export function TrafficAnalysis({
 	const pages = useQuery({
 		queryKey: [
 			"traffic-pages",
+			domainScopeKey,
 			status?.propertyId,
 			status?.hostname,
 			status?.connectionRevision,
@@ -289,7 +312,7 @@ export function TrafficAnalysis({
 			pagesRequest,
 		],
 		queryFn: () => getTrafficPagesFn({ data: pagesRequest }),
-		enabled,
+		enabled: enabled && analysisTab === "traffic",
 		staleTime: 30 * 60000,
 		retry: false,
 		refetchOnWindowFocus: false,
@@ -297,17 +320,17 @@ export function TrafficAnalysis({
 	useEffect(() => {
 		if (!status || !views.data || initialized.current) return;
 		initialized.current = true;
-		if (!search.viewId && !search.conditions) {
+		if (hostname !== "all" && !search.viewId && !search.conditions) {
 			try {
 				const previous = localStorage.getItem(viewStorageKey(status.userId, brandId));
-				if (previous && views.data.some((view) => view.id === previous && view.hostname === status.hostname))
+				if (previous && views.data.some((view) => view.id === previous && view.hostname === hostname))
 					onSearch({ viewId: previous }, true);
 			} catch {
 				/* Storage can be disabled by the browser. */
 			}
 		}
 		setPreferencesReady(true);
-	}, [status, views.data, brandId, search.viewId, search.conditions, onSearch]);
+	}, [status, views.data, brandId, search.viewId, search.conditions, hostname, onSearch]);
 	useEffect(() => {
 		if (status && views.data && scope.invalidView) {
 			setNotice(t("traffic.invalidView"));
@@ -325,37 +348,73 @@ export function TrafficAnalysis({
 	}, [status, preferencesReady, scope.invalidView, search.viewId, brandId]);
 	const selectView = (id?: string) => {
 		setNotice(undefined);
-		return onSearch(scopeChange({ viewId: id, conditions: undefined, ga4: undefined }));
+		const view = views.data?.find((item) => item.id === id);
+		return onSearch(
+			scopeChange({
+				viewId: id,
+				hostname: view?.hostname ?? hostname,
+				conditions: undefined,
+				ga4: undefined,
+				analysisTab: id ? (view?.analysisTab ?? "traffic") : analysisTab,
+				conversionGoalId: id ? (view?.conversionGoalId ?? undefined) : conversionGoalId,
+			}),
+		);
 	};
 	const refreshViews = async () => {
 		await client.invalidateQueries({ queryKey: ["traffic-views", brandId] });
 	};
 	async function saveView(value: { name: string; conditions: TrafficCondition[] }, initial?: ViewDialogState) {
-		if (!status) return;
+		if (!status || combined) return;
 		const saved = await saveTrafficViewFn({
 			data: {
 				brandId,
-				hostname: status.hostname,
+				hostname,
 				...value,
+				analysisTab: initial?.analysisTab ?? initial?.view?.analysisTab ?? analysisTab,
+				conversionGoalId:
+					initial && "conversionGoalId" in initial
+						? initial.conversionGoalId
+						: initial?.view
+							? (initial.view.conversionGoalId ?? null)
+							: (conversionGoalId ?? null),
 				...(initial?.view ? { id: initial.view.id, revision: initial.view.revision } : {}),
 			},
 		});
 		await refreshViews();
 		if (initial?.keepDetail) setSavedFromDetail(saved);
-		else await selectView(saved.id);
+		else
+			await onSearch(
+				scopeChange({
+					viewId: saved.id,
+					conditions: undefined,
+					analysisTab: saved.analysisTab ?? "traffic",
+					conversionGoalId: saved.conversionGoalId ?? undefined,
+				}),
+			);
 		setNotice(t("traffic.savedSuccess"));
 	}
 	async function saveChanges() {
 		if (!selected) return;
 		setActionError(undefined);
 		try {
-			await saveView({ name: selected.name, conditions }, { view: selected, name: selected.name, conditions });
+			await saveView(
+				{ name: selected.name, conditions },
+				{ view: selected, name: selected.name, conditions, analysisTab, conversionGoalId: conversionGoalId ?? null },
+			);
 		} catch (e) {
 			setActionError(trafficError(e));
 		}
 	}
 	async function connectionChanged() {
-		onSearch(scopeChange({}));
+		onSearch(
+			scopeChange({
+				hostname: "all",
+				viewId: undefined,
+				conditions: undefined,
+				analysisTab: "traffic",
+				conversionGoalId: undefined,
+			}),
+		);
 		await client.invalidateQueries({
 			predicate: (query) => typeof query.queryKey[0] === "string" && query.queryKey[0].startsWith("traffic-"),
 		});
@@ -392,6 +451,15 @@ export function TrafficAnalysis({
 						</Button>
 					</div>
 				</header>
+				<Tabs
+					value={analysisTab}
+					onValueChange={(value) => onSearch(scopeChange({ analysisTab: value as "traffic" | "conversions" }))}
+				>
+					<TabsList aria-label={t("traffic.title")}>
+						<TabsTrigger value="traffic">{t("conversions.trafficTab")}</TabsTrigger>
+						<TabsTrigger value="conversions">{t("conversions.tab")}</TabsTrigger>
+					</TabsList>
+				</Tabs>
 				{search.ga4 && (search.ga4 !== "connected" || !status.connected) && (
 					<p role="status" className="rounded-lg border p-3 text-sm">
 						{t(search.ga4 === "connected" ? "traffic.oauthSuccess" : "traffic.oauthError")}
@@ -410,8 +478,35 @@ export function TrafficAnalysis({
 				<div className="flex flex-wrap items-end justify-between gap-4">
 					<div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
 						<div>
-							<p className="mb-1 text-xs text-muted-foreground">{t("traffic.site")}</p>
-							<p className="font-medium">{status.hostname || "—"}</p>
+							<label className="mb-1 block text-xs text-muted-foreground" htmlFor="traffic-domain">
+								{t("traffic.domainFilter")}
+							</label>
+							<select
+								id="traffic-domain"
+								value={hostname}
+								className="h-9 max-w-full rounded-md border bg-background px-3 text-sm"
+								onChange={(event) => {
+									setManager(false);
+									setViewDialog(undefined);
+									setSavedFromDetail(undefined);
+									void onSearch(
+										scopeChange({
+											hostname: event.target.value,
+											viewId: undefined,
+											conditions: undefined,
+											conversionGoalId: undefined,
+										}),
+									);
+								}}
+							>
+								<option value="all">{t("traffic.allDomains")}</option>
+								{status.availableSites.map((site) => (
+									<option key={site} value={site}>
+										{site}
+									</option>
+								))}
+							</select>
+							{combined && <p className="mt-1 text-xs text-muted-foreground">{status.availableSites.join(" + ")}</p>}
 						</div>
 						<div>
 							<p className="mb-1 text-xs text-muted-foreground">{t("traffic.property")}</p>
@@ -426,23 +521,39 @@ export function TrafficAnalysis({
 						onApply={(start, end) => onSearch(scopeChange({ from: start, to: end }))}
 					/>
 				</div>
-				{status.connected && <MeasurementNotice mode={measurementMode} />}
+				{status.connected && analysisTab === "traffic" && <MeasurementNotice mode={measurementMode} />}
+				{!domainValid && (
+					<p role="alert" className="text-sm text-destructive">
+						{t("traffic.invalidDomain")}
+					</p>
+				)}
 				{views.isError ? (
 					<TrafficError error={views.error} retry={() => views.refetch()} />
+				) : combined ? (
+					<p className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+						{t("traffic.domainSavedViewsHelp")}
+					</p>
 				) : (
 					<SavedViewSwitcher
+						allPathsLabel={analysisTab === "conversions" ? t("conversions.allPaths") : undefined}
 						views={views.data ?? []}
-						hostname={status.hostname}
+						hostname={hostname}
 						selected={selected}
 						dirty={dirty}
 						canManage={status.canManage}
 						onSelect={selectView}
-						onCreate={() =>
-							setViewDialog({ name: "", conditions: [{ mode: "include", operator: "exact", value: "/" }] })
-						}
+						onCreate={() => setViewDialog(newViewDraft(conditions, analysisTab, conversionGoalId))}
 						onManage={() => setManager(true)}
 						onSave={saveChanges}
-						onRestore={() => onSearch(scopeChange({ conditions: undefined }))}
+						onRestore={() =>
+							onSearch(
+								scopeChange({
+									conditions: undefined,
+									analysisTab: selected?.analysisTab ?? "traffic",
+									conversionGoalId: selected?.conversionGoalId ?? undefined,
+								}),
+							)
+						}
 					/>
 				)}
 				{!status.configured || !status.connected || status.needsReconnect ? (
@@ -478,10 +589,11 @@ export function TrafficAnalysis({
 				) : (
 					<>
 						<FilterForm
-							key={`${status.hostname}:${JSON.stringify(conditions)}`}
+							title={analysisTab === "conversions" ? t("conversions.filterTitle") : undefined}
+							key={`${hostname}:${JSON.stringify(conditions)}`}
 							conditions={conditions}
-							hostname={status.hostname}
-							canManage={status.canManage}
+							hostname={combined ? status.availableSites : hostname}
+							canManage={status.canManage && !combined}
 							onApply={(parsed) =>
 								onSearch(
 									scopeChange({
@@ -490,97 +602,112 @@ export function TrafficAnalysis({
 									}),
 								)
 							}
-							onSave={() => setViewDialog({ name: "", conditions })}
+							onSave={() => setViewDialog(newViewDraft(conditions, analysisTab, conversionGoalId))}
 						/>
 						{!dateValid && (
 							<p role="alert" className="text-sm text-destructive">
 								{t("traffic.dateInvalid")}
 							</p>
 						)}
-						{enabled && overview.isPending && <TrafficLoading />}
-						{overview.isError && <TrafficError error={overview.error} retry={() => overview.refetch()} />}
-						{overview.data && enabled && (
+						{analysisTab === "conversions" ? (
+							<ConversionAnalysis
+								key={`${status.propertyId}:${hostname}:${status.connectionRevision}`}
+								brandId={brandId}
+								status={status}
+								request={request}
+								enabled={enabled}
+								search={effectiveSearch}
+								onSearch={onSearch}
+							/>
+						) : (
 							<>
-								<div className="flex flex-wrap items-center justify-between gap-3">
-									<p className="text-xs text-muted-foreground">
-										{from} – {to} · {timeZone}
-									</p>
-									<div className="flex items-center gap-2">
-										<GrainToggle value={grain} onChange={(v) => onSearch({ grain: v })} />
-										<Button
-											variant="ghost"
-											size="icon"
-											aria-label={t("traffic.retry")}
-											disabled={overview.isFetching}
-											onClick={() => {
-												void overview.refetch();
-												void pages.refetch();
+								{enabled && overview.isPending && <TrafficLoading />}
+								{overview.isError && <TrafficError error={overview.error} retry={() => overview.refetch()} />}
+								{overview.data && enabled && (
+									<>
+										<div className="flex flex-wrap items-center justify-between gap-3">
+											<p className="text-xs text-muted-foreground">
+												{from} – {to} · {timeZone}
+											</p>
+											<div className="flex items-center gap-2">
+												<GrainToggle value={grain} onChange={(v) => onSearch({ grain: v })} />
+												<Button
+													variant="ghost"
+													size="icon"
+													aria-label={t("traffic.retry")}
+													disabled={overview.isFetching}
+													onClick={() => {
+														void overview.refetch();
+														void pages.refetch();
+													}}
+												>
+													<RefreshCw className="size-4" />
+												</Button>
+											</div>
+										</div>
+										{overview.isFetching && (
+											<p role="status" className="text-xs text-muted-foreground">
+												{t("traffic.updating")}
+											</p>
+										)}
+										<TrafficKpis totals={overview.data.totals} />
+										<QualityNotices warnings={overview.data.warnings} />
+										{overview.data.totals.total === 0 && (
+											<div className="rounded-lg bg-muted/30 p-4 text-sm">
+												<p className="font-medium">{t("traffic.noData")}</p>
+												<p className="mt-1 text-muted-foreground">{t("traffic.noDataHelp")}</p>
+											</div>
+										)}
+										<TrafficChart
+											points={aggregateTrafficPoints(overview.data.points, grain, from, to)}
+											chart={chart}
+											onChartChange={(value) => onSearch({ chart: value })}
+										/>
+										<TrafficPeriodTable
+											data={overview.data}
+											grain={grain}
+											from={from}
+											to={to}
+											onGrainChange={(v) => onSearch({ grain: v })}
+										/>
+									</>
+								)}
+								{enabled && pages.isPending && <TrafficLoading />}
+								{pages.isError && <TrafficError error={pages.error} retry={() => pages.refetch()} />}
+								{pages.data && enabled && (
+									<>
+										<QualityNotices warnings={pages.data.warnings} />
+										<PageTrafficTable
+											key={`${search.pageSearch ?? ""}:${search.pageScope ?? "ai"}`}
+											data={pages.data}
+											hostname={combined ? "" : hostname}
+											query={search.pageSearch ?? ""}
+											pageScope={search.pageScope ?? "ai"}
+											pageSize={search.pageSize ?? 10}
+											grain={grain}
+											from={from}
+											to={to}
+											onSearch={(value) => onSearch({ pageSearch: value || undefined, page: undefined })}
+											onScope={(value) => onSearch({ pageScope: value, page: undefined })}
+											onPageSize={(value) => onSearch({ pageSize: value as 5 | 10 | 25 | 50, page: undefined })}
+											onPage={(value) => onSearch({ page: value })}
+											onDetail={(path, pageHostname) => {
+												detailReturnFocus.current =
+													document.activeElement instanceof HTMLElement ? document.activeElement : null;
+												setSavedFromDetail(undefined);
+												onSearch({ detail: path, detailHostname: pageHostname });
 											}}
-										>
-											<RefreshCw className="size-4" />
-										</Button>
-									</div>
-								</div>
-								{overview.isFetching && (
-									<p role="status" className="text-xs text-muted-foreground">
-										{t("traffic.updating")}
-									</p>
+										/>
+									</>
 								)}
-								<TrafficKpis totals={overview.data.totals} />
-								<QualityNotices warnings={overview.data.warnings} />
-								{overview.data.totals.total === 0 && (
-									<div className="rounded-lg bg-muted/30 p-4 text-sm">
-										<p className="font-medium">{t("traffic.noData")}</p>
-										<p className="mt-1 text-muted-foreground">{t("traffic.noDataHelp")}</p>
-									</div>
-								)}
-								<TrafficChart
-									points={aggregateTrafficPoints(overview.data.points, grain, from, to)}
-									chart={chart}
-									onChartChange={(value) => onSearch({ chart: value })}
-								/>
-								<TrafficPeriodTable
-									data={overview.data}
-									grain={grain}
-									from={from}
-									to={to}
-									onGrainChange={(v) => onSearch({ grain: v })}
-								/>
-							</>
-						)}
-						{enabled && pages.isPending && <TrafficLoading />}
-						{pages.isError && <TrafficError error={pages.error} retry={() => pages.refetch()} />}
-						{pages.data && enabled && (
-							<>
-								<QualityNotices warnings={pages.data.warnings} />
-								<PageTrafficTable
-									key={`${search.pageSearch ?? ""}:${search.pageScope ?? "ai"}`}
-									data={pages.data}
-									query={search.pageSearch ?? ""}
-									pageScope={search.pageScope ?? "ai"}
-									pageSize={search.pageSize ?? 10}
-									grain={grain}
-									from={from}
-									to={to}
-									onSearch={(value) => onSearch({ pageSearch: value || undefined, page: undefined })}
-									onScope={(value) => onSearch({ pageScope: value, page: undefined })}
-									onPageSize={(value) => onSearch({ pageSize: value as 5 | 10 | 25 | 50, page: undefined })}
-									onPage={(value) => onSearch({ page: value })}
-									onDetail={(path) => {
-										detailReturnFocus.current =
-											document.activeElement instanceof HTMLElement ? document.activeElement : null;
-										setSavedFromDetail(undefined);
-										onSearch({ detail: path });
-									}}
-								/>
 							</>
 						)}
 					</>
 				)}
 				<footer className="space-y-2 text-pretty text-xs leading-relaxed text-muted-foreground">
-					<p>{measurement.measurementNote}</p>
+					{analysisTab === "traffic" && <p>{measurement.measurementNote}</p>}
 					<p>{t("traffic.provisional")}</p>
-					{overview.data && (
+					{analysisTab === "traffic" && overview.data && (
 						<p>
 							{t("traffic.lastFetched")}:{" "}
 							{new Intl.DateTimeFormat(UI_LOCALE, { dateStyle: "short", timeStyle: "short", timeZone }).format(
@@ -602,7 +729,7 @@ export function TrafficAnalysis({
 					<SavedViewDialog
 						key={viewDialog.view?.id ?? viewDialog.name}
 						initial={viewDialog}
-						hostname={status.hostname}
+						hostname={hostname}
 						onClose={() => setViewDialog(undefined)}
 						onSave={(value) => saveView(value, viewDialog)}
 					/>
@@ -610,7 +737,7 @@ export function TrafficAnalysis({
 				{manager && (
 					<SavedViewManager
 						views={views.data ?? []}
-						hostname={status.hostname}
+						hostname={hostname}
 						timeZone={timeZone}
 						canManage={status.canManage}
 						onClose={() => setManager(false)}
@@ -624,7 +751,10 @@ export function TrafficAnalysis({
 						}}
 						onDuplicate={(view) => {
 							setManager(false);
-							setViewDialog(duplicateViewDraft(view, t("traffic.copyName", { name: view.name })));
+							setViewDialog({
+								...duplicateViewDraft(view, t("traffic.copyName", { name: view.name })),
+								conversionGoalId: view.hostname === hostname ? view.conversionGoalId : null,
+							});
 						}}
 						onDelete={async (view) => {
 							await deleteTrafficViewFn({ data: { brandId, id: view.id, revision: view.revision } });
@@ -637,21 +767,21 @@ export function TrafficAnalysis({
 						}}
 					/>
 				)}
-				{search.detail?.startsWith("/") && enabled && (
+				{analysisTab === "traffic" && search.detail?.startsWith("/") && enabled && (
 					<PageTrafficDetail
-						key={search.detail}
-						request={request}
+						key={`${search.detailHostname ?? hostname}:${search.detail}`}
+						request={{ ...request, detailHostname: search.detailHostname }}
 						path={search.detail}
-						hostname={status.hostname}
+						hostname={search.detailHostname ?? (combined ? t("traffic.allDomains") : hostname)}
 						timeZone={timeZone}
 						initialGrain={grain}
-						connectionKey={`${status.propertyId}:${status.hostname}:${status.connectionRevision}`}
+						connectionKey={`${status.propertyId}:${status.hostname}:${status.connectionRevision}:${domainScopeKey}`}
 						measurementMode={measurementMode}
 						returnFocus={detailReturnFocus.current}
 						registeredView={savedFromDetail}
 						onOpenRegistered={selectView}
-						canManage={status.canManage}
-						onClose={() => onSearch({ detail: undefined })}
+						canManage={status.canManage && !combined}
+						onClose={() => onSearch({ detail: undefined, detailHostname: undefined })}
 						onRegister={() =>
 							setViewDialog({
 								name: (search.detail ?? "").slice(0, 60),

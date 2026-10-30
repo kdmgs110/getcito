@@ -32,6 +32,7 @@ import {
 	trafficAccessToken,
 	trafficCanManage,
 } from "./traffic-runtime";
+import { resolveTrafficHosts } from "./traffic-scope";
 import { normalizeAnalyticsHostname, openAnalyticsSecret, trafficCacheKey } from "./traffic-security";
 
 const brandInput = z.object({ brandId: z.string().min(1).max(200) });
@@ -164,6 +165,8 @@ async function cachedTraffic<T extends TrafficOverview | TrafficPages>(
 		from: string;
 		to: string;
 		conditions: import("@workspace/lib/analytics").TrafficCondition[];
+		hostname?: string;
+		detailHostname?: string;
 		[key: string]: unknown;
 	},
 	load: (
@@ -172,6 +175,7 @@ async function cachedTraffic<T extends TrafficOverview | TrafficPages>(
 		hostname: string,
 		conditions: import("@workspace/lib/analytics").TrafficCondition[],
 		measurementMode: AnalyticsMeasurementMode,
+		hostnames: string[],
 	) => Promise<T>,
 ): Promise<T> {
 	const { sites } = await requireTrafficAccess(input.brandId);
@@ -180,10 +184,19 @@ async function cachedTraffic<T extends TrafficOverview | TrafficPages>(
 		throw new Error("ANALYTICS_RECONNECT_REQUIRED");
 	if (!sites.includes(connection.hostname)) throw new Error("TRAFFIC_INVALID_SITE");
 	const propertyId = connection.propertyId;
-	const hostname = connection.hostname;
-	const measurementMode = connection.measurementMode ?? "landing_sessions";
-	const conditions = normalizeConditions(input.conditions, connection.hostname);
-	const normalizedInput = { ...input, conditions };
+	const hostnames = resolveTrafficHosts(sites, input.hostname, kind === "detail" ? input.detailHostname : undefined);
+	const hostname = hostnames[0];
+	const measurementMode =
+		hostnames.length > 1 || hostname !== connection.hostname
+			? "observed_session_start"
+			: (connection.measurementMode ?? "landing_sessions");
+	let conditions: import("@workspace/lib/analytics").TrafficCondition[];
+	try {
+		conditions = normalizeConditions(input.conditions, hostnames);
+	} catch {
+		throw new Error("TRAFFIC_INVALID_REQUEST");
+	}
+	const normalizedInput = { ...input, hostname: hostnames.length > 1 ? "all" : hostname, hostnames, conditions };
 	const key = trafficCacheKey(
 		kind,
 		{
@@ -220,6 +233,7 @@ async function cachedTraffic<T extends TrafficOverview | TrafficPages>(
 				hostname,
 				conditions,
 				measurementMode,
+				hostnames,
 			);
 			await assertTrafficRevision(input.brandId, connection.revision);
 			await db
@@ -280,11 +294,12 @@ export const getTrafficOverviewFn = createServerFn({ method: "GET" })
 	.validator(trafficRequestSchema)
 	.handler(
 		({ data }): Promise<TrafficOverview> =>
-			cachedTraffic("overview", data, (accessToken, propertyId, hostname, conditions, measurementMode) =>
+			cachedTraffic("overview", data, (accessToken, propertyId, hostname, conditions, measurementMode, hostnames) =>
 				fetchTrafficOverview({
 					accessToken,
 					propertyId,
 					hostname,
+					hostnames,
 					from: data.from,
 					to: data.to,
 					conditions,
@@ -297,11 +312,12 @@ export const getTrafficPagesFn = createServerFn({ method: "GET" })
 	.validator(trafficPagesRequestSchema)
 	.handler(
 		({ data }): Promise<TrafficPages> =>
-			cachedTraffic("pages", data, (accessToken, propertyId, hostname, conditions, measurementMode) =>
+			cachedTraffic("pages", data, (accessToken, propertyId, hostname, conditions, measurementMode, hostnames) =>
 				fetchTrafficPages({
 					accessToken,
 					propertyId,
 					hostname,
+					hostnames,
 					from: data.from,
 					to: data.to,
 					conditions,
@@ -318,12 +334,18 @@ export const getTrafficPageDetailFn = createServerFn({ method: "GET" })
 	.validator(trafficRequestSchema.safeExtend({ path: z.string().min(1).max(2048) }))
 	.handler(
 		({ data }): Promise<TrafficOverview> =>
-			cachedTraffic("detail", data, (accessToken, propertyId, hostname, conditions, measurementMode) => {
-				const exact = normalizeConditions([{ mode: "include", operator: "exact", value: data.path }], hostname);
+			cachedTraffic("detail", data, (accessToken, propertyId, hostname, conditions, measurementMode, hostnames) => {
+				let exact: import("@workspace/lib/analytics").TrafficCondition[];
+				try {
+					exact = normalizeConditions([{ mode: "include", operator: "exact", value: data.path }], hostnames);
+				} catch {
+					throw new Error("TRAFFIC_INVALID_REQUEST");
+				}
 				return fetchTrafficOverview({
 					accessToken,
 					propertyId,
 					hostname,
+					hostnames,
 					from: data.from,
 					to: data.to,
 					conditions: [...conditions, ...exact],
