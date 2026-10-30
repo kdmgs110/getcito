@@ -1,6 +1,7 @@
 import { t } from "@/i18n";
 
 const warningKeys = {
+	page_titles_unavailable: "traffic.pageTitlesUnavailable",
 	conversion_landing_unavailable: "conversions.pageUnsupported",
 	conversion_landing_unset: "conversions.landingUnset",
 	conversion_rate_metric_unavailable: "conversions.cvrUnavailable",

@@ -49,6 +49,7 @@ const DATA_API = "https://analyticsdata.googleapis.com/v1beta";
 const ADMIN_API = "https://analyticsadmin.googleapis.com/v1beta";
 const ROW_LIMIT = 10_000;
 const MAX_ROWS = 200_000;
+const PAGE_TITLE_ROW_LIMIT = 5_000;
 interface Row {
 	dimensionValues?: { value?: string }[];
 	metricValues?: { value?: string }[];
@@ -297,6 +298,58 @@ export async function fetchTrafficOverview(raw: AnalyticsFetchRequest): Promise<
 	};
 }
 
+/** Event-scoped metadata only: never add pageTitle to session/landing-page reports. */
+async function rankedPageTitles(input: AnalyticsFetchRequest, paths: string[]): Promise<Map<string, string>> {
+	const eligible = new Set(paths.filter((path) => path.startsWith("/")));
+	if (!eligible.size) return new Map();
+	const result = await report(input.accessToken, input.propertyId, {
+		dimensions: [{ name: "pagePath" }, { name: "pageTitle" }],
+		metrics: [{ name: "eventCount" }],
+		dateRanges: [{ startDate: input.from, endDate: input.to }],
+		dimensionFilter: andFilters(
+			stringFilter("hostName", input.hostname, "EXACT", false),
+			stringFilter("platform", "web", "EXACT", false),
+			stringFilter("eventName", "page_view"),
+			{ filter: { fieldName: "pagePath", inListFilter: { values: [...eligible], caseSensitive: true } } },
+		),
+		orderBys: [
+			{ metric: { metricName: "eventCount" }, desc: true },
+			{ dimension: { dimensionName: "pagePath" }, desc: false },
+			{ dimension: { dimensionName: "pageTitle" }, desc: false },
+		],
+		limit: PAGE_TITLE_ROW_LIMIT,
+	});
+	const rows = result.rows ?? [];
+	// A partial title distribution cannot establish the most frequent title.
+	if (
+		metadataWarnings(result).length ||
+		rows.length > PAGE_TITLE_ROW_LIMIT ||
+		(result.rowCount === undefined && rows.length === PAGE_TITLE_ROW_LIMIT) ||
+		(result.rowCount !== undefined && (!Number.isSafeInteger(result.rowCount) || result.rowCount !== rows.length))
+	)
+		throw new AnalyticsError("upstream");
+	const counts = new Map<string, Map<string, number>>();
+	for (const row of rows) {
+		const fields = dimensions(row);
+		if (fields.length !== 2) throw new AnalyticsError("upstream");
+		const [path, rawTitle] = fields;
+		if (!eligible.has(path)) continue;
+		const title = rawTitle.trim().replace(/\s+/g, " ");
+		if (!title || ["(not set)", "(other)"].includes(title.toLowerCase())) continue;
+		const count = sessions(row);
+		if (!Number.isFinite(count)) throw new AnalyticsError("upstream");
+		const titles = counts.get(path) ?? new Map<string, number>();
+		titles.set(title, (titles.get(title) ?? 0) + count);
+		counts.set(path, titles);
+	}
+	return new Map(
+		[...counts].map(([path, titles]) => [
+			path,
+			[...titles].sort(([a, ac], [b, bc]) => bc - ac || (a < b ? -1 : a > b ? 1 : 0))[0][0],
+		]),
+	);
+}
+
 export async function fetchTrafficPages(
 	raw: AnalyticsFetchRequest & { page: number; pageSize: number; pageSearch: string; pageScope: "ai" | "all" },
 ): Promise<TrafficPages> {
@@ -317,7 +370,7 @@ export async function fetchTrafficPages(
 		limit: raw.pageSize,
 	});
 	const paths = (ranked.rows ?? []).map((row) => dimensions(row)[0]);
-	const rows: TrafficPageRow[] = paths.map((path) => ({ path, ...emptyTrafficTotals(), trend: [] }));
+	const rows: TrafficPageRow[] = paths.map((path) => ({ path, title: null, ...emptyTrafficTotals(), trend: [] }));
 	const warnings = new Set(metadataWarnings(ranked));
 	if (input.measurementMode === "observed_session_start") warnings.add("observed_session_start");
 	if (paths.length) {
@@ -360,6 +413,13 @@ export async function fetchTrafficPages(
 			const rankedCount = sessions(ranked.rows?.[index] as Row);
 			if (rankedCount !== (raw.pageScope === "ai" ? row.ai : row.total)) warnings.add("inconsistent_totals");
 			if (row.ai > row.total) warnings.add("inconsistent_totals");
+		}
+		try {
+			const titles = await rankedPageTitles(input, paths);
+			for (const row of rows) row.title = titles.get(row.path) ?? null;
+		} catch {
+			// Optional page-view metadata must not hide successful session reports.
+			warnings.add("page_titles_unavailable");
 		}
 	}
 	return {

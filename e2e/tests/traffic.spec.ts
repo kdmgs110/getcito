@@ -19,6 +19,20 @@ test.describe("GA4 traffic analysis", () => {
 		await expect(page.locator(`a[href='/app/${TRAFFIC_BRAND_ID}/traffic'][data-sidebar='menu-button']`)).toBeVisible();
 		await expect(page.getByText("280", { exact: true }).first()).toBeVisible();
 		await expect(page.getByText("2,800", { exact: true }).first()).toBeVisible();
+		const pageList = page.locator("section").filter({
+			has: page.getByRole("heading", { name: text("ページ別トラフィック", "Traffic by page"), exact: true }),
+		});
+		await expect(
+			pageList.getByRole("columnheader", { name: text("ページタイトル / URL", "Page title / URL") }),
+		).toBeVisible();
+		const engineer = pageList.getByRole("rowheader").filter({ hasText: "エンジニアのフリーランス案件" });
+		await expect(engineer).toContainText("https://example.com/job_listings/engineer/");
+		const title = engineer.locator("span").first();
+		const url = engineer.locator("span").last();
+		expect((await title.boundingBox())?.y).toBeLessThan((await url.boundingBox())?.y ?? 0);
+		await expect(
+			pageList.getByRole("rowheader").filter({ hasText: text("タイトル未取得", "Title unavailable") }),
+		).toContainText("https://example.com/job_listings/marketing/");
 		await page
 			.getByRole("tab", { name: text("月別", "Monthly"), exact: true })
 			.first()

@@ -624,6 +624,7 @@ export function TrafficAnalysis({
 										<PageTrafficTable
 											key={`${search.pageSearch ?? ""}:${search.pageScope ?? "ai"}`}
 											data={pages.data}
+											hostname={status.hostname ?? ""}
 											query={search.pageSearch ?? ""}
 											pageScope={search.pageScope ?? "ai"}
 											pageSize={search.pageSize ?? 10}

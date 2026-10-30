@@ -1,4 +1,10 @@
 export const trafficMessages = {
+	"traffic.pageIdentity": { en: "Page title / URL", ja: "ページタイトル / URL" },
+	"traffic.titleUnavailable": { en: "Title unavailable", ja: "タイトル未取得" },
+	"traffic.pageTitlesUnavailable": {
+		en: "Some page titles could not be retrieved. Traffic counts are still available.",
+		ja: "一部のページタイトルを取得できませんでした。トラフィック数は引き続き確認できます。",
+	},
 	"traffic.observed.noticeTitle": {
 		en: "Session starts recorded on this website",
 		ja: "このサイトのセッション開始（計測分）を表示しています",

@@ -23,6 +23,8 @@ export interface TrafficOverview {
 }
 export interface TrafficPageRow extends TrafficTotals {
 	path: string;
+	/** Most frequent page-view title on this host during the selected period. */
+	title?: string | null;
 	trend: TrafficPoint[];
 }
 export interface TrafficPages {

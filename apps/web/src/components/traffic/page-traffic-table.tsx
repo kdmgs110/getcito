@@ -10,6 +10,7 @@ import { TrafficCard } from "./shared";
 import { useTrafficMeasurement } from "./traffic-measurement";
 export function PageTrafficTable({
 	data,
+	hostname,
 	query,
 	pageScope,
 	pageSize,
@@ -23,6 +24,7 @@ export function PageTrafficTable({
 	onDetail,
 }: {
 	data: TrafficPages;
+	hostname: string;
 	query: string;
 	pageScope: "ai" | "all";
 	pageSize: number;
@@ -93,7 +95,7 @@ export function PageTrafficTable({
 					<thead className="text-xs text-muted-foreground">
 						<tr>
 							{[
-								measurement.path,
+								t("traffic.pageIdentity"),
 								`${measurement.ai}${pageScope === "ai" ? " ↓" : ""}`,
 								`${measurement.total}${pageScope === "all" ? " ↓" : ""}`,
 								measurement.ratio,
@@ -113,9 +115,14 @@ export function PageTrafficTable({
 					<tbody>
 						{data.rows.map((row) => (
 							<tr key={row.path} className="hover:bg-muted/40">
-								<th scope="row" className="max-w-72 border-b px-2 py-3 text-left font-normal">
-									<span className="block truncate" title={row.path}>
-										{row.path === "(not set)" || !row.path ? measurement.unavailablePath : row.path}
+								<th scope="row" className="w-[42%] min-w-64 max-w-lg border-b px-2 py-4 text-left font-normal">
+									<span className="block break-words font-semibold leading-relaxed">
+										{row.title || t("traffic.titleUnavailable")}
+									</span>
+									<span className="mt-1 block break-all text-xs leading-relaxed text-muted-foreground">
+										{hostname && row.path.startsWith("/")
+											? `https://${hostname}${row.path}`
+											: measurement.unavailablePath}
 									</span>
 								</th>
 								<td className="border-b px-2 py-3 text-right font-medium">{formatNumber(row.ai)}</td>

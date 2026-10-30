@@ -36,6 +36,7 @@ function reportMarkup(mode: AnalyticsMeasurementMode) {
 			<TrafficPeriodTable data={overview} grain="day" from="2026-10-01" to="2026-10-28" onGrainChange={() => {}} />
 			<PageTrafficTable
 				data={pages}
+				hostname="example.com"
 				query=""
 				pageScope="ai"
 				pageSize={10}
@@ -69,7 +70,7 @@ describe("traffic measurement semantics", () => {
 			"traffic.observed.periodTable",
 			"traffic.observed.pageTable",
 			"traffic.observed.pageTableHelp",
-			"traffic.observed.path",
+			"traffic.pageIdentity",
 		] as const) {
 			expect(markup).toContain(t(key));
 		}
