@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as conversionHelpers from "./conversions";
 import { conversionRequestSchema } from "./conversions";
 import { fetchConversionReport, listGA4KeyEvents } from "./conversions-server";
+import type { GAFilterExpression } from "./filters";
 
 const input = {
 	accessToken: "token",
@@ -221,6 +222,91 @@ describe("GA4 conversion reporting", () => {
 			fetchConversionReport({ ...input, eventScopes: [{ hostname: "example.com", eventNames: ["download"] }] }),
 		).rejects.toMatchObject({ code: "invalid_request" });
 		expect(requests.filter((request) => request.metrics[0].name === "keyEvents")).toHaveLength(0);
+	});
+	it("counts both IDN spellings without admitting other hosts or another host's CV events", async () => {
+		const rails = "rails案件.com";
+		const sap = "sap案件.com";
+		const railsAscii = new URL(`https://${rails}`).hostname;
+		const sapAscii = new URL(`https://${sap}`).hostname;
+		const events = [
+			{ hostName: rails, eventName: "apply", count: 3 },
+			{ hostName: railsAscii, eventName: "apply", count: 5 },
+			{ hostName: sap, eventName: "download", count: 2 },
+			{ hostName: sapAscii, eventName: "download", count: 4 },
+			{ hostName: rails, eventName: "download", count: 100 },
+			{ hostName: sapAscii, eventName: "apply", count: 100 },
+			{ hostName: `sub.${rails}`, eventName: "apply", count: 100 },
+			{ hostName: `${rails}.other.example`, eventName: "apply", count: 100 },
+			{ hostName: "other.example", eventName: "download", count: 100 },
+		];
+		function matches(expression: GAFilterExpression, event: (typeof events)[number]): boolean {
+			if (expression.andGroup) return expression.andGroup.expressions.every((child) => matches(child, event));
+			if (expression.orGroup) return expression.orGroup.expressions.some((child) => matches(child, event));
+			const filter = expression.filter;
+			if (!filter) throw new Error("Expected a host/event filter");
+			const values: Record<string, string> = { hostName: event.hostName, eventName: event.eventName, platform: "web" };
+			const value = values[filter.fieldName];
+			if (filter.inListFilter) {
+				const list = filter.inListFilter;
+				return list.values.some((candidate) =>
+					list.caseSensitive ? value === candidate : value.toLowerCase() === candidate.toLowerCase(),
+				);
+			}
+			const string = filter.stringFilter;
+			if (string?.matchType !== "EXACT") throw new Error("Expected exact matching");
+			return string.caseSensitive ? value === string.value : value.toLowerCase() === string.value.toLowerCase();
+		}
+		mock({
+			keyEvents: [
+				{ name: "properties/123/keyEvents/1", eventName: "apply" },
+				{ name: "properties/123/keyEvents/2", eventName: "download" },
+			],
+			report: (request) =>
+				request.metrics[0].name === "keyEvents"
+					? json({
+							rows: events
+								.filter((event) => matches(request.dimensionFilter as GAFilterExpression, event))
+								.map((event) => row(["20261001", "chatgpt.com", "referral", "Referral", "/"], [event.count])),
+						})
+					: undefined,
+		});
+		const idnInput = {
+			...input,
+			hostname: railsAscii,
+			hostnames: [railsAscii, sap],
+			eventNames: ["apply", "download"],
+			eventScopes: [
+				{ hostname: rails, eventNames: ["apply"] },
+				{ hostname: sapAscii, eventNames: ["download"] },
+			],
+		};
+		expect((await fetchConversionReport(idnInput)).totals).toMatchObject({ cv: 14, aiCv: 14 });
+		const counts = requests.find((request) => request.metrics[0].name === "keyEvents" && request.offset === 0);
+		const hosts: GAFilterExpression[] = [];
+		function collectHostFilters(expression: GAFilterExpression) {
+			if (expression.filter?.fieldName === "hostName") hosts.push(expression);
+			for (const child of expression.andGroup?.expressions ?? expression.orGroup?.expressions ?? [])
+				collectHostFilters(child);
+		}
+		collectHostFilters(counts?.dimensionFilter as GAFilterExpression);
+		expect(hosts).toHaveLength(3);
+		expect(
+			hosts.map((filter) =>
+				[...new Set(events.filter((event) => matches(filter, event)).map((event) => event.hostName))].sort(),
+			),
+		).toEqual(
+			expect.arrayContaining([
+				[rails, railsAscii, sap, sapAscii].sort(),
+				[rails, railsAscii].sort(),
+				[sap, sapAscii].sort(),
+			]),
+		);
+		const countRequests = () => requests.filter((request) => request.metrics[0].name === "keyEvents");
+		const before = countRequests().length;
+		await expect(
+			fetchConversionReport({ ...idnInput, eventScopes: [{ hostname: `sub.${rails}`, eventNames: ["apply"] }] }),
+		).rejects.toMatchObject({ code: "invalid_request" });
+		expect(countRequests()).toHaveLength(before);
 	});
 	it("allocates complete trends only for the selected pages in a year-long report", async () => {
 		const paths = 500;

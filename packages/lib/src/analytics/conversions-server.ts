@@ -13,12 +13,12 @@ import {
 	andFilters,
 	buildPathFilter,
 	type GAFilterExpression,
-	hostnameFilter,
 	normalizeConditions,
 	normalizeHostname,
 	stringFilter,
 	trafficRequestSchema,
 } from "./filters";
+import { ga4HostnameFilter as hostnameFilter } from "./hostnames-server";
 import {
 	AnalyticsError,
 	type AnalyticsFetchRequest,

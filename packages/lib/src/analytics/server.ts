@@ -5,7 +5,6 @@ import {
 	andFilters,
 	buildPathFilter,
 	type GAFilterExpression,
-	hostnameFilter,
 	normalizeConditions,
 	normalizeHostname,
 	stringFilter,
@@ -13,6 +12,7 @@ import {
 	trafficPathDimension,
 	trafficRequestSchema,
 } from "./filters";
+import { ga4HostnameFilter as hostnameFilter } from "./hostnames-server";
 import type {
 	AnalyticsMeasurementMode,
 	AnalyticsProperty,
@@ -269,7 +269,7 @@ async function verifyHostRange(
 	});
 	if ((result.rowCount ?? 0) > 100 || metadataWarnings(result).length) throw new AnalyticsError("unsupported_site");
 	const hosts = (result.rows ?? []).map((row) => dimensions(row)[0]).filter((h) => h && h !== "(not set)");
-	if (hosts.some((h) => h.toLowerCase() !== hostname)) throw new AnalyticsError("unsupported_site");
+	if (hosts.some((h) => normalizeHostname(h) !== hostname)) throw new AnalyticsError("unsupported_site");
 }
 
 export async function fetchTrafficOverview(raw: AnalyticsFetchRequest): Promise<TrafficOverview> {
@@ -611,8 +611,14 @@ export async function verifyAnalyticsPropertySite(
 		}),
 		limit: 2,
 	});
-	if (metadataWarnings(observed).length || (observed.rowCount ?? 0) > 1) throw new AnalyticsError("unsupported_site");
-	if (!(observed.rows ?? []).some((row) => dimensions(row)[0]?.toLowerCase() === hostname && sessions(row) > 0))
+	const observedRows = observed.rows ?? [];
+	if (
+		metadataWarnings(observed).length ||
+		(observed.rowCount ?? 0) > 2 ||
+		observedRows.some((row) => normalizeHostname(dimensions(row)[0]) !== hostname)
+	)
+		throw new AnalyticsError("unsupported_site");
+	if (!observedRows.some((row) => normalizeHostname(dimensions(row)[0]) === hostname && sessions(row) > 0))
 		throw new AnalyticsError("site_mismatch");
 	return "observed_session_start";
 }
@@ -641,7 +647,7 @@ async function checkReportCompatibility(
 		dimensions: dimensions.map((name) => ({ name })),
 		metrics: [{ name: "sessions" }],
 		dimensionFilter: andFilters(
-			stringFilter("hostName", hostname, "EXACT", false),
+			hostnameFilter([hostname]),
 			...(measurementMode === "observed_session_start"
 				? [stringFilter("eventName", "session_start"), stringFilter("platform", "web", "EXACT", false)]
 				: []),

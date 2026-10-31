@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { AnalyticsMeasurementMode, TrafficCondition } from "./types";
 
 export const FILTER_SCHEMA_VERSION = 1;
-export const ANALYTICS_MEASUREMENT_VERSION = 1;
+export const ANALYTICS_MEASUREMENT_VERSION = 2;
 export function trafficPathDimension(mode: AnalyticsMeasurementMode = "landing_sessions"): "landingPage" | "pagePath" {
 	return mode === "observed_session_start" ? "pagePath" : "landingPage";
 }
