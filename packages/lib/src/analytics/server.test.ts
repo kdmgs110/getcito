@@ -71,6 +71,56 @@ function mockReports(
 }
 
 describe("GA4 traffic reports", () => {
+	it("binds and reads a Unicode GA4 hostname using its ASCII stream domain", async () => {
+		const requests: Request[] = [];
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (url: string, init?: RequestInit) => {
+				if (url.includes("dataStreams"))
+					return json({ dataStreams: [{ webStreamData: { defaultUri: "https://Rails案件.com/" } }] });
+				if (url.includes(":checkCompatibility")) return json(compatibleFields());
+				if (!url.includes(":runReport")) return json({ timeZone: "Asia/Tokyo" });
+				const request = JSON.parse(init?.body as string) as Request;
+				requests.push(request);
+				if (request.dimensions[0].name === "hostName") return json({ rows: [row(["rails案件.com"], 20)], rowCount: 1 });
+				return json({
+					rows:
+						request.dimensions.length === 1
+							? [row(["20261001"], 20)]
+							: [row(["20261001", "chatgpt.com", "referral", "Referral"], 3)],
+					rowCount: 1,
+				});
+			}),
+		);
+		await expect(verifyAnalyticsPropertySite("token", "123", "xn--rails-qn2hn62m.com")).resolves.toBe(
+			"landing_sessions",
+		);
+		const report = await fetchTrafficOverview({ ...input, hostname: "xn--rails-qn2hn62m.com" });
+		expect(report.totals).toMatchObject({ ai: 3, total: 20 });
+		for (const request of requests.filter((r) => r.dimensionFilter)) {
+			expect(JSON.stringify(request.dimensionFilter)).toContain('"values":["rails案件.com","xn--rails-qn2hn62m.com"]');
+		}
+	});
+	it("accepts two IDN spellings in observed proof but rejects an unrelated host", async () => {
+		for (const unrelated of [false, true]) {
+			vi.stubGlobal(
+				"fetch",
+				vi.fn(async (url: string) => {
+					if (url.includes("dataStreams"))
+						return json({ dataStreams: [{ webStreamData: { defaultUri: "https://old.example/" } }] });
+					if (url.includes(":checkCompatibility")) return json(compatibleFields());
+					if (!url.includes(":runReport")) return json({ timeZone: "Asia/Tokyo" });
+					return json({
+						rows: [row(["rails案件.com"], 5), row([unrelated ? "other.example" : "xn--rails-qn2hn62m.com"], 3)],
+						rowCount: 2,
+					});
+				}),
+			);
+			const proof = verifyAnalyticsPropertySite("token", "123", "xn--rails-qn2hn62m.com");
+			if (unrelated) await expect(proof).rejects.toMatchObject({ code: "unsupported_site" });
+			else await expect(proof).resolves.toBe("observed_session_start");
+		}
+	});
 	it("queries a deduplicated host union once for each combined total rather than adding host sessions", async () => {
 		const requests: Request[] = [];
 		vi.stubGlobal(

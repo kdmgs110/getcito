@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ConversionMetrics, ConversionPeriod } from "./conversion-types";
 import { trafficRequestSchema } from "./filters";
 import { AI_PROVIDERS } from "./types";
-export const CONVERSION_MEASUREMENT_VERSION = 2;
+export const CONVERSION_MEASUREMENT_VERSION = 3;
 export const conversionEventNameSchema = z
 	.string()
 	.min(1)
