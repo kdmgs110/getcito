@@ -23,6 +23,7 @@ import type { z } from "zod";
 import {
 	getProvider,
 	type Provider,
+	type ProviderOptions,
 	parseScrapeTargets,
 	type StructuredResearchResult,
 	withProviderCallTracking,
@@ -117,14 +118,25 @@ export function resolveResearchProvider(env: Record<string, string | undefined> 
  * heavy lifting (web search, structured outputs, retry) lives inside each
  * provider's `runStructuredResearch` impl — we just pick the provider.
  */
-export async function runStructuredResearchPrompt<T>(prompt: string, schema: z.ZodType<T>): Promise<T> {
+export async function runStructuredResearchPrompt<T>(
+	prompt: string,
+	schema: z.ZodType<T>,
+	locale: Pick<ProviderOptions, "targetLanguage" | "targetMarket"> = {},
+): Promise<T> {
 	const { provider, version } = resolveResearchProvider();
 	if (!provider.runStructuredResearch) {
 		throw new Error(`Provider "${provider.id}" does not implement structured research`);
 	}
 	const result = await withProviderCallTracking(
 		{ provider: provider.id, model: version ?? provider.id, kind: "research" },
-		() => provider.runStructuredResearch!({ prompt, schema, version }),
+		() =>
+			provider.runStructuredResearch!({
+				prompt,
+				schema,
+				version,
+				targetLanguage: locale.targetLanguage,
+				targetMarket: locale.targetMarket,
+			}),
 	);
 	return result.object;
 }
@@ -141,12 +153,20 @@ export async function runStructuredResearchPrompt<T>(prompt: string, schema: z.Z
 export async function runStructuredCompletionPrompt<T>(
 	prompt: string,
 	schema: z.ZodType<T>,
+	locale: Pick<ProviderOptions, "targetLanguage" | "targetMarket"> = {},
 ): Promise<StructuredResearchResult<T>> {
 	const { provider, version } = resolveResearchProvider();
 	if (!provider.runStructuredResearch) {
 		throw new Error(`Provider "${provider.id}" does not implement structured research`);
 	}
 	return withProviderCallTracking({ provider: provider.id, model: version ?? provider.id, kind: "research" }, () =>
-		provider.runStructuredResearch!({ prompt, schema, version, webSearch: false }),
+		provider.runStructuredResearch!({
+			prompt,
+			schema,
+			version,
+			webSearch: false,
+			targetLanguage: locale.targetLanguage,
+			targetMarket: locale.targetMarket,
+		}),
 	);
 }

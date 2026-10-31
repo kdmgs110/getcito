@@ -1,5 +1,9 @@
 import Olostep from "olostep";
 import { z } from "zod";
+import { resolveBrandLocale } from "../../brand-locale";
+import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
+import type { Citation } from "../../text-extraction";
+import { createGate } from "../concurrency";
 import type {
 	ModelConfig,
 	Provider,
@@ -8,21 +12,11 @@ import type {
 	StructuredResearchOptions,
 	StructuredResearchResult,
 } from "../types";
-import type { Citation } from "../../text-extraction";
-import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
-import { BRIGHTDATA_COUNTRIES } from "../../brightdata-locations";
-import { createGate } from "../concurrency";
-import { DATAFORSEO_LOCATION_LANGUAGES } from "../../location-languages";
 
-function getLanguageCode(languageName: string): string | undefined {
-	for (const languages of Object.values(DATAFORSEO_LOCATION_LANGUAGES)) {
-		const match = languages.find((l) => l.name === languageName);
-		if (match) return match.code;
-	}
-	return undefined;
-}
-
-const OLOSTEP_PARSERS: Record<string, { parserId: string; urlTemplate: (q: string, lang?: string) => string; credits: number }> = {
+const OLOSTEP_PARSERS: Record<
+	string,
+	{ parserId: string; urlTemplate: (q: string, lang?: string) => string; credits: number }
+> = {
 	chatgpt: {
 		parserId: "@olostep/chatgpt-results",
 		// `hints=search` is the URL OpenAI hands out for using ChatGPT as a browser
@@ -35,12 +29,12 @@ const OLOSTEP_PARSERS: Record<string, { parserId: string; urlTemplate: (q: strin
 	},
 	"google-ai-mode": {
 		parserId: "@olostep/google-aimode-results",
-		urlTemplate: (q, lang) => `https://google.com/aimode?q=${encodeURIComponent(q)}${lang ? `&hl=${lang}` : ''}`,
+		urlTemplate: (q, lang) => `https://google.com/aimode?q=${encodeURIComponent(q)}${lang ? `&hl=${lang}` : ""}`,
 		credits: 3,
 	},
 	"google-ai-overview": {
 		parserId: "@olostep/google-ai-overview-results",
-		urlTemplate: (q, lang) => `https://www.google.com/search?q=${encodeURIComponent(q)}${lang ? `&hl=${lang}` : ''}`,
+		urlTemplate: (q, lang) => `https://www.google.com/search?q=${encodeURIComponent(q)}${lang ? `&hl=${lang}` : ""}`,
 		credits: 3,
 	},
 	gemini: {
@@ -176,7 +170,7 @@ function extractCitationsFromOlostep(data: any): Citation[] {
 		const url = typeof source === "string" ? source : source?.url;
 		if (!url || typeof url !== "string") continue;
 		try {
-			// Some search engines return relative URLs like "/goto?url=..." 
+			// Some search engines return relative URLs like "/goto?url=..."
 			// Providing a base URL prevents new URL() from throwing ERR_INVALID_URL
 			const parsed = new URL(url, "https://google.com");
 			citations.push({
@@ -269,43 +263,48 @@ export const olostep: Provider = {
 		const parserConfig = OLOSTEP_PARSERS[model];
 		if (!parserConfig) throw new Error(`Olostep does not support model "${model}"`);
 
-		// `targetLanguage` holds a display name ("English"), never an ISO code, so
-		// the old `!== "en"` test matched every brand and appended a redundant
-		// "respond in English" line to English prompts. Compare the resolved code.
-		const targetLanguage = _options?.targetLanguage;
-		const langCode = targetLanguage ? getLanguageCode(targetLanguage) : undefined;
+		const locale = resolveBrandLocale(_options);
+		const targetLanguage = locale.languageName;
+		const langCode = locale.languageCode;
 		const finalPrompt =
-			targetLanguage && langCode !== "en" && model !== "google-ai-mode" && model !== "google-ai-overview"
+			targetLanguage && model !== "google-ai-mode" && model !== "google-ai-overview"
 				? `${prompt}\nPlease provide your response in ${targetLanguage}.`
 				: prompt;
 
 		const client = getClient();
 		const url = parserConfig.urlTemplate(finalPrompt, langCode);
 
-		const country = _options?.targetMarket ? BRIGHTDATA_COUNTRIES[_options.targetMarket] : undefined;
+		const country = locale.countryCode?.toLowerCase();
 
 		// The gate spans creation through retrieval, not just creation: the wait is
 		// the scarce resource, so holding a slot only while enqueuing would bound
 		// nothing.
 		const retrieved = await gate(async () => {
 			// Use batch API — the /scrapes endpoint doesn't support all parsers
-			const batch = await client.batches.create([{ url, customId: "1" }], {
-				parser: { id: parserConfig.parserId },
-				...(country && { country }),
-			}).catch((error: unknown) => {
-				// Name the parser: a status that only one parser gets back is a
-				// parser problem, not the outage the SDK's message implies.
-				throw new Error(
-					`Olostep rejected batch for ${model} (parser ${parserConfig.parserId}): ${
-						error instanceof Error ? error.message : String(error)
-					}${describeOlostepError(error)}`,
-					{ cause: error },
-				);
-			});
+			const batch = await client.batches
+				.create([{ url, customId: "1" }], {
+					parser: { id: parserConfig.parserId },
+					...(country && { country }),
+				})
+				.catch((error: unknown) => {
+					// Name the parser: a status that only one parser gets back is a
+					// parser problem, not the outage the SDK's message implies.
+					throw new Error(
+						`Olostep rejected batch for ${model} (parser ${parserConfig.parserId}): ${
+							error instanceof Error ? error.message : String(error)
+						}${describeOlostepError(error)}`,
+						{ cause: error },
+					);
+				});
 
 			await Promise.race([
 				batch.waitTillDone({ checkEveryNSecs: 5, timeoutSeconds: BATCH_TIMEOUT_SECONDS }),
-				new Promise((_, reject) => setTimeout(() => reject(new Error(`Olostep batch waitTillDone hard timeout for ${model}`)), BATCH_HARD_TIMEOUT_MS))
+				new Promise((_, reject) =>
+					setTimeout(
+						() => reject(new Error(`Olostep batch waitTillDone hard timeout for ${model}`)),
+						BATCH_HARD_TIMEOUT_MS,
+					),
+				),
 			]);
 
 			// The item listing can lag the batch's own status, so an immediate read
@@ -338,8 +337,7 @@ export const olostep: Provider = {
 		});
 
 		const jsonContent = retrieved.json_content;
-		const parsed =
-			typeof jsonContent === "string" ? JSON.parse(jsonContent) : (jsonContent ?? retrieved);
+		const parsed = typeof jsonContent === "string" ? JSON.parse(jsonContent) : (jsonContent ?? retrieved);
 
 		const webQueries = extractWebQueries(parsed);
 		const citations = extractCitationsFromOlostep(parsed);
@@ -386,13 +384,13 @@ export const olostep: Provider = {
 		prompt,
 		schema,
 		version,
+		targetLanguage,
+		targetMarket,
 	}: StructuredResearchOptions<T>): Promise<StructuredResearchResult<T>> {
 		const model = version && OLOSTEP_PARSERS[version] ? version : "chatgpt";
 		const jsonSchema = z.toJSONSchema(schema as z.ZodType);
 		const trimmed =
-			prompt.length > MAX_RESEARCH_PROMPT_CHARS
-				? `${prompt.slice(0, MAX_RESEARCH_PROMPT_CHARS)}\n[truncated]`
-				: prompt;
+			prompt.length > MAX_RESEARCH_PROMPT_CHARS ? `${prompt.slice(0, MAX_RESEARCH_PROMPT_CHARS)}\n[truncated]` : prompt;
 		const instruction = `${trimmed}\n\nReply with ONLY a single JSON object matching this JSON Schema. No prose, no markdown fences.\n${JSON.stringify(jsonSchema)}`;
 
 		let lastError: unknown;
@@ -402,6 +400,7 @@ export const olostep: Provider = {
 				attempt === 0
 					? instruction
 					: `${instruction}\n\nA previous attempt returned text that was not valid JSON. Output the JSON object and nothing else.`,
+				{ targetLanguage, targetMarket, webSearch: true },
 			);
 			try {
 				return {

@@ -1,3 +1,4 @@
+import { resolveBrandLocale } from "../../brand-locale";
 import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
 import { type Citation, cloroAnswer, extractCitationsFromCloro, extractTextFromCloro } from "../../text-extraction";
 import { localeCountryCode } from "../locale";
@@ -209,11 +210,19 @@ export const cloro: Provider = {
 			throw new Error(`Cloro: no task mapping for model "${model}". Supported: ${Object.keys(CLORO_TASKS).join(", ")}`);
 		}
 
-		// Cloro localizes natively, so the brand's target market goes on the request
-		// rather than into a system message the way the chat-completion providers
-		// have to do it.
+		const locale = resolveBrandLocale(options);
+		// Cloro documents a country but no language parameter for Google tasks.
+		// Appending a language instruction would change the actual search query.
+		if (locale.languageName && model.startsWith("google-ai-")) {
+			throw new Error(
+				"Cloro Google engines do not support explicit language targeting; choose DataForSEO, BrightData or Olostep",
+			);
+		}
+		const localizedPrompt = locale.languageName
+			? `${prompt}\nPlease provide your response in ${locale.languageName}.`
+			: prompt;
 		const payload: Record<string, any> = {
-			[task.field]: prompt,
+			[task.field]: localizedPrompt,
 			country: localeCountryCode(options) ?? CLORO_DEFAULT_COUNTRY,
 		};
 		if (task.include) payload.include = task.include;

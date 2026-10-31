@@ -1,3 +1,4 @@
+import { normalizeBrandLocale } from "@workspace/lib/brand-locale";
 import { db } from "@workspace/lib/db/db";
 import { reports, type Brand, brands, competitors as competitorsSchema, prompts as promptsSchema, promptRuns as promptRunsSchema } from "@workspace/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
@@ -56,6 +57,8 @@ export interface ReportJobData {
 	brandId?: string;
 	useExistingData?: boolean;
 	manualCompetitors?: { name: string; domain: string }[];
+	targetLanguage?: string | null;
+	targetMarket?: string | null;
 }
 
 export interface ReportJobContext {
@@ -219,6 +222,7 @@ async function runPrompt(
 	competitors: CompetitorResult[],
 	scrapeConfigs: ModelConfig[],
 	job: ReportJobContext,
+	locale: { targetLanguage: string | null; targetMarket: string | null },
 ): Promise<PromptRunResult> {
 	const runOne = async (config: ModelConfig) => {
 		try {
@@ -231,6 +235,8 @@ async function runPrompt(
 					providerImpl.run(config.model, promptValue, {
 						webSearch: config.webSearch,
 						version: config.version,
+						targetLanguage: locale.targetLanguage ?? undefined,
+						targetMarket: locale.targetMarket ?? undefined,
 					}),
 			);
 			const { brandMentioned, competitorsMentioned } = analyzeMentions(
@@ -286,6 +292,10 @@ export async function processReportJob(job: ReportJobContext) {
 	}
 
 	try {
+		const storedBrand = brandId ? await db.query.brands.findFirst({ where: eq(brands.id, brandId) }) : undefined;
+		if (brandId && !storedBrand) throw new Error("BRAND_NOT_FOUND");
+		const locale = normalizeBrandLocale(storedBrand ?? job.data);
+
 		// Update report status to processing
 		await db.update(reports).set({ status: "processing", updatedAt: new Date() }).where(eq(reports.id, reportId));
 
@@ -329,7 +339,7 @@ export async function processReportJob(job: ReportJobContext) {
 			existingPrompts = dbPrompts
 				.filter(p => p.enabled)
 				.map(p => ({
-					prompt: p.value.toLowerCase().trim(),
+					prompt: p.value.trim(),
 					brandedPrompt: isPromptBranded(p.value, brandName, brandWebsite),
 				}));
 		}
@@ -338,6 +348,7 @@ export async function processReportJob(job: ReportJobContext) {
 		if (competitors.length === 0 || needsAiPrompts) {
 			job.log(`Analyzing brand: ${brandWebsite} (fallback/AI)`);
 			suggestion = await analyzeBrand({
+				...locale,
 				website: brandWebsite,
 				brandName,
 				// Always ask for candidate prompts to prevent LLM from returning empty responses entirely
@@ -356,7 +367,7 @@ export async function processReportJob(job: ReportJobContext) {
 		// Step 2: Build candidate prompt list — manual override or analyzeBrand output
 		const candidatePrompts: { prompt: string; brandedPrompt: boolean }[] = useManualPrompts
 			? manualPrompts.map((prompt) => ({
-					prompt: prompt.toLowerCase().trim(),
+					prompt: prompt.trim(),
 					brandedPrompt: isPromptBranded(prompt, brandName, brandWebsite),
 				}))
 			: existingPrompts.length > 0
@@ -417,7 +428,7 @@ export async function processReportJob(job: ReportJobContext) {
 			}
 
 			for (const candidate of candidatePrompts) {
-				const pid = promptIdMap.get(candidate.prompt);
+				const pid = promptIdMap.get(candidate.prompt.toLowerCase());
 				if (!pid) {
 					candidateResults.push({
 						promptValue: candidate.prompt,
@@ -466,7 +477,7 @@ export async function processReportJob(job: ReportJobContext) {
 				const batch = candidatePrompts.slice(i, i + batchSize);
 				const batchPromises = batch.map(async (candidate) => {
 					try {
-						const result = await runPrompt(candidate.prompt, brandName, brandWebsite, competitors, scrapeConfigs, job);
+						const result = await runPrompt(candidate.prompt, brandName, brandWebsite, competitors, scrapeConfigs, job, locale);
 						completedCandidates++;
 						const progress = 40 + (completedCandidates / totalCandidates) * 30; // 40-70% for testing
 						job.updateProgress(progress);

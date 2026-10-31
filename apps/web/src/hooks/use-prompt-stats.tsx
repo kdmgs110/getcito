@@ -3,21 +3,22 @@ import { getPromptStatsFn } from "@/server/prompts";
 
 export const promptStatsKeys = {
 	all: ["prompt-stats"] as const,
-	detail: (promptId: string, days: number, endDate?: string) =>
-		[...promptStatsKeys.all, promptId, days, endDate ?? null] as const,
+	detail: (promptId: string, days: number, endDate?: string, language = "all") =>
+		[...promptStatsKeys.all, promptId, days, endDate ?? null, language] as const,
 };
 
-export function usePromptStats(promptId?: string, options?: { days?: number; endDate?: string }) {
+export function usePromptStats(promptId?: string, options?: { days?: number; endDate?: string; language?: string }) {
 	const days = options?.days || 7;
 	const endDate = options?.endDate;
+	const language = options?.language ?? "all";
 
 	const query = useQuery({
-		queryKey: promptStatsKeys.detail(promptId || "", days, endDate),
-		queryFn: () => getPromptStatsFn({ data: { promptId: promptId!, days, endDate } }),
+		queryKey: promptStatsKeys.detail(promptId || "", days, endDate, language),
+		queryFn: () => getPromptStatsFn({ data: { promptId: promptId!, days, endDate, language } }),
 		enabled: !!promptId,
 		staleTime: 30_000,
 		refetchOnWindowFocus: true,
-		placeholderData: (prev) => prev, // Keep previous data while refetching
+		// A changed language must never show cached totals from the previous selection.
 	});
 
 	return {

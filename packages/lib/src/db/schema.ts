@@ -13,6 +13,7 @@ import {
 	uuid,
 } from "drizzle-orm/pg-core";
 import type { AnalyticsMeasurementMode, TrafficCondition } from "../analytics/types";
+import type { PromptRunRequestContext } from "../prompt-run-context";
 
 // Better-auth tables & relations — re-exported so `import * as schema` sees everything.
 // Source file is auto-generated; run `pnpm run generate:auth-schema` to refresh.
@@ -212,6 +213,8 @@ export const promptRuns = pgTable(
 		provider: text("provider"),
 		version: text("version").notNull(),
 		webSearchEnabled: boolean("web_search_enabled").notNull(),
+		/** Null on historical runs where the requested locale and prompt were not captured. */
+		requestContext: jsonb("request_context").$type<PromptRunRequestContext>(),
 		rawOutput: json("raw_output").notNull(),
 		webQueries: text("web_queries").array().notNull().default([]),
 		brandMentioned: boolean("brand_mentioned").notNull(),

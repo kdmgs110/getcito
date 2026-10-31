@@ -1,13 +1,13 @@
 import { z } from "zod";
+import type { Citation } from "../../text-extraction";
+import { localeSystemMessages, localeSystemPrompt } from "../locale";
 import type {
 	Provider,
-	ScrapeResult,
 	ProviderOptions,
+	ScrapeResult,
 	StructuredResearchOptions,
 	StructuredResearchResult,
 } from "../types";
-import type { Citation } from "../../text-extraction";
-import { localeSystemMessages, localeSystemPrompt } from "../locale";
 
 const MISTRAL_BASE_URL = "https://api.mistral.ai";
 const DEFAULT_MODEL = "mistral-medium-latest";
@@ -123,6 +123,8 @@ export const mistralApi: Provider = {
 		schema,
 		version,
 		webSearch = true,
+		targetLanguage,
+		targetMarket,
 	}: StructuredResearchOptions<T>): Promise<StructuredResearchResult<T>> {
 		const jsonSchema = z.toJSONSchema(schema as z.ZodType);
 		const targetModel = version ?? DEFAULT_RESEARCH_MODEL;
@@ -131,7 +133,7 @@ export const mistralApi: Provider = {
 			// Pure completion: plain chat endpoint with server-validated json_schema.
 			const data = await mistralPost("/v1/chat/completions", {
 				model: targetModel,
-				messages: [{ role: "user", content: prompt }],
+				messages: [...localeSystemMessages({ targetLanguage, targetMarket }), { role: "user", content: prompt }],
 				response_format: {
 					type: "json_schema",
 					json_schema: { name: "research_output", strict: true, schema: jsonSchema },
@@ -149,6 +151,9 @@ export const mistralApi: Provider = {
 		const data = await mistralPost("/v1/conversations", {
 			model: targetModel,
 			inputs: prompt,
+			...(localeSystemPrompt({ targetLanguage, targetMarket })
+				? { instructions: localeSystemPrompt({ targetLanguage, targetMarket }) }
+				: {}),
 			tools: [{ type: "web_search" }],
 			completion_args: {
 				response_format: {

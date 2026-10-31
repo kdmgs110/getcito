@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { APP_TIMEZONE } from "@/lib/app-locale";
-import { getQueryFanoutFn } from "@/server/query-fanout";
 import type { LookbackPeriod } from "@/lib/chart-utils";
+import { getQueryFanoutFn } from "@/server/query-fanout";
 
 export interface QueryFanoutFilters {
 	lookback?: LookbackPeriod;
@@ -11,6 +11,7 @@ export interface QueryFanoutFilters {
 	tags?: string[];
 	/** Scope to one prompt (prompt-details Web Queries tab) — lists come back uncapped. */
 	promptId?: string;
+	language?: string;
 }
 
 export const queryFanoutKeys = {
@@ -32,12 +33,14 @@ export function useQueryFanout(brandId?: string, filters?: QueryFanoutFilters) {
 					model: filters?.model,
 					tags: filters?.tags?.join(","),
 					promptId: filters?.promptId,
+					language: filters?.language,
 					timezone: APP_TIMEZONE,
 				},
 			}),
 		enabled: !!resolvedBrandId,
 		staleTime: 30_000,
-		placeholderData: (prev) => prev,
+		placeholderData: (prev, previousQuery) =>
+			(previousQuery?.queryKey[2] as QueryFanoutFilters | undefined)?.language === filters?.language ? prev : undefined,
 	});
 
 	return {

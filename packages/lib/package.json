@@ -17,6 +17,8 @@
     "./auth/client": "./src/auth/client.ts",
     "./auth/permissions": "./src/auth/permissions.ts",
     "./constants": "./src/constants.ts",
+    "./brand-locale": "./src/brand-locale.ts",
+    "./prompt-run-context": "./src/prompt-run-context.ts",
     "./locations": "./src/locations.ts",
     "./languages": "./src/languages.ts",
     "./location-languages": "./src/location-languages.ts",

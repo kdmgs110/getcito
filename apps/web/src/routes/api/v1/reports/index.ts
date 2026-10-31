@@ -7,14 +7,19 @@
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { db } from "@workspace/lib/db/db";
-import { reports, type NewReport } from "@workspace/lib/db/schema";
-import { desc, count, eq } from "drizzle-orm";
+import { type NewReport, reports } from "@workspace/lib/db/schema";
+import { count, desc, eq } from "drizzle-orm";
 import { z } from "zod";
-import { sendReportJob } from "@/lib/job-scheduler";
 import { ApiError, createApiHandler } from "@/lib/api/handler";
+import { sendReportJob } from "@/lib/job-scheduler";
+import { onboardingLocaleSchemaFields } from "@/server/onboarding-locale-schema";
 
 const createReportBody = z.object({
-	brandName: z.string("brandName is required and must be a non-empty string").trim().min(1, "brandName is required and must be a non-empty string"),
+	...onboardingLocaleSchemaFields,
+	brandName: z
+		.string("brandName is required and must be a non-empty string")
+		.trim()
+		.min(1, "brandName is required and must be a non-empty string"),
 	brandWebsite: z
 		.string("brandWebsite is required and must be a non-empty string")
 		.trim()
@@ -57,6 +62,10 @@ export const Route = createFileRoute("/api/v1/reports/")({
 						createdReport.brandName,
 						createdReport.brandWebsite,
 						parsedManualPrompts,
+						undefined,
+						undefined,
+						undefined,
+						{ targetLanguage: body.targetLanguage, targetMarket: body.targetMarket },
 					);
 
 					if (!success) {

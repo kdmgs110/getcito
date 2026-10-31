@@ -12,9 +12,11 @@
  * has to round-trip). The columns used here (`name`, `data`, `state`,
  * `output`, `created_on`) are stable across the pinned pg-boss v12 line.
  */
-import { sql } from "drizzle-orm";
+
+import { normalizeBrandLocale } from "@workspace/lib/brand-locale";
 import { db } from "@workspace/lib/db/db";
 import type { OnboardingSuggestion } from "@workspace/lib/onboarding";
+import { sql } from "drizzle-orm";
 import { getBoss } from "@/lib/boss-client";
 import { extractDomain } from "@/lib/domain-categories";
 
@@ -38,25 +40,32 @@ export interface AnalyzeBrandInput {
 	brandId: string;
 	website: string;
 	brandName?: string;
+	targetLanguage?: string | null;
+	targetMarket?: string | null;
 }
 
 interface JobRow {
 	id: string;
 	state: string;
-	data: { website?: string } | null;
+	data: { website?: string; localeKey?: string } | null;
 	output: unknown;
 }
 
 /** The most recent analyze-brand job for a brand, regardless of state. */
-async function latestJobForBrand(brandId: string): Promise<JobRow | undefined> {
+async function latestJobForBrand(brandId: string, localeKey?: string): Promise<JobRow | undefined> {
 	const result = await db.execute(sql`
 		SELECT id, state, data, output
 		FROM pgboss.job
 		WHERE name = ${ANALYZE_BRAND_QUEUE} AND data->>'brandId' = ${brandId}
+  ${localeKey === undefined ? sql`` : sql`AND data->>'localeKey' = ${localeKey}`}
 		ORDER BY created_on DESC
 		LIMIT 1
 	`);
 	return result.rows[0] as unknown as JobRow | undefined;
+}
+
+export function analysisLocaleKey(locale: { targetLanguage?: string | null; targetMarket?: string | null }): string {
+	return JSON.stringify({ version: 1, ...normalizeBrandLocale(locale) });
 }
 
 const IN_FLIGHT_STATES = new Set(["created", "active", "retry"]);
@@ -81,17 +90,21 @@ export async function enqueueAnalyzeBrand(input: AnalyzeBrandInput): Promise<voi
 	const boss = await getBoss();
 	const domain = extractDomain(input.website);
 
-	const latest = await latestJobForBrand(input.brandId);
+	const localeKey = analysisLocaleKey(input);
+	const latest = await latestJobForBrand(input.brandId, localeKey);
 	if (latest && IN_FLIGHT_STATES.has(latest.state) && extractDomain(latest.data?.website ?? "") === domain) {
 		return;
 	}
 
-	await boss.send(ANALYZE_BRAND_QUEUE, input);
+	await boss.send(ANALYZE_BRAND_QUEUE, { ...input, ...normalizeBrandLocale(input), localeKey });
 }
 
 /** Poll the status/result of the latest brand-analysis job for a brand. */
-export async function getAnalyzeBrandStatus(brandId: string): Promise<AnalyzeBrandStatus> {
-	const job = await latestJobForBrand(brandId);
+export async function getAnalyzeBrandStatus(
+	brandId: string,
+	locale: { targetLanguage?: string | null; targetMarket?: string | null } = {},
+): Promise<AnalyzeBrandStatus> {
+	const job = await latestJobForBrand(brandId, analysisLocaleKey(locale));
 
 	// No job yet — the enqueue may not be visible, or the worker hasn't picked
 	// it up. Either way the client should keep polling.
@@ -117,8 +130,11 @@ export async function getAnalyzeBrandStatus(brandId: string): Promise<AnalyzeBra
  * backs out of the wizard so the worker doesn't keep grinding on a result
  * nobody is waiting for.
  */
-export async function cancelAnalyzeBrand(brandId: string): Promise<void> {
-	const job = await latestJobForBrand(brandId);
+export async function cancelAnalyzeBrand(
+	brandId: string,
+	locale: { targetLanguage?: string | null; targetMarket?: string | null } = {},
+): Promise<void> {
+	const job = await latestJobForBrand(brandId, analysisLocaleKey(locale));
 	if (!job || !IN_FLIGHT_STATES.has(job.state)) {
 		return;
 	}

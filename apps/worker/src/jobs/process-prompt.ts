@@ -1,5 +1,4 @@
 import { getDefaultDelayHours, PROCESS_PROMPT_JOB_POLICY, RUNS_PER_PROMPT } from "@workspace/lib/constants";
-import { failureBackoffHours } from "@workspace/lib/run-backoff";
 import { db } from "@workspace/lib/db/db";
 import {
 	type Brand,
@@ -10,6 +9,7 @@ import {
 	promptRuns,
 	prompts,
 } from "@workspace/lib/db/schema";
+import { buildPromptRunRequestContext, type PromptRunRequestContext } from "@workspace/lib/prompt-run-context";
 import {
 	getProvider,
 	type ModelConfig,
@@ -18,6 +18,7 @@ import {
 	selectTargetsForBrand,
 	withProviderCallTracking,
 } from "@workspace/lib/providers";
+import { failureBackoffHours } from "@workspace/lib/run-backoff";
 import type { Citation } from "@workspace/lib/text-extraction";
 import { eq } from "drizzle-orm";
 import type { Job } from "pg-boss";
@@ -147,6 +148,7 @@ async function savePromptRun(
 	webQueries: string[],
 	brandMentioned: boolean,
 	competitorsMentioned: string[],
+	requestContext: PromptRunRequestContext,
 ): Promise<{ id: string; createdAt: Date }> {
 	const [result] = await db
 		.insert(promptRuns)
@@ -161,6 +163,7 @@ async function savePromptRun(
 			webQueries,
 			brandMentioned,
 			competitorsMentioned,
+			requestContext,
 		})
 		.returning({ id: promptRuns.id, createdAt: promptRuns.createdAt });
 
@@ -210,6 +213,7 @@ async function runModelIteration({
 	runIndex: number;
 }): Promise<void> {
 	const logPrefix = `[${config.model}_${runIndex}]`;
+	const requestContext = buildPromptRunRequestContext(promptValue, brand);
 
 	// Locale and web search silently degrade rather than fail: a provider with no
 	// targetMarket geolocates from its own IP, and webSearch=false (no `:online`
@@ -222,11 +226,11 @@ async function runModelIteration({
 	const result = await withProviderCallTracking(
 		{ provider: providerImpl.id, model: config.model, kind: "run", brandId: brand.id, promptId },
 		() =>
-			providerImpl.run(config.model, promptValue, {
+			providerImpl.run(config.model, requestContext.prompt, {
 				webSearch: config.webSearch,
 				version: config.version,
-				targetMarket: brand.targetMarket ?? undefined,
-				targetLanguage: brand.targetLanguage ?? undefined,
+				targetMarket: requestContext.targetMarket ?? undefined,
+				targetLanguage: requestContext.targetLanguage ?? undefined,
 			}),
 	);
 
@@ -255,6 +259,7 @@ async function runModelIteration({
 		webQueries,
 		brandMentioned,
 		competitorsMentioned,
+		requestContext,
 	);
 	console.log(`${logPrefix} Saved prompt run ${promptRunId}`);
 

@@ -38,6 +38,9 @@ import { extractTextContent } from "@workspace/lib/text-extraction";
 import ReactMarkdown from "react-markdown";
 import { shareOfVoiceColorMap } from "@/lib/share-of-voice-palette";
 import { WebLogo } from "@/components/web-logo";
+import { PromptRunContext } from "@/components/prompt-run-context";
+import { PromptLanguageFilter } from "@/components/prompt-language-filter";
+import { isPromptRunLanguageFilter } from "@/lib/prompt-run-language";
 
 // -------------------------------------------------------------------
 // Types
@@ -66,8 +69,9 @@ const TABS: { key: TabKey; label: string }[] = [
 export const Route = createFileRoute("/_authed/app/$brand/prompts/$promptId")({
 	// `tab` is part of the route's search schema so links can target a specific
 	// tab (e.g. View Details → web-queries). Absent means the default tab.
-	validateSearch: (search: Record<string, unknown>): { tab?: TabKey } => ({
+	validateSearch: (search: Record<string, unknown>): { tab?: TabKey; language?: string } => ({
 		tab: TAB_KEYS.includes(search.tab as TabKey) ? (search.tab as TabKey) : undefined,
+		language: isPromptRunLanguageFilter(search.language) ? search.language : undefined,
 	}),
 	head: ({ matches, match }) => {
 		const appName = getAppName(match);
@@ -92,6 +96,7 @@ function PromptHistoryPage() {
 
 	const activeTab = Route.useSearch({ select: (s) => s.tab ?? "mentions" });
 	const navigate = Route.useNavigate();
+	const language = Route.useSearch({ select: (search) => search.language ?? "all" });
 	const setActiveTab = useCallback(
 		(tab: TabKey) =>
 			navigate({
@@ -114,7 +119,7 @@ function PromptHistoryPage() {
 		isLoading: isStatsLoading,
 		isError: isStatsError,
 		aggregations,
-	} = usePromptStats(shouldFetchStats ? promptId : "", { days, endDate });
+	} = usePromptStats(shouldFetchStats ? promptId : "", { days, endDate, language });
 
 	const shouldFetchRuns = visitedTabs.has("responses");
 	const {
@@ -127,7 +132,12 @@ function PromptHistoryPage() {
 		limit: 15,
 		days,
 		endDate,
+		language,
 	});
+
+	useEffect(() => {
+		setCurrentPage(1);
+	}, [language]);
 
 	// Fetch prompt metadata
 	useEffect(() => {
@@ -286,6 +296,18 @@ function PromptHistoryPage() {
 				)}
 			</div>
 
+			<PromptLanguageFilter
+				language={language}
+				onChange={(value) => {
+					setCurrentPage(1);
+					navigate({
+						search: (previous) => ({ ...previous, language: value === "all" ? undefined : value }),
+						replace: true,
+						resetScroll: false,
+					});
+				}}
+			/>
+
 			{/* TABS */}
 			<div className="border-b border-border">
 				<div className="flex items-end justify-between">
@@ -331,6 +353,7 @@ function PromptHistoryPage() {
 						promptId={promptId}
 						promptValue={promptMeta?.value ?? ""}
 						lookback={lookback}
+						language={language}
 					/>
 				)}
 
@@ -477,16 +500,18 @@ function WebQueriesTab({
 	promptId,
 	promptValue,
 	lookback,
+	language,
 }: {
 	brandId: string;
 	promptId: string;
 	promptValue: string;
 	lookback: ReturnType<typeof useLookbackPeriod>;
+	language: string;
 }) {
 	// Same pipeline as the Query Fan-Out page, scoped to this prompt — echo and
 	// "unavailable" sentinels filtered, and (unlike the brand-wide page) every
 	// variation returned.
-	const { data, isLoading, isError } = useQueryFanout(brandId, { lookback, promptId });
+	const { data, isLoading, isError } = useQueryFanout(brandId, { lookback, promptId, language });
 
 	// query → per-model counts, for the inline "2× ChatGPT" breakdown. byModel
 	// lists are uncapped in single-prompt mode, so every variation resolves.
@@ -673,6 +698,10 @@ function ResponsesTab({
 					</CardHeader>
 					<Separator />
 					<CardContent className="space-y-5">
+						<PromptRunContext
+							context={run.requestContext}
+							responseText={extractTextContent(run.rawOutput, run.provider ?? run.model)}
+						/>
 						{run.webQueries && run.webQueries.length > 0 && (
 							<div>
 								<span className="text-xs text-muted-foreground block mb-1.5">{t("dashboard.webQueries")}</span>

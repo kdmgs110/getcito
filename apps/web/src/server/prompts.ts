@@ -33,6 +33,7 @@ import {
 } from "@/lib/domain-categories";
 import { classifyUrl } from "@/lib/domain-categories.server";
 import { buildGoogleModule } from "@/lib/google-module";
+import { isPromptRunLanguageFilter, promptRunLanguageCondition } from "@/lib/prompt-run-language";
 // Server Functions
 // ============================================================================
 
@@ -232,6 +233,7 @@ export const getPromptStatsFn = createServerFn({ method: "GET" })
 			/** Last day of the window (`YYYY-MM-DD`); defaults to today. A custom
 			 *  lookback range sets it so the window doesn't run up to the present. */
 			endDate: z.string().optional(),
+			language: z.string().refine(isPromptRunLanguageFilter).optional().default("all"),
 		}),
 	)
 	.handler(async ({ data }) => {
@@ -252,7 +254,11 @@ export const getPromptStatsFn = createServerFn({ method: "GET" })
 		const fromDateStr = fromDate.toISOString().split("T")[0];
 		const toDateStr = toDate.toISOString().split("T")[0];
 		const timezone = APP_TIMEZONE;
-		const timeCondition = and(gte(promptRuns.createdAt, fromDate), lte(promptRuns.createdAt, toDate));
+		const timeCondition = and(
+			gte(promptRuns.createdAt, fromDate),
+			lte(promptRuns.createdAt, toDate),
+			promptRunLanguageCondition(promptRuns.requestContext, data.language),
+		);
 
 		// Run aggregation queries in parallel. Web-query stats used to be computed
 		// here too — the Web Queries tab now goes through getQueryFanoutFn instead.
@@ -350,7 +356,7 @@ export const getPromptStatsFn = createServerFn({ method: "GET" })
 		const brandDomains = new Set([primaryBrandDomain, ...additionalBrandDomains].filter(Boolean));
 		const competitorDomains = new Set(competitorsList.flatMap((c) => c.domains.map(extractDomain)).filter(Boolean));
 
-		const urlStats = await getPromptCitationUrlStats(data.promptId, fromDateStr, toDateStr, timezone);
+		const urlStats = await getPromptCitationUrlStats(data.promptId, fromDateStr, toDateStr, timezone, data.language);
 
 		if (urlStats.length > 0) {
 			// Google AI Mode module: Shopping products (brand vs competitor) + search
@@ -459,6 +465,7 @@ export const getPromptRunsFn = createServerFn({ method: "GET" })
 			/** Last day of the window (`YYYY-MM-DD`); defaults to today. A custom
 			 *  lookback range sets it so the window doesn't run up to the present. */
 			endDate: z.string().optional(),
+			language: z.string().refine(isPromptRunLanguageFilter).optional().default("all"),
 		}),
 	)
 	.handler(async ({ data }) => {
@@ -473,7 +480,11 @@ export const getPromptRunsFn = createServerFn({ method: "GET" })
 		const toDate = resolveWindowEnd(data.endDate);
 		const fromDate = new Date(toDate);
 		fromDate.setDate(fromDate.getDate() - data.days);
-		const timeCondition = and(gte(promptRuns.createdAt, fromDate), lte(promptRuns.createdAt, toDate));
+		const timeCondition = and(
+			gte(promptRuns.createdAt, fromDate),
+			lte(promptRuns.createdAt, toDate),
+			promptRunLanguageCondition(promptRuns.requestContext, data.language),
+		);
 
 		const offset = (data.page - 1) * data.limit;
 

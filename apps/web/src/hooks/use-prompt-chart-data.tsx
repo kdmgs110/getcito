@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { APP_TIMEZONE } from "@/lib/app-locale";
 import { getPromptChartDataFn } from "@/server/prompts";
@@ -31,16 +31,13 @@ export interface PromptChartDataResponse {
 	modelWebQueryMappings: Record<string, Record<string, string>>;
 }
 
-export function usePromptChartData(
-	brandId: string | undefined,
+export function promptChartQueryOptions(
+	resolvedBrandId: string | undefined,
 	promptId: string,
 	filters?: PromptChartDataFilters,
 	enabled: boolean = true,
 ) {
-	const params = useParams({ strict: false });
-	const resolvedBrandId = brandId || (params && "brand" in params ? (params.brand as string) : undefined);
-
-	const { data, error, isLoading, refetch } = useQuery({
+	return queryOptions({
 		queryKey: ["promptChartData", resolvedBrandId, promptId, filters],
 		queryFn: () =>
 			getPromptChartDataFn({
@@ -55,9 +52,26 @@ export function usePromptChartData(
 			}),
 		enabled: enabled && !!resolvedBrandId,
 		staleTime: 60_000,
+		refetchOnWindowFocus: true,
+		refetchOnReconnect: true,
+		refetchInterval: 60_000,
 		retry: 3,
 		placeholderData: (prev) => prev, // Keep previous data while refetching with new filters
 	});
+}
+
+export function usePromptChartData(
+	brandId: string | undefined,
+	promptId: string,
+	filters?: PromptChartDataFilters,
+	enabled: boolean = true,
+) {
+	const params = useParams({ strict: false });
+	const resolvedBrandId = brandId || (params && "brand" in params ? (params.brand as string) : undefined);
+
+	const { data, error, isLoading, refetch } = useQuery(
+		promptChartQueryOptions(resolvedBrandId, promptId, filters, enabled),
+	);
 
 	return {
 		chartData: data as PromptChartDataResponse | undefined,

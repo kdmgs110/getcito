@@ -1,19 +1,19 @@
-import { t } from "@/i18n";
 /**
  * /app/$brand/settings/prompts - Prompt management page
  *
  * Editor to add/edit/remove prompts.
  */
 import { createFileRoute } from "@tanstack/react-router";
-import { getAppName, getBrandName, buildTitle } from "@/lib/route-head";
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
-import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { db } from "@workspace/lib/db/db";
 import { prompts } from "@workspace/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { PromptsEditor } from "@/components/prompts-editor";
 import { Skeleton } from "@workspace/ui/components/skeleton";
+import { desc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { PromptsEditor } from "@/components/prompts-editor";
+import { t } from "@/i18n";
+import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
+import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
 
 const getPromptsForEditing = createServerFn({ method: "GET" })
 	.validator(z.object({ brandId: z.string() }))
@@ -79,6 +79,7 @@ function PromptsSettingsPage() {
 
 	return (
 		<PromptsEditor
+			key={brandId}
 			initialPrompts={brandPrompts}
 			brandId={brandId}
 			brandName={brand?.name}

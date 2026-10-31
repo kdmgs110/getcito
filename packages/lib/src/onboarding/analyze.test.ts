@@ -1,19 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 // Mock the LLM and excerpt modules so the test exercises only normalization.
 vi.mock("./llm", () => ({
-	resolveResearchTarget: vi.fn(() => ({
-		provider: { id: "anthropic-api", isConfigured: () => true } as any,
-		model: "claude-sonnet-4-6",
-	})),
 	runStructuredResearchPrompt: vi.fn(),
+	runStructuredCompletionPrompt: vi.fn(),
 }));
 vi.mock("../website-excerpt", () => ({
 	getWebsiteExcerpt: vi.fn(async () => ""),
 }));
 
-import { runStructuredResearchPrompt } from "./llm";
-import { analyzeBrand } from "./analyze";
+import { analyzeBrand, analyzeBrandInfo, analyzeCompetitors, analyzePrompts, translatePrompts } from "./analyze";
+import { runStructuredCompletionPrompt, runStructuredResearchPrompt } from "./llm";
 
 afterEach(() => {
 	vi.clearAllMocks();
@@ -21,7 +19,7 @@ afterEach(() => {
 
 describe("analyzeBrand", () => {
 	it("normalizes brand fields, dedupes domains, and filters self-referential competitors", async () => {
-		(runStructuredResearchPrompt as any).mockResolvedValueOnce({
+		vi.mocked(runStructuredResearchPrompt).mockResolvedValueOnce({
 			brandName: "Acme",
 			additionalDomains: ["acme.co.uk", "ACME.COM", "acme.de"],
 			// Aliases containing "Acme" are redundant under substring mention
@@ -74,7 +72,7 @@ describe("analyzeBrand", () => {
 	});
 
 	it("falls back to inferred brand name when LLM omits it", async () => {
-		(runStructuredResearchPrompt as any).mockResolvedValueOnce({
+		vi.mocked(runStructuredResearchPrompt).mockResolvedValueOnce({
 			brandName: "",
 			additionalDomains: [],
 			aliases: [],
@@ -87,7 +85,7 @@ describe("analyzeBrand", () => {
 	});
 
 	it("respects maxCompetitors=0 / maxPrompts=0", async () => {
-		(runStructuredResearchPrompt as any).mockResolvedValueOnce({
+		vi.mocked(runStructuredResearchPrompt).mockResolvedValueOnce({
 			brandName: "Acme",
 			additionalDomains: [],
 			aliases: [],
@@ -105,7 +103,7 @@ describe("analyzeBrand", () => {
 	});
 
 	it("caps competitors and prompts at the requested maxes", async () => {
-		(runStructuredResearchPrompt as any).mockResolvedValueOnce({
+		vi.mocked(runStructuredResearchPrompt).mockResolvedValueOnce({
 			brandName: "Acme",
 			additionalDomains: [],
 			aliases: [],
@@ -127,5 +125,91 @@ describe("analyzeBrand", () => {
 		});
 		expect(result.competitors).toHaveLength(3);
 		expect(result.suggestedPrompts).toHaveLength(5);
+	});
+});
+
+describe("localized generation", () => {
+	it.each([
+		["combined brand analysis", analyzeBrand],
+		["brand information", analyzeBrandInfo],
+		["competitor regeneration", analyzeCompetitors],
+	] as const)("forwards the selected locale through %s", async (_name, generate) => {
+		vi.mocked(runStructuredResearchPrompt).mockResolvedValueOnce({
+			brandName: "Rails",
+			additionalDomains: [],
+			aliases: [],
+			competitors: [],
+			suggestedPrompts: [{ prompt: "Railsの案件を探すには？", tags: ["案件"] }],
+		});
+		const result = await generate({
+			website: "rails.example.com",
+			brandName: "Rails",
+			targetLanguage: "ja",
+			targetMarket: "JP",
+		});
+		expect(vi.mocked(runStructuredResearchPrompt).mock.calls[0][2]).toMatchObject({
+			targetLanguage: "Japanese",
+			targetMarket: "Japan",
+		});
+		if ("suggestedPrompts" in result && Array.isArray(result.suggestedPrompts)) expect(result.suggestedPrompts[0].prompt).toBe("Railsの案件を探すには？");
+	});
+
+	it("generates Japanese questions and preserves technical names and Japanese tags", async () => {
+		vi.mocked(runStructuredResearchPrompt).mockResolvedValueOnce({
+			suggestedPrompts: [{ prompt: "Railsのフリーランス案件を探せるサイトは？", tags: ["案件選び"] }],
+		});
+		const result = await analyzePrompts({
+			website: "rails.example.com",
+			brandName: "Rails案件.com",
+			targetLanguage: "ja-JP",
+			targetMarket: "JP",
+		});
+		expect(result.suggestedPrompts).toEqual([
+			{ prompt: "Railsのフリーランス案件を探せるサイトは？", tags: ["案件選び"] },
+		]);
+		const [instructions, schema, locale] = vi.mocked(runStructuredResearchPrompt).mock.calls[0];
+		expect(instructions).toContain("候補の質問文・説明文は日本語で作成");
+		expect(locale).toMatchObject({ targetLanguage: "Japanese", targetMarket: "Japan" });
+		const promptDescription = JSON.stringify(z.toJSONSchema(schema));
+		expect(promptDescription).toContain("日本語で自然な");
+		expect(promptDescription).not.toContain("under ~12 words");
+	});
+
+	it("keeps default English normalization while forwarding the selected language", async () => {
+		vi.mocked(runStructuredResearchPrompt).mockResolvedValueOnce({
+			suggestedPrompts: [{ prompt: "Best Rails Jobs", tags: [] }],
+		});
+		const result = await analyzePrompts({ website: "rails.example.com", brandName: "Rails", targetLanguage: "en" });
+		expect(result.suggestedPrompts[0].prompt).toBe("best rails jobs");
+		expect(vi.mocked(runStructuredResearchPrompt).mock.calls[0][2]).toMatchObject({ targetLanguage: "English" });
+	});
+
+	it("previews translations without researching or modifying the source prompts", async () => {
+		const source = [{ prompt: "Best Rails Jobs", tags: ["jobs"] }];
+		vi.mocked(runStructuredCompletionPrompt).mockResolvedValueOnce({
+			object: { suggestedPrompts: [{ prompt: "Rails案件を探せるおすすめサイトは？", tags: ["案件"] }] },
+			modelVersion: "test",
+		});
+		const result = await translatePrompts({ targetLanguage: "Japanese", targetMarket: "Japan", prompts: source });
+		expect(result.suggestedPrompts[0].prompt).toContain("Rails案件");
+		expect(source[0].prompt).toBe("Best Rails Jobs");
+		expect(runStructuredResearchPrompt).not.toHaveBeenCalled();
+		expect(vi.mocked(runStructuredCompletionPrompt).mock.calls[0][2]).toMatchObject({
+			targetLanguage: "Japanese",
+			targetMarket: "Japan",
+		});
+	});
+
+	it("requires an explicit translation language and limits the paid request size", async () => {
+		await expect(translatePrompts({ prompts: [{ prompt: "Jobs", tags: [] }] })).rejects.toThrow(
+			"BRAND_LANGUAGE_REQUIRED",
+		);
+		await expect(
+			translatePrompts({
+				targetLanguage: "ja",
+				prompts: Array.from({ length: 31 }, () => ({ prompt: "Jobs", tags: [] })),
+			}),
+		).rejects.toThrow("PROMPT_TRANSLATION_LIMIT");
+		expect(runStructuredCompletionPrompt).not.toHaveBeenCalled();
 	});
 });

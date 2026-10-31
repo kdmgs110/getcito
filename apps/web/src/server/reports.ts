@@ -2,6 +2,8 @@
  * Server functions for report operations.
  * Replaces apps/web/src/app/api/reports/route.ts
  */
+import { onboardingLocaleSchemaFields } from "@/server/onboarding-locale-schema";
+
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAuthSession, hasReportAccess } from "@/lib/auth/helpers";
@@ -72,6 +74,7 @@ export const getReportByIdFn = createServerFn({ method: "GET" })
 export const createReportFn = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
+			...onboardingLocaleSchemaFields,
 			brandName: z.string().min(1),
 			brandWebsite: z.string().url(),
 			manualPrompts: z.string().optional(),
@@ -132,6 +135,7 @@ export const createReportFn = createServerFn({ method: "POST" })
 				data.brandId,
 				data.useExistingData,
 				parsedManualCompetitors.length > 0 ? parsedManualCompetitors : undefined,
+				{ targetLanguage: data.targetLanguage, targetMarket: data.targetMarket },
 			);
 			if (!success) throw new Error("Failed to send report job");
 		} catch (error) {

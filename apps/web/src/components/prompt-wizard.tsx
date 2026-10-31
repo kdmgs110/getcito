@@ -1,5 +1,11 @@
-import { settingsError } from "@/i18n/settings-labels";
-import { t } from "@/i18n";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
+import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
+import { Separator } from "@workspace/ui/components/separator";
+import { TagsInput } from "@workspace/ui/components/tags-input";
+import { Textarea } from "@workspace/ui/components/textarea";
+import { AlertCircle, Loader2, Play, Rocket } from "lucide-react";
 /**
  * Single-step onboarding wizard.
  *
@@ -7,19 +13,18 @@ import { t } from "@/i18n";
  * and edits before saving. Replaces the prior 4-step wizard that required
  * DataForSEO + Anthropic in tandem.
  */
-import { useState, useCallback, useEffect, memo, useMemo, useRef } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "@tanstack/react-router";
-import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
-import { Textarea } from "@workspace/ui/components/textarea";
-import { Loader2, AlertCircle, Play, Rocket } from "lucide-react";
-import { TagsInput } from "@workspace/ui/components/tags-input";
-import { Separator } from "@workspace/ui/components/separator";
-import { useBrand, brandKeys } from "@/hooks/use-brands";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CompetitorEntry, CompetitorsEditor, newCompetitorEntry } from "@/components/competitors-editor";
+import { type EditablePrompt, newPromptEntry, PromptsListEditor } from "@/components/prompts-list-editor";
+import { brandKeys, useBrand } from "@/hooks/use-brands";
 import { citationKeys } from "@/hooks/use-citations";
 import { dashboardKeys } from "@/hooks/use-dashboard-summary";
 import { promptsSummaryKeys } from "@/hooks/use-prompts-summary";
+import { t } from "@/i18n";
+import { brandCreationText as ct } from "@/i18n/brand-creation-labels";
+import { localeText as lt } from "@/i18n/brand-locale-labels";
+import { settingsError } from "@/i18n/settings-labels";
+import { trackEvent } from "@/lib/posthog";
 import {
 	analyzeBrandInfoFn,
 	analyzeCompetitorsFn,
@@ -27,11 +32,8 @@ import {
 	cancelAnalyzeBrandFn,
 	updateOnboardedBrandFn,
 } from "@/server/onboarding";
-import { trackEvent } from "@/lib/posthog";
-import { CompetitorsEditor, newCompetitorEntry, type CompetitorEntry } from "@/components/competitors-editor";
-import { PromptsListEditor, newPromptEntry, type EditablePrompt } from "@/components/prompts-list-editor";
+import { BrandLocaleFields } from "./brand-locale-fields";
 import { WebLogo } from "./web-logo";
-import { brandCreationText as ct } from "@/i18n/brand-creation-labels";
 
 interface PromptWizardProps {
 	onComplete: () => void;
@@ -86,11 +88,17 @@ const EditableTagsInput = memo(
 );
 EditableTagsInput.displayName = "EditableTagsInput";
 
-export default function PromptWizard({ onComplete, autoStart = true }: PromptWizardProps) {
+export default function PromptWizard({ onComplete, autoStart = false }: PromptWizardProps) {
 	const { brand } = useBrand();
 	const queryClient = useQueryClient();
 	const router = useRouter();
-	const STORAGE_KEY = brand?.id ? `getcito_onboarding_${brand.id}` : null;
+	const [targetLanguage, setTargetLanguage] = useState(brand?.targetLanguage ?? "");
+	const [targetMarket, setTargetMarket] = useState(brand?.targetMarket ?? "");
+	const localeKey = JSON.stringify([targetLanguage, targetMarket]);
+	const localeRef = useRef(localeKey);
+	localeRef.current = localeKey;
+	const [dataLocale, setDataLocale] = useState(localeKey);
+	const STORAGE_KEY = brand?.id ? `getcito_onboarding_v2_${brand.id}_${encodeURIComponent(localeKey)}` : null;
 
 	const [phase, setPhase] = useState<"idle" | "analyzing" | "review">(() => {
 		if (typeof window !== "undefined" && STORAGE_KEY) {
@@ -134,19 +142,29 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 			setError(errorMessage);
 			if (brandId) {
 				queryClient.removeQueries({ queryKey: analyzeStatusKey(brandId) });
-				cancelAnalyzeBrandFn({ data: { brandId } }).catch(() => {});
+				cancelAnalyzeBrandFn({
+					data: { brandId, targetLanguage: targetLanguage || null, targetMarket: targetMarket || null },
+				}).catch(() => {});
 			}
 		},
-		[brandId, queryClient],
+		[brandId, queryClient, targetLanguage, targetMarket],
 	);
 
 	const { mutate: enqueueAnalysis, isPending: isAnalyzingBrand } = useMutation({
-		mutationFn: (vars: { brandId: string; website: string; brandName?: string }) => analyzeBrandInfoFn({ data: vars }),
+		mutationFn: (vars: {
+			brandId: string;
+			website: string;
+			brandName?: string;
+			targetLanguage: string | null;
+			targetMarket: string | null;
+		}) => analyzeBrandInfoFn({ data: vars }),
 		onMutate: () => {
 			setError(null);
 			setPhase("analyzing");
 		},
-		onSuccess: (result) => {
+		onSuccess: (result, vars) => {
+			if (JSON.stringify([vars.targetLanguage ?? "", vars.targetMarket ?? ""]) !== localeRef.current) return;
+			setDataLocale(localeRef.current);
 			const newData: WizardData = {
 				...data,
 				brandName: result.brandName || brand?.name || "",
@@ -172,8 +190,15 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 	});
 
 	const { mutate: enqueueCompetitorsAnalysis, isPending: isAnalyzingCompetitors } = useMutation({
-		mutationFn: (vars: { brandId: string; website: string; brandName: string }) => analyzeCompetitorsFn({ data: vars }),
-		onSuccess: (result) => {
+		mutationFn: (vars: {
+			brandId: string;
+			website: string;
+			brandName: string;
+			targetLanguage: string | null;
+			targetMarket: string | null;
+		}) => analyzeCompetitorsFn({ data: vars }),
+		onSuccess: (result, vars) => {
+			if (JSON.stringify([vars.targetLanguage ?? "", vars.targetMarket ?? ""]) !== localeRef.current) return;
 			setData((prev) => ({
 				...prev,
 				competitors: result.competitors.map((c) =>
@@ -192,9 +217,16 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 	});
 
 	const { mutate: enqueuePromptsAnalysis, isPending: isAnalyzingPrompts } = useMutation({
-		mutationFn: (vars: { brandId: string; website: string; brandName: string; competitorNames: string[] }) =>
-			analyzePromptsFn({ data: vars }),
-		onSuccess: (result) => {
+		mutationFn: (vars: {
+			brandId: string;
+			website: string;
+			brandName: string;
+			competitorNames: string[];
+			targetLanguage: string | null;
+			targetMarket: string | null;
+		}) => analyzePromptsFn({ data: vars }),
+		onSuccess: (result, vars) => {
+			if (JSON.stringify([vars.targetLanguage ?? "", vars.targetMarket ?? ""]) !== localeRef.current) return;
 			setData((prev) => ({
 				...prev,
 				prompts: result.suggestedPrompts.map((p) => newPromptEntry({ value: p.prompt, tags: p.tags, enabled: true })),
@@ -207,8 +239,14 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 
 	const handleAnalyze = useCallback(() => {
 		if (!brand?.website || !brand?.id) return;
-		enqueueAnalysis({ brandId: brand.id, website: brand.website, brandName: brand.name });
-	}, [brand?.website, brand?.id, brand?.name, enqueueAnalysis]);
+		enqueueAnalysis({
+			brandId: brand.id,
+			website: brand.website,
+			brandName: brand.name,
+			targetLanguage: targetLanguage || null,
+			targetMarket: targetMarket || null,
+		});
+	}, [brand?.website, brand?.id, brand?.name, enqueueAnalysis, targetLanguage, targetMarket]);
 
 	const handleAnalyzeCompetitors = useCallback(() => {
 		if (!brand?.id) return;
@@ -216,8 +254,10 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 			brandId: brand.id,
 			website: data.website || brand.website,
 			brandName: data.brandName || brand.name,
+			targetLanguage: targetLanguage || null,
+			targetMarket: targetMarket || null,
 		});
-	}, [brand, data.website, data.brandName, enqueueCompetitorsAnalysis]);
+	}, [brand, data.website, data.brandName, enqueueCompetitorsAnalysis, targetLanguage, targetMarket]);
 
 	const handleAnalyzePrompts = useCallback(() => {
 		if (!brand?.id) return;
@@ -225,18 +265,20 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 			brandId: brand.id,
 			website: data.website || brand.website,
 			brandName: data.brandName || brand.name,
+			targetLanguage: targetLanguage || null,
+			targetMarket: targetMarket || null,
 			competitorNames: data.competitors.map((c) => c.name).filter(Boolean),
 		});
-	}, [brand, data.website, data.brandName, data.competitors, enqueuePromptsAnalysis]);
+	}, [brand, data.website, data.brandName, data.competitors, enqueuePromptsAnalysis, targetLanguage, targetMarket]);
 
 	const hasAutoAnalyzed = useRef(false);
 
 	// Synchronize form progress to localStorage so hard refreshes don't lose data
 	useEffect(() => {
-		if (STORAGE_KEY && phase === "review") {
+		if (STORAGE_KEY && phase === "review" && dataLocale === localeKey) {
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 		}
-	}, [data, phase, STORAGE_KEY]);
+	}, [data, phase, STORAGE_KEY, dataLocale, localeKey]);
 
 	// Auto-start analysis when component mounts
 	useEffect(() => {
@@ -289,7 +331,7 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 	}, [data.prompts]);
 
 	const handleSubmit = useCallback(async () => {
-		if (!brand?.id) return;
+		if (!brand?.id || dataLocale !== localeKey) return;
 		setSubmitError(null);
 		setIsSaving(true);
 		try {
@@ -317,6 +359,8 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 					shortDescription: data.shortDescription,
 					productsAndServices: data.productsAndServices,
 					keywords: data.keywords,
+					targetLanguage: targetLanguage || null,
+					targetMarket: targetMarket || null,
 				},
 			});
 
@@ -341,13 +385,25 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 		} finally {
 			setIsSaving(false);
 		}
-	}, [brand, data, queryClient, router, onComplete, STORAGE_KEY]);
+	}, [brand, data, queryClient, router, onComplete, STORAGE_KEY, dataLocale, localeKey, targetLanguage, targetMarket]);
+
+	const busy = isAnalyzingBrand || isAnalyzingCompetitors || isAnalyzingPrompts || isSaving;
+	const localeFields = (
+		<BrandLocaleFields
+			targetLanguage={targetLanguage}
+			targetMarket={targetMarket}
+			onLanguageChange={setTargetLanguage}
+			onMarketChange={setTargetMarket}
+			disabled={busy}
+		/>
+	);
 
 	if (phase === "idle" && !autoStart && !error) {
 		return (
 			<div className="space-y-4 rounded-xl border bg-card p-6">
 				<h2 className="text-xl font-semibold">{ct("setupTitle")}</h2>
 				<p className="text-sm leading-relaxed text-muted-foreground">{ct("setupDescription")}</p>
+				{localeFields}
 				<Button onClick={handleAnalyze}>
 					<Play className="size-4" />
 					{ct("startAnalysis")}
@@ -368,6 +424,7 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 					</p>
 				</div>
 
+				{localeFields}
 				{error ? (
 					<div className="space-y-4">
 						<div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
@@ -390,6 +447,18 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 
 	return (
 		<div className="max-w-2xl mx-auto space-y-6">
+			{localeFields}
+			{dataLocale !== localeKey && (
+				<div className="space-y-2 rounded-md border p-3">
+					<p role="status" className="text-sm">
+						{lt("changed")}
+					</p>
+					<Button onClick={handleAnalyze} disabled={busy}>
+						{lt("regenerate")}
+					</Button>
+				</div>
+			)}
+
 			<div className="space-y-2">
 				<div className="flex items-center gap-4">
 					<WebLogo domain={data.website} size={48} />
@@ -481,7 +550,7 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 						variant="outline"
 						size="sm"
 						onClick={handleAnalyzeCompetitors}
-						disabled={isAnalyzingCompetitors || isSaving}
+						disabled={busy || dataLocale !== localeKey}
 					>
 						{isAnalyzingCompetitors ? (
 							<>
@@ -492,7 +561,11 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 						)}
 					</Button>
 				</div>
-				<CompetitorsEditor competitors={data.competitors} onChange={updateCompetitors} disabled={isSaving} />
+				<CompetitorsEditor
+					competitors={data.competitors}
+					onChange={updateCompetitors}
+					disabled={busy || dataLocale !== localeKey}
+				/>
 			</div>
 
 			<Separator />
@@ -506,7 +579,12 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 							<br /> {t("settings.untickAnyYouDonTWantEditTagsOr")}
 						</p>
 					</div>
-					<Button variant="outline" size="sm" onClick={handleAnalyzePrompts} disabled={isAnalyzingPrompts || isSaving}>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={handleAnalyzePrompts}
+						disabled={busy || dataLocale !== localeKey}
+					>
 						{isAnalyzingPrompts ? (
 							<>
 								<Loader2 className="h-4 w-4 mr-2 animate-spin" /> {t("settings.suggesting")}
@@ -528,7 +606,7 @@ export default function PromptWizard({ onComplete, autoStart = true }: PromptWiz
 
 			<Button
 				onClick={handleSubmit}
-				disabled={isSaving || previewCounts.totalNew === 0}
+				disabled={busy || dataLocale !== localeKey || previewCounts.totalNew === 0}
 				className="flex items-center gap-2 cursor-pointer"
 			>
 				{isSaving ? (

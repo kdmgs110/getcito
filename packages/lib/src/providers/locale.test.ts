@@ -38,8 +38,8 @@ describe("localeCountryCode", () => {
 		expect(localeCountryCode({ targetMarket: "United Kingdom" })).toBe("GB");
 	});
 
-	it("is undefined for an unset or unknown market, so the tool keeps its default", () => {
+	it("is undefined only for an unset market and rejects unknown explicit settings", () => {
 		expect(localeCountryCode({})).toBeUndefined();
-		expect(localeCountryCode({ targetMarket: "Atlantis" })).toBeUndefined();
+		expect(() => localeCountryCode({ targetMarket: "Atlantis" })).toThrow("BRAND_MARKET_INVALID");
 	});
 });

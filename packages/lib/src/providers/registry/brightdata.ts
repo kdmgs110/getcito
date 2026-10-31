@@ -1,9 +1,8 @@
 import { bdclient } from "@brightdata/sdk";
-import type { Provider, ScrapeResult, ProviderOptions, ModelConfig } from "../types";
-import type { Citation } from "../../text-extraction";
+import { resolveBrandLocale } from "../../brand-locale";
 import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
-import { DATAFORSEO_LOCATION_LANGUAGES } from "../../location-languages";
-import { BRIGHTDATA_COUNTRIES } from "../../brightdata-locations";
+import type { Citation } from "../../text-extraction";
+import type { ModelConfig, Provider, ProviderOptions, ScrapeResult } from "../types";
 
 const BD_DATASET_IDS: Record<string, string> = {
 	chatgpt: "gd_m7aof0k82r803d5bjm",
@@ -29,20 +28,17 @@ function createClient(): bdclient {
 	return new bdclient({ apiKey: process.env.BRIGHTDATA_API_TOKEN });
 }
 
-function getLanguageCode(languageName: string): string | undefined {
-	for (const languages of Object.values(DATAFORSEO_LOCATION_LANGUAGES)) {
-		const match = languages.find((l) => l.name === languageName);
-		if (match) return match.code;
-	}
-	return undefined;
-}
-
-function getCountryCode(countryName: string): string | undefined {
-	return BRIGHTDATA_COUNTRIES[countryName];
-}
-
 function normalizeAnswer(record: Record<string, any>): string {
-	for (const key of ["aio_text", "answer_text_markdown", "answer_text", "answer", "response_raw", "response", "text", "content"]) {
+	for (const key of [
+		"aio_text",
+		"answer_text_markdown",
+		"answer_text",
+		"answer",
+		"response_raw",
+		"response",
+		"text",
+		"content",
+	]) {
 		if (typeof record[key] === "string" && record[key].trim()) return record[key].trim();
 	}
 	// If this is a Google Search result without an AI overview, we don't want to return the raw JSON
@@ -122,8 +118,8 @@ export const brightdata: Provider = {
 		if (!datasetId) {
 			throw new Error(
 				`BrightData: no dataset ID for model "${model}". ` +
-				`Either use a known model (${Object.keys(BD_DATASET_IDS).join(", ")}) ` +
-				`or pass a dataset ID as the version slug: ${model}:brightdata:gd_abc123`,
+					`Either use a known model (${Object.keys(BD_DATASET_IDS).join(", ")}) ` +
+					`or pass a dataset ID as the version slug: ${model}:brightdata:gd_abc123`,
 			);
 		}
 
@@ -132,34 +128,32 @@ export const brightdata: Provider = {
 		let consumed = false;
 		try {
 			const triggerUrl = `https://api.brightdata.com/datasets/v3/trigger?dataset_id=${datasetId}&notify=false&include_errors=true&format=json`;
-			
-			const defaultMarket = options?.targetMarket ?? "US";
-			const defaultLanguage = options?.targetLanguage ?? "en";
 
-			const finalPrompt = (model !== "google-ai-mode" && model !== "google-ai-overview")
-				? `${prompt}\nPlease provide your response in ${defaultLanguage}.`
-				: prompt;
+			const locale = resolveBrandLocale(options);
+
+			const finalPrompt =
+				locale.languageName && model !== "google-ai-mode" && model !== "google-ai-overview"
+					? `${prompt}\nPlease provide your response in ${locale.languageName}.`
+					: prompt;
 
 			let payloadData: any = {
 				url: BD_BASE_URL[model] ?? "",
 				prompt: finalPrompt,
 				index: 1,
 				...(model === "chatgpt" ? { web_search: options?.webSearch ?? false } : {}),
-				country: getCountryCode(defaultMarket) ?? defaultMarket,
-				...(model === "google-ai-mode"
-					? { hl: getLanguageCode(defaultLanguage) ?? "en" }
-					: {}),
+				...(locale.countryCode ? { country: locale.countryCode.toLowerCase() } : {}),
+				...(model === "google-ai-mode" ? { hl: locale.languageCode ?? "en" } : {}),
 			};
 
 			if (model === "google-ai-overview") {
 				payloadData = {
 					url: "https://www.google.com/",
 					keyword: prompt,
-					language: options?.targetLanguage ? (getLanguageCode(options.targetLanguage) ?? "en") : "en",
-					country: options?.targetMarket ? (getCountryCode(options.targetMarket) ?? "US") : "US",
+					language: locale.languageCode ?? "en",
+					country: locale.countryCode?.toLowerCase() ?? "us",
 					start_page: 1,
 					end_page: 10,
-					collapse_aio: false
+					collapse_aio: false,
 				};
 			}
 
@@ -175,6 +169,7 @@ export const brightdata: Provider = {
 			if (triggerRes.status === 400) {
 				const errorText = await triggerRes.text();
 				if (errorText.includes('"country"')) {
+					if (locale.countryCode) throw new Error("BrightData does not support the selected market for this engine");
 					// The scraper doesn't support this specific country, retry without it
 					delete payloadData.country;
 					triggerRes = await fetch(triggerUrl, {
@@ -196,8 +191,8 @@ export const brightdata: Provider = {
 
 			({ snapshot_id: snapshotId } = (await triggerRes.json()) as { snapshot_id: string });
 			await pollUntilReady(snapshotId);
-			
-			let payload;
+
+			let payload: Awaited<ReturnType<typeof client.scrape.snapshot.fetch>> | undefined;
 			for (let i = 0; i < 5; i++) {
 				try {
 					payload = await client.scrape.snapshot.fetch(snapshotId, { format: "json" });
@@ -227,7 +222,11 @@ export const brightdata: Provider = {
 				// and citations exist but no query strings were exposed.
 				// When web search is disabled, webQueries is always empty.
 				webQueries: options?.webSearch
-					? (webQueries.length > 0 ? webQueries : citations.length > 0 ? [WEB_QUERIES_UNAVAILABLE] : [])
+					? webQueries.length > 0
+						? webQueries
+						: citations.length > 0
+							? [WEB_QUERIES_UNAVAILABLE]
+							: []
 					: [],
 				citations,
 				modelVersion: record?.model ?? undefined,
@@ -263,7 +262,7 @@ async function pollUntilReady(snapshotId: string): Promise<void> {
 			throw new Error(`BrightData snapshot ${snapshotId} ${status}`);
 		}
 
-		const delay = Math.min(BASE_DELAY * Math.pow(2, Math.floor(attempt / 5)), MAX_DELAY);
+		const delay = Math.min(BASE_DELAY * 2 ** Math.floor(attempt / 5), MAX_DELAY);
 		await new Promise((resolve) => setTimeout(resolve, delay));
 	}
 

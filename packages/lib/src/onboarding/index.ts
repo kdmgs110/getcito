@@ -1,12 +1,13 @@
 export {
+	type AnalyzeBrandOptions,
 	analyzeBrand,
 	analyzeBrandInfo,
 	analyzeCompetitors,
 	analyzePrompts,
-	type AnalyzeBrandOptions,
 	type OnboardingCompetitor,
 	type OnboardingPrompt,
 	type OnboardingSuggestion,
+	translatePrompts,
 } from "./analyze";
 export { runStructuredCompletionPrompt, runStructuredResearchPrompt } from "./llm";
 export {

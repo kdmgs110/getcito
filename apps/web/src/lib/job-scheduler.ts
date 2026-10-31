@@ -307,13 +307,14 @@ export async function sendReportJob(
 	brandId?: string,
 	useExistingData?: boolean,
 	manualCompetitors?: { name: string; domain: string }[],
+	locale: { targetLanguage?: string | null; targetMarket?: string | null } = {},
 ): Promise<boolean> {
 	try {
 		const boss = await getBoss();
 
 		await boss.send(
 			"generate-report",
-			{ reportId, brandName, brandWebsite, manualPrompts, brandId, useExistingData, manualCompetitors },
+			{ reportId, brandName, brandWebsite, manualPrompts, brandId, useExistingData, manualCompetitors, ...locale },
 			{
 				retryLimit: 3,
 				retryDelay: 60,

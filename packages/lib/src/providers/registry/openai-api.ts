@@ -1,14 +1,14 @@
-import { openai, createOpenAI } from "@ai-sdk/openai";
+import { createOpenAI, openai } from "@ai-sdk/openai";
 import { generateText, Output } from "ai";
-import { extractTextFromOpenAI, extractCitationsFromOpenAI } from "../../text-extraction";
+import { extractCitationsFromOpenAI, extractTextFromOpenAI } from "../../text-extraction";
+import { localeCountryCode, localeSystemPrompt } from "../locale";
 import type {
 	Provider,
-	ScrapeResult,
 	ProviderOptions,
+	ScrapeResult,
 	StructuredResearchOptions,
 	StructuredResearchResult,
 } from "../types";
-import { localeCountryCode, localeSystemPrompt } from "../locale";
 
 const DEFAULT_RESEARCH_MODEL = "gpt-4o-mini";
 
@@ -17,9 +17,7 @@ function sanitizeForJson(obj: unknown): unknown {
 }
 
 function getOpenAIResponsesModel(model: string) {
-	const provider = process.env.OPENAI_API_KEY
-		? createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
-		: openai;
+	const provider = process.env.OPENAI_API_KEY ? createOpenAI({ apiKey: process.env.OPENAI_API_KEY }) : openai;
 	return provider.responses(model);
 }
 
@@ -84,12 +82,27 @@ export const openaiApi: Provider = {
 		schema,
 		version,
 		webSearch = true,
+		targetLanguage,
+		targetMarket,
 	}: StructuredResearchOptions<T>): Promise<StructuredResearchResult<T>> {
 		const targetModel = version ?? DEFAULT_RESEARCH_MODEL;
+		const options = { targetLanguage, targetMarket };
+		const system = localeSystemPrompt(options);
+		const country = localeCountryCode(options);
 		const result = await generateText({
 			model: getOpenAIResponsesModel(targetModel),
-			...(webSearch ? { tools: { web_search: openai.tools.webSearch({ searchContextSize: "medium" }) as any } } : {}),
+			...(webSearch
+				? {
+						tools: {
+							web_search: openai.tools.webSearch({
+								searchContextSize: "medium",
+								...(country ? { userLocation: { type: "approximate" as const, country } } : {}),
+							}) as any,
+						},
+					}
+				: {}),
 			experimental_output: Output.object({ schema }),
+			...(system ? { system } : {}),
 			prompt,
 		});
 		return {

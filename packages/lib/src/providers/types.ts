@@ -23,6 +23,8 @@ export interface ProviderOptions {
 }
 
 export interface StructuredResearchOptions<T> {
+	targetLanguage?: string;
+	targetMarket?: string;
 	prompt: string;
 	schema: z.ZodType<T>;
 	version?: string;
