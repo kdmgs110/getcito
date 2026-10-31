@@ -22,6 +22,7 @@ import { WebLogo } from "@/components/web-logo";
 import { useBrand } from "@/hooks/use-brands";
 import { citationKeys } from "@/hooks/use-citations";
 import { dashboardKeys } from "@/hooks/use-dashboard-summary";
+import { opportunitiesKeys } from "@/lib/opportunities-query";
 import { cleanAndValidateDomain } from "@/lib/domain-categories";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
 import { deleteBrandFn, updateBrandFn } from "@/server/brands";
@@ -138,6 +139,7 @@ function BrandSettingsPage() {
 			// Saved values are now the server's; drop the local edits.
 			clearOverrides();
 			await revalidate();
+			await queryClient.invalidateQueries({ queryKey: opportunitiesKeys.detail(brand.id) });
 		} catch (err) {
 			setError(settingsError(err, t("settings.anErrorOccurred")));
 		} finally {

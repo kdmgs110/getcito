@@ -1,12 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { APP_TIMEZONE } from "@/lib/app-locale";
-import { getOpportunitiesFn } from "@/server/opportunities";
+import { useBrand } from "@/hooks/use-brands";
+import { opportunitiesQueryOptions } from "@/lib/opportunities-query";
 
-export const opportunitiesKeys = {
-	all: ["opportunities-report"] as const,
-	detail: (brandId: string) => [...opportunitiesKeys.all, brandId] as const,
-};
+export { opportunitiesKeys } from "@/lib/opportunities-query";
 
 /**
  * Opportunities AEO report. The server returns a stored report and regenerates it
@@ -17,23 +14,14 @@ export function useOpportunities(brandId?: string) {
 	const params = useParams({ strict: false }) as { brand?: string };
 	const resolvedBrandId = brandId || params.brand;
 
-	const query = useQuery({
-		queryKey: opportunitiesKeys.detail(resolvedBrandId || ""),
-		queryFn: () =>
-			getOpportunitiesFn({
-				data: { brandId: resolvedBrandId!, timezone: APP_TIMEZONE },
-			}),
-		enabled: !!resolvedBrandId,
-		staleTime: Number.POSITIVE_INFINITY,
-		refetchOnWindowFocus: false,
-		retry: false,
-	});
+	const { brand, isLoading: isBrandLoading, isError: brandError } = useBrand(resolvedBrandId);
+	const query = useQuery(opportunitiesQueryOptions(resolvedBrandId, brand));
 
 	return {
 		data: query.data,
-		isLoading: query.isLoading,
+		isLoading: isBrandLoading || query.isLoading,
 		isFetching: query.isFetching,
-		isError: !!query.error,
+		isError: !!(brandError || query.error),
 		revalidate: query.refetch,
 	};
 }
