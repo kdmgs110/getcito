@@ -27,6 +27,7 @@ import {
 	analyticsAllRows,
 	analyticsApi,
 	analyticsPropertyPath,
+	fetchConversionPageIdentities,
 	normalizeReportHosts,
 	verifyAnalyticsHostRange,
 } from "./server";
@@ -481,7 +482,7 @@ export async function fetchConversionReport(
 		warnings.add("conversion_rate_quality_unavailable");
 	}
 
-	const pageRows = matching.slice((page - 1) * pageSize, page * pageSize).map((pageRow) => ({
+	const pageRows: ConversionPageRow[] = matching.slice((page - 1) * pageSize, page * pageSize).map((pageRow) => ({
 		...pageRow,
 		trend: [...points.keys()].map((date) => {
 			const existing = pageTrends.get(pageRow.path)?.get(date);
@@ -491,6 +492,18 @@ export async function fetchConversionReport(
 			return point;
 		}),
 	}));
+	try {
+		const identities = await fetchConversionPageIdentities(
+			input,
+			pageRows.map((row) => row.path),
+		);
+		for (const row of pageRows) {
+			const pageIdentities = identities.get(row.path);
+			if (pageIdentities?.length) row.pageIdentities = pageIdentities;
+		}
+	} catch {
+		warnings.add("page_titles_unavailable");
+	}
 	return {
 		totals,
 		points: [...points.values()],
