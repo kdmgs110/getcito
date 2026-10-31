@@ -1,6 +1,6 @@
 import { useHydrated } from "@/hooks/use-hydrated";
-import { authErrorMessage } from "@/i18n/settings-labels";
 import { t } from "@/i18n";
+import { authErrorMessage } from "@/i18n/settings-labels";
 /**
  * /auth/login - Login page
  *
@@ -183,6 +183,13 @@ export function EmailPasswordLogin({
 					{loading ? t("settings.signingIn") : t("settings.signIn")}
 				</Button>
 			</form>
+			{!isDemo && (
+				<p className="pt-4 text-center text-sm">
+					<Link to="/auth/forgot-password" className="font-medium text-primary hover:underline">
+						パスワードをお忘れの方
+					</Link>
+				</p>
+			)}
 			{canRegister && (
 				<p className="text-center text-sm text-muted-foreground pt-4">
 					{t("settings.donTHaveAnAccount")}{" "}

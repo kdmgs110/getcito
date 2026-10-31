@@ -69,6 +69,9 @@ declare global {
 			readonly DATAFORSEO_LOGIN: string;
 			readonly DATAFORSEO_PASSWORD: string;
 			readonly BETTER_AUTH_SECRET?: string;
+			readonly BREVO_API_KEY?: string;
+			readonly AUTH_EMAIL_FROM?: string;
+			readonly AUTH_EMAIL_FROM_NAME?: string;
 			readonly GOOGLE_ANALYTICS_CLIENT_ID?: string;
 			readonly GOOGLE_ANALYTICS_CLIENT_SECRET?: string;
 			readonly GOOGLE_ANALYTICS_REDIRECT_URI?: string;

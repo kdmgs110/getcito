@@ -97,6 +97,24 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Session cookie encryption secret.",
 	},
 	{
+		name: "BREVO_API_KEY",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Brevo transactional email API key for password reset emails.",
+	},
+	{
+		name: "AUTH_EMAIL_FROM",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Verified sender email address for password reset messages.",
+	},
+	{
+		name: "AUTH_EMAIL_FROM_NAME",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Password reset sender display name (default GetCito).",
+	},
+	{
 		name: "GOOGLE_ANALYTICS_CLIENT_ID",
 		scope: "server",
 		requiredBy: "optional",

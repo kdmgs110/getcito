@@ -11,9 +11,11 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthResetPasswordRouteImport } from './routes/auth/reset-password'
 import { Route as AuthRegisterRouteImport } from './routes/auth/register'
 import { Route as AuthLogoutRouteImport } from './routes/auth/logout'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
+import { Route as AuthForgotPasswordRouteImport } from './routes/auth/forgot-password'
 import { Route as AuthedReportsRouteImport } from './routes/_authed/reports'
 import { Route as AuthedAppRouteImport } from './routes/_authed/app'
 import { Route as AuthedAdminRouteImport } from './routes/_authed/admin'
@@ -71,6 +73,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
+  id: '/auth/reset-password',
+  path: '/auth/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRegisterRoute = AuthRegisterRouteImport.update({
   id: '/auth/register',
   path: '/auth/register',
@@ -84,6 +91,11 @@ const AuthLogoutRoute = AuthLogoutRouteImport.update({
 const AuthLoginRoute = AuthLoginRouteImport.update({
   id: '/auth/login',
   path: '/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthForgotPasswordRoute = AuthForgotPasswordRouteImport.update({
+  id: '/auth/forgot-password',
+  path: '/auth/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedReportsRoute = AuthedReportsRouteImport.update({
@@ -344,9 +356,11 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthedAdminRouteWithChildren
   '/app': typeof AuthedAppRouteWithChildren
   '/reports': typeof AuthedReportsRouteWithChildren
+  '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/auth/register': typeof AuthRegisterRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/admin/queue': typeof AuthedAdminQueueRoute
   '/admin/tools': typeof AuthedAdminToolsRoute
   '/admin/usage': typeof AuthedAdminUsageRoute
@@ -394,9 +408,11 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/auth/register': typeof AuthRegisterRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/admin/queue': typeof AuthedAdminQueueRoute
   '/admin/tools': typeof AuthedAdminToolsRoute
   '/admin/usage': typeof AuthedAdminUsageRoute
@@ -448,9 +464,11 @@ export interface FileRoutesById {
   '/_authed/admin': typeof AuthedAdminRouteWithChildren
   '/_authed/app': typeof AuthedAppRouteWithChildren
   '/_authed/reports': typeof AuthedReportsRouteWithChildren
+  '/auth/forgot-password': typeof AuthForgotPasswordRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/auth/register': typeof AuthRegisterRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
   '/_authed/admin/queue': typeof AuthedAdminQueueRoute
   '/_authed/admin/tools': typeof AuthedAdminToolsRoute
   '/_authed/admin/usage': typeof AuthedAdminUsageRoute
@@ -503,9 +521,11 @@ export interface FileRouteTypes {
     | '/admin'
     | '/app'
     | '/reports'
+    | '/auth/forgot-password'
     | '/auth/login'
     | '/auth/logout'
     | '/auth/register'
+    | '/auth/reset-password'
     | '/admin/queue'
     | '/admin/tools'
     | '/admin/usage'
@@ -553,9 +573,11 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/auth/forgot-password'
     | '/auth/login'
     | '/auth/logout'
     | '/auth/register'
+    | '/auth/reset-password'
     | '/admin/queue'
     | '/admin/tools'
     | '/admin/usage'
@@ -606,9 +628,11 @@ export interface FileRouteTypes {
     | '/_authed/admin'
     | '/_authed/app'
     | '/_authed/reports'
+    | '/auth/forgot-password'
     | '/auth/login'
     | '/auth/logout'
     | '/auth/register'
+    | '/auth/reset-password'
     | '/_authed/admin/queue'
     | '/_authed/admin/tools'
     | '/_authed/admin/usage'
@@ -658,9 +682,11 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthedRoute: typeof AuthedRouteWithChildren
+  AuthForgotPasswordRoute: typeof AuthForgotPasswordRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
+  AuthResetPasswordRoute: typeof AuthResetPasswordRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiManifestIndexRoute: typeof ApiManifestIndexRoute
   ApiOgIndexRoute: typeof ApiOgIndexRoute
@@ -696,6 +722,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/reset-password': {
+      id: '/auth/reset-password'
+      path: '/auth/reset-password'
+      fullPath: '/auth/reset-password'
+      preLoaderRoute: typeof AuthResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/register': {
       id: '/auth/register'
       path: '/auth/register'
@@ -715,6 +748,13 @@ declare module '@tanstack/react-router' {
       path: '/auth/login'
       fullPath: '/auth/login'
       preLoaderRoute: typeof AuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/forgot-password': {
+      id: '/auth/forgot-password'
+      path: '/auth/forgot-password'
+      fullPath: '/auth/forgot-password'
+      preLoaderRoute: typeof AuthForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authed/reports': {
@@ -1171,9 +1211,11 @@ const ApiV1PromptsPromptIdRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRoute: AuthedRouteWithChildren,
+  AuthForgotPasswordRoute: AuthForgotPasswordRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,
   AuthRegisterRoute: AuthRegisterRoute,
+  AuthResetPasswordRoute: AuthResetPasswordRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiManifestIndexRoute: ApiManifestIndexRoute,
   ApiOgIndexRoute: ApiOgIndexRoute,
