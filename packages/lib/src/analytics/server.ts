@@ -1,5 +1,6 @@
 import { OAuth2Client } from "google-auth-library";
 import { buildAIFilter, classifyAISource } from "./classification";
+import type { ConversionPageRow } from "./conversion-types";
 import { addTrafficTotals, defaultTrafficRange, emptyTrafficTotals, trafficDates } from "./dates";
 import {
 	andFilters,
@@ -385,6 +386,74 @@ async function rankedPageTitles(
 		[...counts].map(([path, titles]) => [
 			path,
 			[...titles].sort(([a, ac], [b, bc]) => bc - ac || (a < b ? -1 : a > b ? 1 : 0))[0][0],
+		]),
+	);
+}
+
+/** Page-view identities are display metadata, never evidence of the host where a CV session landed. */
+export async function fetchConversionPageIdentities(
+	input: AnalyticsFetchRequest,
+	paths: string[],
+): Promise<Map<string, NonNullable<ConversionPageRow["pageIdentities"]>>> {
+	const eligible = new Set(paths.filter((path) => path.startsWith("/") && !path.startsWith("//")));
+	if (!eligible.size) return new Map();
+	const hosts = new Set(normalizeReportHosts(input));
+	const result = await report(input.accessToken, input.propertyId, {
+		dimensions: [{ name: "pagePath" }, { name: "pageTitle" }, { name: "hostName" }],
+		metrics: [{ name: "screenPageViews" }],
+		dateRanges: [{ startDate: input.from, endDate: input.to }],
+		dimensionFilter: andFilters(
+			hostnameFilter([...hosts]),
+			stringFilter("platform", "web", "EXACT", false),
+			stringFilter("eventName", "page_view"),
+			rankedPageFilter(
+				[...eligible].map((path) => ({ path })),
+				"pagePath",
+			),
+		),
+		orderBys: [
+			{ metric: { metricName: "screenPageViews" }, desc: true },
+			{ dimension: { dimensionName: "pagePath" }, desc: false },
+			{ dimension: { dimensionName: "hostName" }, desc: false },
+			{ dimension: { dimensionName: "pageTitle" }, desc: false },
+		],
+		limit: PAGE_TITLE_ROW_LIMIT,
+	});
+	const rows = result.rows ?? [];
+	if (
+		metadataWarnings(result).length ||
+		rows.length > PAGE_TITLE_ROW_LIMIT ||
+		(result.rowCount === undefined && rows.length === PAGE_TITLE_ROW_LIMIT) ||
+		(result.rowCount !== undefined && (!Number.isSafeInteger(result.rowCount) || result.rowCount !== rows.length))
+	)
+		throw new AnalyticsError("upstream");
+	const counts = new Map<string, Map<string, Map<string, number>>>();
+	for (const row of rows) {
+		const fields = dimensions(row);
+		if (fields.length !== 3) throw new AnalyticsError("upstream");
+		const [path, rawTitle, rawHostname] = fields;
+		const hostname = normalizeHostname(rawHostname);
+		if (!eligible.has(path) || !hosts.has(hostname)) continue;
+		const count = sessions(row);
+		if (!Number.isFinite(count)) throw new AnalyticsError("upstream");
+		if (count <= 0) continue;
+		const hostTitles = counts.get(path) ?? new Map<string, Map<string, number>>();
+		const titles = hostTitles.get(hostname) ?? new Map<string, number>();
+		const title = rawTitle.trim().replace(/\s+/g, " ");
+		if (title && !["(not set)", "(other)"].includes(title.toLowerCase()))
+			titles.set(title, (titles.get(title) ?? 0) + count);
+		hostTitles.set(hostname, titles);
+		counts.set(path, hostTitles);
+	}
+	return new Map(
+		[...counts].map(([path, hostTitles]) => [
+			path,
+			[...hostTitles]
+				.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+				.map(([hostname, titles]) => ({
+					hostname,
+					title: [...titles].sort(([a, ac], [b, bc]) => bc - ac || (a < b ? -1 : a > b ? 1 : 0))[0]?.[0] ?? null,
+				})),
 		]),
 	);
 }

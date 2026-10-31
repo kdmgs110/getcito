@@ -43,6 +43,8 @@ export interface ConversionSourceRow {
 }
 export interface ConversionPageRow extends ConversionMetrics {
 	path: string;
+	/** Observed page-view metadata; CV counts remain grouped by landing path. */
+	pageIdentities?: { hostname: string; title: string | null }[];
 	trend: ConversionPeriod[];
 }
 export interface ConversionReport {

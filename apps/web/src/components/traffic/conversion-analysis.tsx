@@ -314,7 +314,7 @@ function ConversionSourceTable({ report }: { report: ConversionReport }) {
 		</TrafficCard>
 	);
 }
-function ConversionPages({
+export function ConversionPages({
 	report,
 	search,
 	onSearch,
@@ -372,12 +372,15 @@ function ConversionPages({
 				<p className="text-sm text-muted-foreground">{t("conversions.pageUnsupported")}</p>
 			) : (
 				<>
+					{pages.rows.some((row) => (row.pageIdentities?.length ?? 0) > 1) && (
+						<p className="mb-4 text-xs leading-relaxed text-muted-foreground">{t("conversions.sharedPathPages")}</p>
+					)}
 					<div className="overflow-x-auto">
 						<table className="w-full text-sm">
 							<thead>
 								<tr className="border-b text-xs text-muted-foreground">
 									{[
-										t("conversions.path"),
+										t("traffic.pageIdentity"),
 										t("conversions.aiCv"),
 										t("conversions.allCv"),
 										t("conversions.aiSessions"),
@@ -393,8 +396,37 @@ function ConversionPages({
 							<tbody>
 								{pages.rows.map((row) => (
 									<tr key={row.path} className="border-b last:border-0">
-										<th scope="row" className="max-w-72 break-all p-3 text-left font-normal">
-											{row.path}
+										<th scope="row" className="w-[42%] min-w-64 max-w-lg p-3 text-left font-normal">
+											{row.path.startsWith("/") && row.pageIdentities?.length ? (
+												<div className="space-y-3">
+													{row.pageIdentities.map((identity) => {
+														const url = `https://${identity.hostname}${row.path}`;
+														return (
+															<div key={identity.hostname}>
+																<span className="block break-words font-semibold leading-relaxed">
+																	{identity.title || t("traffic.titleUnavailable")}
+																</span>
+																<a
+																	href={url}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	aria-label={t("traffic.openPageInNewTab", { url })}
+																	className="mt-1 block break-all rounded-sm text-xs leading-relaxed text-muted-foreground underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+																>
+																	{url}
+																</a>
+															</div>
+														);
+													})}
+												</div>
+											) : (
+												<>
+													<span className="block font-semibold leading-relaxed">{t("traffic.titleUnavailable")}</span>
+													<span className="mt-1 block break-all text-xs leading-relaxed text-muted-foreground">
+														{row.path}
+													</span>
+												</>
+											)}
 										</th>
 										<td className="p-3 text-right tabular-nums">{conversionNumber(row.aiCv)}</td>
 										<td className="p-3 text-right tabular-nums">{conversionNumber(row.cv)}</td>

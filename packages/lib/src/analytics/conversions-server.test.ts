@@ -86,6 +86,7 @@ function mock(options: MockOptions = {}) {
 			if (request.dimensions[0]?.name === "hostName") return json({ rows: [row(["example.com"], [100])], rowCount: 1 });
 			const custom = options.report?.(request);
 			if (custom) return custom;
+			if (request.dimensions[0]?.name === "pagePath") return json({ rows: [], rowCount: 0 });
 			if (request.metrics[0].name === "keyEvents")
 				return json({
 					rows: [
@@ -146,6 +147,147 @@ afterEach(() => {
 });
 
 describe("GA4 conversion reporting", () => {
+	it("adds observed identities for a shared landing path without splitting CV counts by host", async () => {
+		mock({
+			report: (request) => {
+				if (request.metrics[0].name === "keyEvents")
+					return json({ rows: [row(["20261001", "chatgpt.com", "referral", "Referral", "/"], [7])], rowCount: 1 });
+				if (request.dimensions[0]?.name === "pagePath")
+					return json({
+						rows: [
+							row(["/", "Main home", "example.com"], [20]),
+							row(["/", " Content   home ", "content.example.com"], [12]),
+							row(["/", "Old title", "example.com"], [2]),
+							row(["/", "Other property site", "unregistered.example.com"], [50]),
+						],
+						rowCount: 4,
+					});
+			},
+		});
+		const report = await fetchConversionReport({ ...input, hostnames: ["example.com", "content.example.com"] });
+		expect(report.totals).toMatchObject({ cv: 7, aiCv: 7 });
+		expect(report.pages.rows).toHaveLength(1);
+		expect(report.pages.rows[0]).toMatchObject({
+			path: "/",
+			cv: 7,
+			aiCv: 7,
+			pageIdentities: [
+				{ hostname: "content.example.com", title: "Content home" },
+				{ hostname: "example.com", title: "Main home" },
+			],
+		});
+		expect(report.measurementScope).toBe("cv_event_host");
+		expect(report.warnings).toContain("cross_host_landing_unverified");
+		const metadata = requests.find((request) => request.dimensions[0]?.name === "pagePath");
+		expect(metadata?.metrics).toEqual([{ name: "screenPageViews" }]);
+		expect(filtered(metadata as Request, "eventName", "page_view")).toBe(true);
+		expect(
+			requests
+				.filter((request) => request.metrics[0].name === "keyEvents" && request.dimensions.length === 5)
+				.every((request) => !request.dimensions.some(({ name }) => name === "hostName")),
+		).toBe(true);
+	});
+	it("resolves titles from landing-page views rather than the event page or the event host", async () => {
+		mock({
+			report: (request) => {
+				if (request.metrics[0].name === "keyEvents")
+					return json({
+						rows: [row(["20261001", "chatgpt.com", "referral", "Referral", "/seminar"], [3])],
+						rowCount: 1,
+					});
+				if (request.dimensions[0]?.name === "pagePath")
+					return json({
+						rows: [
+							row(["/seminar", "Seminar landing", "example.com"], [10]),
+							row(["/complete", "Registration complete", "content.example.com"], [3]),
+						],
+						rowCount: 2,
+					});
+			},
+		});
+		const report = await fetchConversionReport({
+			...input,
+			hostnames: ["example.com", "content.example.com"],
+			eventScopes: [{ hostname: "content.example.com", eventNames: ["apply"] }],
+		});
+		expect(report.pages.rows[0]).toMatchObject({
+			path: "/seminar",
+			cv: 3,
+			pageIdentities: [{ hostname: "example.com", title: "Seminar landing" }],
+		});
+		const metadata = requests.find((request) => request.dimensions[0]?.name === "pagePath") as Request;
+		expect(JSON.stringify(metadata.dimensionFilter)).toContain('"pagePath"');
+		expect(JSON.stringify(metadata.dimensionFilter)).toContain('"/seminar"');
+		expect(filtered(metadata, "landingPage")).toBe(false);
+		expect(filtered(metadata, "eventName", "apply")).toBe(false);
+	});
+	it("retains an observed host with a missing title and never invents identities for unobserved pages", async () => {
+		mock({
+			report: (request) =>
+				request.dimensions[0]?.name === "pagePath"
+					? json({ rows: [row(["/jobs/1", "(not set)", "example.com"], [10])], rowCount: 1 })
+					: undefined,
+		});
+		const report = await fetchConversionReport(input);
+		expect(report.pages.rows.find((page) => page.path === "/jobs/1")?.pageIdentities).toEqual([
+			{ hostname: "example.com", title: null },
+		]);
+		expect(report.pages.rows.find((page) => page.path === "/jobs/2")?.pageIdentities).toBeUndefined();
+	});
+	it("keeps all conversion metrics when optional page metadata fails or is partial", async () => {
+		mock();
+		const expected = await fetchConversionReport(input);
+		for (const metadata of [
+			json({ error: { message: "optional metadata failed" } }, 403),
+			json({ rows: [], rowCount: 1 }),
+		]) {
+			mock({ report: (request) => (request.dimensions[0]?.name === "pagePath" ? metadata : undefined) });
+			const actual = await fetchConversionReport(input);
+			expect(actual.totals).toEqual(expected.totals);
+			expect(actual.pages).toEqual(expected.pages);
+			expect(actual.points).toEqual(expected.points);
+			expect(actual.sources).toEqual(expected.sources);
+			expect(actual.cvrSupported).toBe(expected.cvrSupported);
+			expect(actual.warnings).toContain("page_titles_unavailable");
+		}
+	});
+	it("matches Unicode GA4 host aliases to the registered IDN without changing landing paths", async () => {
+		const unicode = "案件.com";
+		const ascii = new URL(`https://${unicode}`).hostname;
+		mock({
+			report: (request) =>
+				request.dimensions[0]?.name === "pagePath"
+					? json({
+							rows: [row(["/jobs/1", "案件一覧", unicode], [8]), row(["/jobs/1", "案件一覧", ascii], [2])],
+							rowCount: 2,
+						})
+					: undefined,
+		});
+		const report = await fetchConversionReport({
+			...input,
+			hostname: ascii,
+			measurementMode: "observed_session_start",
+		});
+		expect(report.pages.rows.find((page) => page.path === "/jobs/1")?.pageIdentities).toEqual([
+			{ hostname: ascii, title: "案件一覧" },
+		]);
+		const metadata = requests.find((request) => request.dimensions[0]?.name === "pagePath") as Request;
+		expect(JSON.stringify(metadata.dimensionFilter)).toContain(unicode);
+		expect(JSON.stringify(metadata.dimensionFilter)).toContain(ascii);
+		expect(metadata.dimensions).not.toContainEqual({ name: "pagePathPlusQueryString" });
+	});
+	it("does not query or invent page identities for unavailable landing paths", async () => {
+		mock({
+			report: (request) =>
+				request.metrics[0].name === "keyEvents"
+					? json({ rows: [row(["20261001", "chatgpt.com", "referral", "Referral", "(not set)"], [3])], rowCount: 1 })
+					: undefined,
+		});
+		const report = await fetchConversionReport(input);
+		expect(report.pages.rows[0]).toMatchObject({ path: "(not set)", cv: 3 });
+		expect(report.pages.rows[0].pageIdentities).toBeUndefined();
+		expect(requests.some((request) => request.dimensions[0]?.name === "pagePath")).toBe(false);
+	});
 	it("accepts an all-goals report request while retaining domain selection", () => {
 		expect(
 			conversionRequestSchema.parse({

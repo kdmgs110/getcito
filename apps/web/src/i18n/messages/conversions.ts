@@ -93,6 +93,10 @@ export const conversionMessages = {
 		ja: "CVしたセッションの開始パス（開始ホスト未判定）",
 	},
 	"conversions.path": { en: "Landing path", ja: "開始パス" },
+	"conversions.sharedPathPages": {
+		en: "Counts are combined for matching landing paths across domains. Links show pages observed at each path; the entry domain of each conversion is unverified.",
+		ja: "複数ドメインで同じ開始パスの数値は合算しています。リンクには同じパスで計測されたページを表示します。各CVの開始ドメインは未判定です。",
+	},
 	"conversions.aiCvShort": { en: "AI CV", ja: "AI CV" },
 	"conversions.detail": { en: "View trend", ja: "推移を見る" },
 	"conversions.detailTitle": { en: "Conversion trend for this page", ja: "ページ別のCV推移" },
