@@ -1,12 +1,14 @@
-import { useNavigate, useRouteContext } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useRouteContext, useRouter } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
 import { computeSystemTags } from "@workspace/lib/tag-utils";
 import { Button } from "@workspace/ui/components/button";
 import { Save } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { type EditablePrompt, PromptsListEditor } from "@/components/prompts-list-editor";
-import { useInvalidatePromptsSummary } from "@/hooks/use-prompts-summary";
-import { t } from "@/i18n";
+import { brandKeys } from "@/hooks/use-brands";
+import { buildPromptEdits } from "@/lib/prompt-edits";
+import { APP_LANGUAGE, t } from "@/i18n";
 import { settingsError } from "@/i18n/settings-labels";
 import { trackEvent } from "@/lib/posthog";
 import { updatePromptsFn } from "@/server/prompts";
@@ -52,7 +54,9 @@ export function PromptsEditor({
 	const [isLoading, setIsLoading] = useState(false);
 	const saveInProgress = useRef(false);
 	const navigate = useNavigate();
-	const invalidatePromptsSummary = useInvalidatePromptsSummary();
+	const queryClient = useQueryClient();
+	const router = useRouter();
+	const deletedCount = initialPrompts.filter((prompt) => !prompts.some((draft) => draft.id === prompt.id)).length;
 	const routeContext = useRouteContext({ strict: false }) as { clientConfig?: ClientConfig };
 	const isReadOnly = routeContext.clientConfig?.features.readOnly;
 
@@ -62,35 +66,37 @@ export function PromptsEditor({
 			return;
 		}
 
+		if (prompts.some((prompt) => prompt.id && !prompt.value.trim())) {
+			alert(t("settings.promptTextRequired"));
+			return;
+		}
+
 		saveInProgress.current = true;
 		setIsLoading(true);
 		try {
-			const validPrompts = prompts.filter((p) => p.value.trim());
+			const edits = buildPromptEdits(brandId, initialPrompts, prompts);
+			if (
+				edits.deletedPromptIds.length &&
+				!window.confirm(
+					`${edits.deletedPromptIds.length}${APP_LANGUAGE === "en" ? " prompt(s)" : "件のプロンプト"}\n${t("settings.confirmPromptDeletion")}`,
+				)
+			)
+				return;
 
-			const currentIds = new Set(validPrompts.filter((p) => p.id).map((p) => p.id));
-			const removedPrompts = initialPrompts
-				.filter((p) => !currentIds.has(p.id))
-				.map((p) => ({ id: p.id, value: p.value, enabled: false, tags: p.tags || [] }));
-
-			const allPrompts = [
-				...validPrompts.map((p) => ({
-					...(p.id ? { id: p.id } : {}),
-					value: p.value.trim(),
-					enabled: p.enabled,
-					tags: p.tags,
-				})),
-				...removedPrompts,
-			];
-
-			await updatePromptsFn({ data: { brandId, prompts: allPrompts } });
-
-			const added = validPrompts.filter((p) => !p.id).length;
-			const edited = validPrompts.filter((p) => p.id).length;
-			const deleted = removedPrompts.length;
-			trackEvent("prompts_updated", { added, edited, deleted });
-
-			invalidatePromptsSummary(brandId);
-			navigate({ to: `/app/${brandId}/visibility` });
+			await updatePromptsFn({ data: edits });
+			trackEvent("prompts_updated", {
+				added: edits.prompts.filter((prompt) => !prompt.id).length,
+				edited: edits.prompts.filter((prompt) => prompt.id).length,
+				deleted: edits.deletedPromptIds.length,
+			});
+			await Promise.all([
+				queryClient.invalidateQueries({ queryKey: brandKeys.all }),
+				...["prompts-summary", "batch-chart-data", "promptChartData"].map((key) =>
+					queryClient.invalidateQueries({ queryKey: [key, brandId] }),
+				),
+			]);
+			await router.invalidate();
+			await navigate({ to: `/app/${brandId}/visibility` });
 		} catch (error) {
 			console.error("Error saving prompts:", error);
 			alert(settingsError(error, t("settings.failedToSave")));
@@ -117,9 +123,18 @@ export function PromptsEditor({
 				</div>
 			</div>
 
-			<PromptLanguageSuggestions prompts={prompts} onAdopt={setPrompts} disabled={isLoading || isReadOnly} />
-			<PromptsListEditor prompts={prompts} onChange={setPrompts} computeSystemTags={handleComputeSystemTags} />
+			<fieldset disabled={isLoading || isReadOnly} className="space-y-6 min-w-0" aria-label={pageTitle}>
+				<PromptLanguageSuggestions prompts={prompts} onAdopt={setPrompts} disabled={isLoading || isReadOnly} />
+				<PromptsListEditor prompts={prompts} onChange={setPrompts} computeSystemTags={handleComputeSystemTags} />
+			</fieldset>
 
+			{deletedCount > 0 && (
+				<p role="status" className="text-sm text-muted-foreground">
+					{deletedCount}
+					{APP_LANGUAGE === "en" ? " prompt(s): " : "件: "}
+					{t("settings.pendingPromptDeletion")}
+				</p>
+			)}
 			<div className="flex gap-2 items-center">
 				<Button
 					onClick={savePrompts}

@@ -20,8 +20,9 @@ import {
 import { coerceLookbackPeriod, generateDateRange, resolveWindowEnd } from "@/lib/chart-utils";
 import { APP_TIMEZONE } from "@/lib/app-locale";
 import { getTimezoneLookbackRange } from "@/lib/timezone-utils";
-import { getEffectiveBrandedStatus, computeSystemTags } from "@workspace/lib/tag-utils";
-import { createMultiplePromptJobSchedulers } from "@/lib/job-scheduler";
+import { getEffectiveBrandedStatus } from "@workspace/lib/tag-utils";
+import { promptEditsSchema } from "@/lib/prompt-edits";
+import { savePromptEdits } from "@/server/prompt-mutations";
 import {
 	extractDomain,
 	normalizeUrl,
@@ -514,74 +515,11 @@ export const getPromptRunsFn = createServerFn({ method: "GET" })
  * Update prompts for a brand (add/edit/delete)
  */
 export const updatePromptsFn = createServerFn({ method: "POST" })
-	.validator(
-		z.object({
-			brandId: z.string(),
-			prompts: z.array(
-				z.object({
-					id: z.string().optional(),
-					value: z.string(),
-					enabled: z.boolean().optional().default(true),
-					tags: z.array(z.string()).optional(),
-				}),
-			),
-		}),
-	)
+	.validator(promptEditsSchema)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
-
-		const brand = await db.query.brands.findFirst({
-			where: eq(brands.id, data.brandId),
-		});
-		if (!brand) throw new Error("Brand not found");
-
-		const existingIds = new Set(
-			(await db.select({ id: prompts.id }).from(prompts).where(eq(prompts.brandId, data.brandId)))
-				.map((p) => p.id),
-		);
-
-		const saved = await db.transaction(async (tx) => {
-			const toUpdate = data.prompts.filter((p) => p.id);
-			const toInsert = data.prompts.filter((p) => !p.id);
-
-			for (const p of toUpdate) {
-				await tx
-					.update(prompts)
-					.set({
-						value: p.value,
-						enabled: p.enabled,
-						tags: p.tags || [],
-						systemTags: computeSystemTags(p.value, brand.name, brand.website),
-					})
-					.where(and(eq(prompts.id, p.id!), eq(prompts.brandId, data.brandId)));
-			}
-
-			if (toInsert.length > 0) {
-				await tx.insert(prompts).values(
-					toInsert.map((p) => ({
-						brandId: data.brandId,
-						value: p.value,
-						enabled: p.enabled,
-						tags: p.tags || [],
-						systemTags: computeSystemTags(p.value, brand.name, brand.website),
-					})),
-				);
-			}
-
-			return tx.query.prompts.findMany({
-				where: eq(prompts.brandId, data.brandId),
-			});
-		});
-
-		const newPromptIds = saved.filter((p) => !existingIds.has(p.id)).map((p) => p.id);
-		if (newPromptIds.length > 0) {
-			createMultiplePromptJobSchedulers(newPromptIds).catch((err) =>
-				console.error("Failed to create job schedulers for new prompts:", err),
-			);
-		}
-
-		return saved;
+		return savePromptEdits(data);
 	});
 
 // ============================================================================

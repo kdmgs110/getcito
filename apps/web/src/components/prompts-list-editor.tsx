@@ -258,7 +258,7 @@ export function PromptsListEditor({
 											size="sm"
 											onClick={() => remove(index)}
 											className="h-auto p-1.5 text-muted-foreground hover:text-destructive shrink-0 cursor-pointer"
-											aria-label={t("settings.deletePrompt")}
+											aria-label={`${t("settings.deletePrompt")}: ${prompt.value}`}
 										>
 											<Trash2 className="h-4 w-4" />
 										</Button>
@@ -318,7 +318,7 @@ export function PromptsListEditor({
 										size="sm"
 										onClick={() => remove(index)}
 										className="h-auto p-1.5 text-muted-foreground hover:text-destructive shrink-0 cursor-pointer"
-										aria-label={t("settings.deletePrompt")}
+										aria-label={`${t("settings.deletePrompt")}: ${prompt.value}`}
 									>
 										<Trash2 className="h-4 w-4" />
 									</Button>
