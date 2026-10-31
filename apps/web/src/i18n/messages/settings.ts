@@ -1,4 +1,16 @@
 export const settingsMessages = {
+	"settings.promptTextRequired": {
+		en: "Enter prompt text or use the delete button.",
+		ja: "プロンプトを入力するか、削除ボタンで削除してください。",
+	},
+	"settings.confirmPromptDeletion": {
+		en: "Delete these prompts and their measurement history and citations? This cannot be undone. To keep history, cancel and turn off measurement instead.",
+		ja: "対象プロンプトと計測履歴・引用データを削除します。この操作は取り消せません。履歴を残す場合はキャンセルし、計測スイッチをオフにしてください。",
+	},
+	"settings.pendingPromptDeletion": {
+		en: "Will be deleted when you save. Reload to discard this change.",
+		ja: "保存すると削除されます。取り消す場合は保存せず再読み込みしてください。",
+	},
 	"settings.removeCompetitor": { en: "Remove competitor", ja: "競合を削除" },
 	"settings.failedToStartSignIn": {
 		en: "Failed to start sign-in",
