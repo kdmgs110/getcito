@@ -12,7 +12,9 @@ test.describe("GA4 traffic analysis", () => {
 	});
 
 	test("shows ingress metrics, changes granularity and opens an exact-page trend", async ({ page }) => {
-		await page.goto(path);
+		// A single-domain brand also defaults to the all-domain scope. Page rows
+		// omit redundant hostnames, so links must retain the sole verified host.
+		await page.goto(path.replace("hostname=example.com", "hostname=all"));
 		await expect(
 			page.getByRole("heading", { name: text("トラフィック分析", "Traffic analysis"), exact: true }),
 		).toBeVisible();
