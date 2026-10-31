@@ -44,6 +44,18 @@ export const environmentMessages = {
 		en: "Session cookie encryption secret.",
 		ja: "セッションCookieの暗号化に使用するシークレットです。",
 	},
+	BREVO_API_KEY: {
+		en: "Brevo transactional email API key for password reset emails.",
+		ja: "パスワード再発行メールの送信に使用するBrevoのAPIキーです。",
+	},
+	AUTH_EMAIL_FROM: {
+		en: "Verified sender email address for password reset messages.",
+		ja: "パスワード再発行メールの送信元として認証済みのメールアドレスです。",
+	},
+	AUTH_EMAIL_FROM_NAME: {
+		en: "Password reset sender display name (default GetCito).",
+		ja: "パスワード再発行メールの送信者名です（初期値：GetCito）。",
+	},
 	GOOGLE_ANALYTICS_CLIENT_ID: {
 		en: "Google OAuth web client ID for the optional GA4 traffic integration.",
 		ja: "GA4トラフィック連携に使用するGoogle OAuthのWebクライアントIDです（任意）。",

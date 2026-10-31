@@ -13,6 +13,7 @@ import { admin, customSession, organization } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { db } from "../db/db";
 import * as schema from "../db/schema";
+import { passwordResetEmailOptions } from "./password-reset-email";
 import { ac, adminRole, userRole } from "./permissions";
 
 export interface CreateAuthOptions {
@@ -63,10 +64,18 @@ export function createAuth(options?: CreateAuthOptions) {
 		emailAndPassword: {
 			enabled: options?.emailAndPasswordEnabled !== false,
 			requireEmailVerification: false,
+			...passwordResetEmailOptions(process.env),
 			...(options?.minPasswordLength !== undefined && {
 				minPasswordLength: options.minPasswordLength,
 			}),
 			...(options?.disableSignUp === true && { disableSignUp: true }),
+		},
+
+		rateLimit: {
+			customRules: {
+				"/request-password-reset": { window: 60, max: 3 },
+				"/reset-password": { window: 60, max: 5 },
+			},
 		},
 
 		user: {
