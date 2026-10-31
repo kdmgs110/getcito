@@ -43,6 +43,48 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "PostgreSQL connection string.",
 	},
 	{
+		name: "DATABASE_SSL_MODE",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Explicit PostgreSQL TLS policy: disable, verify-full, or no-verify; omitted preserves URL behavior.",
+	},
+	{
+		name: "DATABASE_SSL_CA",
+		scope: "server",
+		requiredBy: "optional",
+		description: "PEM certificate authority bundle for PostgreSQL only; requires DATABASE_SSL_MODE=verify-full.",
+	},
+	{
+		name: "DB_POOL_MAX",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Application PostgreSQL pool limit per web or worker process (default 20).",
+	},
+	{
+		name: "PG_BOSS_POOL_MAX",
+		scope: "server",
+		requiredBy: "optional",
+		description: "pg-boss PostgreSQL pool limit per web or worker process (default 10).",
+	},
+	{
+		name: "WORKER_PROMPT_CONCURRENCY",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Concurrent prompt jobs per worker process (default 10).",
+	},
+	{
+		name: "WORKER_REPORT_CONCURRENCY",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Concurrent report jobs per worker process (default 2).",
+	},
+	{
+		name: "WORKER_ANALYSIS_CONCURRENCY",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Concurrent brand analysis jobs per worker process (default 2).",
+	},
+	{
 		name: "APP_URL",
 		scope: "server",
 		requiredBy: "optional",
@@ -265,7 +307,8 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		name: "VITE_APP_LOCALE",
 		scope: "client",
 		requiredBy: "optional",
-		description: "BCP 47 locale for dates, numbers, and UI language. Defaults to ja-JP; ja/ja-* selects Japanese, other locales select English.",
+		description:
+			"BCP 47 locale for dates, numbers, and UI language. Defaults to ja-JP; ja/ja-* selects Japanese, other locales select English.",
 	},
 	{
 		name: "VITE_APP_NAME",

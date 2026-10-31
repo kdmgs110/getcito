@@ -1,3 +1,4 @@
+import { databaseConnection, positiveIntegerEnv } from "@workspace/config/runtime";
 import { PROCESS_PROMPT_JOB_POLICY } from "@workspace/lib/constants";
 import { PgBoss } from "pg-boss";
 
@@ -24,7 +25,8 @@ export async function getBoss(): Promise<PgBoss> {
 
 	bossPromise = (async () => {
 		const boss = new PgBoss({
-			connectionString,
+			...databaseConnection(),
+			max: positiveIntegerEnv("PG_BOSS_POOL_MAX", 10),
 			schema: "pgboss",
 			// Web app only needs to send/schedule jobs, not process them
 			supervise: false, // Let worker handle supervision

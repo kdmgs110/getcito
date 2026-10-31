@@ -1,3 +1,4 @@
+import { databaseConnection, positiveIntegerEnv } from "@workspace/config/runtime";
 import { PgBoss } from "pg-boss";
 
 const connectionString = process.env.DATABASE_URL;
@@ -7,7 +8,8 @@ if (!connectionString) {
 }
 
 const boss = new PgBoss({
-	connectionString,
+	...databaseConnection(),
+	max: positiveIntegerEnv("PG_BOSS_POOL_MAX", 10),
 	// Use same DB as app, pg-boss creates its own schema
 	schema: "pgboss",
 

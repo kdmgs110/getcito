@@ -2,6 +2,13 @@
   "$schema": "https://turborepo.dev/schema.json",
   "globalEnv": [
     "DATABASE_URL",
+    "DATABASE_SSL_MODE",
+    "DATABASE_SSL_CA",
+    "DB_POOL_MAX",
+    "PG_BOSS_POOL_MAX",
+    "WORKER_PROMPT_CONCURRENCY",
+    "WORKER_REPORT_CONCURRENCY",
+    "WORKER_ANALYSIS_CONCURRENCY",
     "APP_URL",
     "BETTER_AUTH_SECRET",
     "GOOGLE_ANALYTICS_CLIENT_ID",
