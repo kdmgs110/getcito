@@ -55,7 +55,7 @@ test.describe("Local brand creation and switching", () => {
 		await page.getByRole("button", { name: text("ブランドを作成", "Create brand"), exact: true }).click();
 		await expect(page.getByRole("button", { name: switchLabel(name), exact: true })).toBeVisible();
 		await expect(page.getByRole("button", { name: text("ブランド分析を開始", "Start brand analysis"), exact: true })).toBeVisible();
-				await expect(page.getByLabel(text("プロンプト・回答の言語", "Prompt and response language"), { exact: true })).toHaveValue("Japanese");
+		await expect(page.getByLabel(text("プロンプト・回答の言語", "Prompt and response language"), { exact: true })).toHaveValue("Japanese");
 		await expect(page.getByLabel(text("対象市場", "Target market"), { exact: true })).toHaveValue("");
 		// Saving is the only POST containing the website: opening the new brand does not auto-start AI analysis.
 		expect(brandPosts).toHaveLength(1);

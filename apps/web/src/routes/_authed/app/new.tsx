@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { BrandLocaleFields } from "@/components/brand-locale-fields";
 import { brandKeys } from "@/hooks/use-brands";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { APP_LANGUAGE, t } from "@/i18n";
 import { brandCreationText as ct } from "@/i18n/brand-creation-labels";
 import { makeBrandDestination, validateBrandReturnSearch } from "@/lib/brand-navigation";
@@ -41,6 +42,7 @@ export const Route = createFileRoute("/_authed/app/new")({
 });
 
 function NewBrandPage() {
+	const hydrated = useHydrated();
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState("");
 	const [errorField, setErrorField] = useState<string>();
@@ -63,7 +65,7 @@ function NewBrandPage() {
 
 	const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
-		if (submitting.current || createdBrandId) return;
+		if (!hydrated || submitting.current || createdBrandId) return;
 		submitting.current = true;
 		setIsLoading(true);
 		setError("");
@@ -140,7 +142,7 @@ function NewBrandPage() {
 							placeholder="Acme"
 							required
 							maxLength={100}
-							disabled={isLoading}
+							disabled={!hydrated || isLoading}
 							value={brandName}
 							onChange={(event) => setBrandName(event.target.value)}
 							aria-invalid={errorField === "brandName"}
@@ -156,7 +158,7 @@ function NewBrandPage() {
 							type="text"
 							placeholder="example.com"
 							required
-							disabled={isLoading}
+							disabled={!hydrated || isLoading}
 							value={website}
 							onChange={(event) => setWebsite(event.target.value)}
 							aria-invalid={errorField === "website"}
@@ -177,7 +179,7 @@ function NewBrandPage() {
 							targetMarket={targetMarket}
 							onLanguageChange={setTargetLanguage}
 							onMarketChange={setTargetMarket}
-							disabled={isLoading}
+							disabled={!hydrated || isLoading}
 						/>
 					</details>
 					{error && (
@@ -186,7 +188,7 @@ function NewBrandPage() {
 						</p>
 					)}
 
-					<Button type="submit" className="w-full" disabled={isLoading}>
+					<Button type="submit" className="w-full" disabled={!hydrated || isLoading}>
 						{isLoading ? t("settings.creating") : t("settings.createBrand")}
 					</Button>
 				</form>
