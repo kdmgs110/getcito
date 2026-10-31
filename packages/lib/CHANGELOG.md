@@ -1,5 +1,20 @@
 # @workspace/lib
 
+## 9.2.0
+
+### Minor Changes
+
+- 8fa5d3e: Track AI-attributed conversions from existing GA4 key events, with goal settings, AI sessions and conversion rates, combined domain reports, page details, and saved conversion views.
+- 936b291: Add GA4 traffic analysis with AI referral trends, page-level reports, and shared saved views.
+
+### Patch Changes
+
+- b24296f: Add searchable brand switching in local mode and preserve form inputs when brand creation fails. Create brands safely on retries, keep analytics separate, and start AI setup only when requested.
+- bd252bf: Add password reset emails and a screen for choosing a new password.
+- Updated dependencies [936b291]
+- Updated dependencies [bd252bf]
+  - @workspace/config@9.2.0
+
 ## 9.1.0
 
 ### Minor Changes

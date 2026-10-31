@@ -1,5 +1,13 @@
 # @workspace/og
 
+## 9.2.0
+
+### Patch Changes
+
+- Updated dependencies [936b291]
+- Updated dependencies [bd252bf]
+  - @workspace/config@9.2.0
+
 ## 9.1.0
 
 - Versioned with the fixed workspace release group.

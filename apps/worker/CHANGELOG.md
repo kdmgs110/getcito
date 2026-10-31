@@ -1,5 +1,17 @@
 # @workspace/worker
 
+## 9.2.0
+
+### Patch Changes
+
+- Updated dependencies [8fa5d3e]
+- Updated dependencies [936b291]
+- Updated dependencies [b24296f]
+- Updated dependencies [bd252bf]
+  - @workspace/lib@9.2.0
+  - @workspace/config@9.2.0
+  - @workspace/whitelabel@9.2.0
+
 ## 9.1.0
 
 ### Minor Changes
