@@ -42,8 +42,8 @@ function Bullet() {
 function BulletList({ items }: { items: string[] }) {
 	return (
 		<ul className="space-y-2.5">
-			{items.map((item, i) => (
-				<li key={`${i}-${item}`} className="flex gap-2.5 text-pretty text-base">
+			{items.map((item) => (
+				<li key={item} className="flex gap-2.5 text-pretty text-base">
 					<Bullet />
 					<span>{item}</span>
 				</li>
@@ -107,7 +107,7 @@ function OpportunityCard({ o, brandId }: { o: Opportunity; brandId: string }) {
 						{o.relatedPrompts.length === 0 ? (
 							<p className="px-1.5 py-1 text-xs text-muted-foreground">{t("dashboard.noSpecificPromptsLinked")}</p>
 						) : (
-							o.relatedPrompts.map((p, i) => <PromptLink key={`${i}-${p.text}`} prompt={p} brandId={brandId} />)
+							o.relatedPrompts.map((p) => <PromptLink key={p.promptId || p.text} prompt={p} brandId={brandId} />)
 						)}
 					</Panel>
 				)}
@@ -118,7 +118,7 @@ function OpportunityCard({ o, brandId }: { o: Opportunity; brandId: string }) {
 								{t("dashboard.youReNotCitedForThesePromptsYet")}
 							</p>
 						) : (
-							o.yourCitations.map((c, i) => <CiteLink key={`${i}-${c.url}`} page={c} />)
+							o.yourCitations.map((c) => <CiteLink key={c.url} page={c} />)
 						)}
 					</Panel>
 				)}
@@ -129,7 +129,7 @@ function OpportunityCard({ o, brandId }: { o: Opportunity; brandId: string }) {
 								{t("dashboard.noCompetitorPagesCitedForThesePrompts")}
 							</p>
 						) : (
-							o.competitorCitations.map((c, i) => <CiteLink key={`${i}-${c.url}`} page={c} />)
+							o.competitorCitations.map((c) => <CiteLink key={c.url} page={c} />)
 						)}
 					</Panel>
 				)}
@@ -140,7 +140,7 @@ function OpportunityCard({ o, brandId }: { o: Opportunity; brandId: string }) {
 
 export function OpportunitiesReport({ report, brandId }: { report: OpportunitiesReportData; brandId: string }) {
 	return (
-		<div className="space-y-8">
+		<div className="space-y-8" lang={report.generationContext?.languageCode}>
 			{report.summary.length > 0 && (
 				<section className="rounded-xl border border-border bg-muted/30 p-5">
 					<h2 className="text-sm font-semibold text-muted-foreground">{t("dashboard.summary")}</h2>
@@ -162,8 +162,8 @@ export function OpportunitiesReport({ report, brandId }: { report: Opportunities
 							<p className="text-pretty text-sm text-muted-foreground">{c.desc}</p>
 						</div>
 						<div className="space-y-3">
-							{opps.map((o, i) => (
-								<OpportunityCard key={`${i}-${o.title}`} o={o} brandId={brandId} />
+							{opps.map((o) => (
+								<OpportunityCard key={`${o.category}-${o.title}`} o={o} brandId={brandId} />
 							))}
 						</div>
 					</section>

@@ -81,6 +81,9 @@ jobs:
       - name: Lint prompt editing and deletion
         working-directory: apps/web
         run: pnpm exec biome lint src/server/prompt-mutations* src/lib/prompt-edits* src/components/prompts-editor.tsx src/components/prompts-list-editor.tsx src/i18n/messages/settings.ts
+      - name: Lint opportunity language and caching
+        working-directory: apps/web
+        run: pnpm exec biome lint src/server/opportunities*.ts src/lib/opportunity-*.ts src/lib/opportunities-query*.ts src/hooks/use-opportunities.tsx src/components/opportunities-report.tsx
       - run: pnpm build
       - run: node packages/lib/scripts/migrate.mjs
       - run: pnpm --filter e2e seed

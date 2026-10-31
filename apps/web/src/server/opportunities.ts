@@ -22,6 +22,14 @@ import { brandOpportunities, brands, competitors } from "@workspace/lib/db/schem
 import { runStructuredCompletionPrompt } from "@workspace/lib/onboarding";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { APP_LANGUAGE } from "@/i18n";
+import {
+	opportunityGenerationContext,
+	opportunityLanguageInstruction,
+	opportunityLanguageMismatch,
+	opportunityContextMatches,
+	type OpportunityGenerationContext,
+} from "@/lib/opportunity-language";
 import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { extractDomain } from "@/lib/domain-categories";
 import { categorizeDomain } from "@/lib/domain-categories.server";
@@ -102,6 +110,8 @@ export interface ReportOpportunity extends Omit<RawReport["opportunities"][numbe
 	competitorCitations: CitedPage[];
 }
 export interface OpportunitiesReport extends Omit<RawReport, "opportunities"> {
+	/** Locale snapshot used for generation and cache compatibility; absent on legacy reports. */
+	generationContext?: OpportunityGenerationContext;
 	opportunities: ReportOpportunity[];
 }
 
@@ -452,13 +462,21 @@ function enrichReport(raw: RawReport, digest: Digest): OpportunitiesReport {
 
 /** Generate the report, retrying until the model's output satisfies the schema.
  * Returns the validated report plus the model id that produced it. */
-async function generateValidReport(prompt: string): Promise<{ report: RawReport; model: string | null } | null> {
+async function generateValidReport(
+	prompt: string,
+	context: OpportunityGenerationContext,
+): Promise<{ report: RawReport; model: string | null } | null> {
 	for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
 		try {
-			const result = await runStructuredCompletionPrompt(prompt, opportunitiesSchema);
+			const result = await runStructuredCompletionPrompt(prompt, opportunitiesSchema, {
+				targetLanguage: context.targetLanguage,
+				targetMarket: context.targetMarket ?? undefined,
+			});
 			const parsed = opportunitiesSchema.safeParse(result.object);
-			if (parsed.success) return { report: parsed.data, model: result.modelVersion ?? null };
-			console.warn(`[opportunities] schema mismatch (attempt ${attempt}/${MAX_GENERATION_ATTEMPTS})`);
+			if (parsed.success && !opportunityLanguageMismatch(parsed.data, context)) {
+				return { report: parsed.data, model: result.modelVersion ?? null };
+			}
+			console.warn(`[opportunities] schema or language mismatch (attempt ${attempt}/${MAX_GENERATION_ATTEMPTS})`);
 		} catch (err) {
 			console.warn(`[opportunities] generation error (attempt ${attempt}/${MAX_GENERATION_ATTEMPTS}):`, err);
 		}
@@ -476,6 +494,11 @@ export const getOpportunitiesFn = createServerFn({ method: "GET" })
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
 
+		const brand = await db.query.brands.findFirst({ where: eq(brands.id, data.brandId) });
+		if (!brand) throw new Error("Brand not found");
+		const timezone = resolveTimezone(data.timezone);
+		const context = opportunityGenerationContext(brand, APP_LANGUAGE, timezone);
+
 		// Serve the most recent stored report while it's fresh. Every generation is
 		// kept (append-only); we regenerate only when the latest is stale.
 		const [latest] = await db
@@ -485,25 +508,34 @@ export const getOpportunitiesFn = createServerFn({ method: "GET" })
 			.orderBy(desc(brandOpportunities.createdAt))
 			.limit(1);
 		const isFresh = latest && Date.now() - new Date(latest.createdAt).getTime() < REFRESH_AFTER_DAYS * 86_400_000;
-		if (latest && isFresh) {
-			return { report: latest.report as OpportunitiesReport, reason: null, generatedFor: null };
+		const previous = latest?.report as OpportunitiesReport | undefined;
+		const compatible =
+			previous &&
+			opportunityContextMatches(previous.generationContext, context) &&
+			!opportunityLanguageMismatch(previous, context);
+		if (previous && compatible && isFresh) {
+			return { report: previous, reason: null, generatedFor: null };
 		}
 
-		const digest = await buildDigest(data.brandId, data.timezone);
+		const digest = await buildDigest(data.brandId, timezone);
 		if (!digest) {
-			if (latest) return { report: latest.report as OpportunitiesReport, reason: null, generatedFor: null };
+			if (previous && compatible) return { report: previous, reason: null, generatedFor: null };
 			return { report: null, reason: "insufficient-data", generatedFor: null };
 		}
 
-		const prompt = `${GUIDANCE}\n\n=== BRAND DATA ===\n${digest.text}\n\n=== TASK ===\n${TASK}`;
-		const generated = await generateValidReport(prompt);
+		const language = opportunityLanguageInstruction(context);
+		const prompt = `${GUIDANCE}\n\n${language}\n\n=== BRAND DATA ===\n${digest.text}\n\n=== TASK ===\n${TASK}\n\n${language}`;
+		const generated = await generateValidReport(prompt, context);
 		if (!generated) {
 			// Couldn't get a schema-valid report — serve the last good one if we have it.
-			if (latest) return { report: latest.report as OpportunitiesReport, reason: null, generatedFor: null };
+			if (previous && compatible) return { report: previous, reason: null, generatedFor: null };
 			throw new Error("Failed to generate a valid opportunities report");
 		}
 
-		const report = enrichReport(generated.report, digest);
+		const report: OpportunitiesReport = {
+			...enrichReport(generated.report, digest),
+			generationContext: context,
+		};
 		await db.insert(brandOpportunities).values({ brandId: data.brandId, report, model: generated.model });
 
 		return { report, reason: null, generatedFor: { brandName: digest.brandName } };
