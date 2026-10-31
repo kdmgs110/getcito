@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { normalizeBrandUpdate } from "@/lib/brand-settings";
 
 describe("normalizeBrandUpdate", () => {
@@ -17,21 +17,38 @@ describe("normalizeBrandUpdate", () => {
 		}
 	});
 
+	it("normalizes language independently and preserves omitted market", () => {
+		expect(normalizeBrandUpdate({ targetLanguage: "ja-JP" })).toEqual({
+			ok: true,
+			updates: { targetLanguage: "Japanese" },
+		});
+	});
+	it("clears explicitly null or blank locale fields", () => {
+		expect(normalizeBrandUpdate({ targetLanguage: null, targetMarket: "" })).toEqual({
+			ok: true,
+			updates: { targetLanguage: null, targetMarket: null },
+		});
+	});
+	it("rejects unsupported locale values", () => {
+		expect(normalizeBrandUpdate({ targetLanguage: "invented" }).ok).toBe(false);
+		expect(normalizeBrandUpdate({ targetMarket: "invented" }).ok).toBe(false);
+	});
+
 	describe("name", () => {
 		it("trims surrounding whitespace", () => {
 			const result = normalizeBrandUpdate({ name: "  Acme  " });
 			expect(result).toEqual({ ok: true, updates: { name: "Acme" } });
 		});
 
-		it.each([["empty string", ""], ["whitespace only", "   "]])(
-			"rejects a %s name",
-			(_label, name) => {
-				expect(normalizeBrandUpdate({ name })).toEqual({
-					ok: false,
-					error: "Brand name must be a non-empty string",
-				});
-			},
-		);
+		it.each([
+			["empty string", ""],
+			["whitespace only", "   "],
+		])("rejects a %s name", (_label, name) => {
+			expect(normalizeBrandUpdate({ name })).toEqual({
+				ok: false,
+				error: "Brand name must be a non-empty string",
+			});
+		});
 	});
 
 	describe("website", () => {

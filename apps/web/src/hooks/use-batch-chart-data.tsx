@@ -1,7 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { APP_TIMEZONE } from "@/lib/app-locale";
-import { type BatchChartDataResponse, getBatchChartDataFn } from "@/server/visibility";
+import { getBatchChartDataFn } from "@/server/visibility";
 
 export type { LookbackPeriod } from "@/lib/chart-utils";
 
@@ -16,11 +16,8 @@ export interface BatchChartDataFilters {
 	search?: string;
 }
 
-export function useBatchChartData(brandId?: string, filters?: BatchChartDataFilters) {
-	const params = useParams({ strict: false }) as { brand?: string };
-	const resolvedBrandId = brandId || params.brand;
-
-	const query = useQuery({
+export function batchChartQueryOptions(resolvedBrandId?: string, filters?: BatchChartDataFilters) {
+	return queryOptions({
 		queryKey: [
 			"batch-chart-data",
 			resolvedBrandId,
@@ -42,10 +39,19 @@ export function useBatchChartData(brandId?: string, filters?: BatchChartDataFilt
 			}),
 		enabled: !!resolvedBrandId,
 		staleTime: 60_000,
-		refetchOnWindowFocus: false,
+		refetchOnWindowFocus: true,
 		refetchOnReconnect: true,
+		// Evaluation results arrive asynchronously; refresh the open chart as they are saved.
+		refetchInterval: 60_000,
 		placeholderData: (prev) => prev, // Keep previous data while loading
 	});
+}
+
+export function useBatchChartData(brandId?: string, filters?: BatchChartDataFilters) {
+	const params = useParams({ strict: false }) as { brand?: string };
+	const resolvedBrandId = brandId || params.brand;
+
+	const query = useQuery(batchChartQueryOptions(resolvedBrandId, filters));
 
 	return {
 		batchChartData: query.data,

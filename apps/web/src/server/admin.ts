@@ -17,6 +17,7 @@ import { sendImmediatePromptJob } from "@/lib/job-scheduler";
 import { getAdminActiveBrandsOverTime, getAdminBrandRunStats, getAdminRunsOverTime } from "@/lib/postgres-read";
 import { compareQueueOrder } from "@/lib/queue-order";
 import { deleteBrandCascade } from "@/server/brand-cascade";
+import { onboardingLocaleSchemaFields } from "@/server/onboarding-locale-schema";
 
 // ============================================================================
 // Admin guard helper
@@ -270,6 +271,7 @@ export const adminAnalyzeBrandFn = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
 			website: z.string().min(1),
+			...onboardingLocaleSchemaFields,
 			brandName: z.string().optional(),
 			maxCompetitors: z.number().int().min(0).optional(),
 			maxPrompts: z.number().int().min(0).optional(),
@@ -279,6 +281,8 @@ export const adminAnalyzeBrandFn = createServerFn({ method: "POST" })
 		await requireAdmin();
 		return analyzeBrand({
 			website: data.website,
+			targetLanguage: data.targetLanguage,
+			targetMarket: data.targetMarket,
 			brandName: data.brandName,
 			maxCompetitors: data.maxCompetitors,
 			maxPrompts: data.maxPrompts,
@@ -898,7 +902,9 @@ export const getProviderUsageFn = createServerFn({ method: "GET" })
 					// Timing is measured over successful calls only — a provider that fails
 					// fast would otherwise flatter its own average.
 					avgMs: sql<number | null>`AVG(${providerCalls.durationMs}) FILTER (WHERE ${providerCalls.success})::int`,
-					p95Ms: sql<number | null>`PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ${providerCalls.durationMs}) FILTER (WHERE ${providerCalls.success})::int`,
+					p95Ms: sql<
+						number | null
+					>`PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY ${providerCalls.durationMs}) FILTER (WHERE ${providerCalls.success})::int`,
 					maxMs: sql<number | null>`MAX(${providerCalls.durationMs}) FILTER (WHERE ${providerCalls.success})::int`,
 					lastCallAt: sql<string | null>`MAX(${providerCalls.createdAt})`,
 				})

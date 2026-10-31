@@ -4,21 +4,21 @@
  * A brand's target market/language lives on the brand row and is forwarded by
  * the worker on every run (`ProviderOptions.targetMarket` / `targetLanguage`,
  * see apps/worker/src/jobs/process-prompt.ts). Scraper providers hand it to the
- * upstream API natively — DataForSEO sets `location_name` / `language_name` —
- * but chat-completion endpoints have no such field, so the only lever is a
- * system message. Providers that skip this silently run every brand in the
+ * upstream API using engine-specific country/language fields. Chat-completion
+ * endpoints also need a system message to select the response language. Providers that skip this silently run every brand in the
  * model's default locale.
  *
  * Returns undefined when the brand set neither value, so a brand that never
  * picked a market keeps the model's own default instead of being pinned to one.
  */
-import { BRIGHTDATA_COUNTRIES } from "../brightdata-locations";
+import { type BrandLocaleInput, resolveBrandLocale } from "../brand-locale";
 import type { ProviderOptions } from "./types";
 
-export function localeSystemPrompt(options?: ProviderOptions): string | undefined {
+export function localeSystemPrompt(options?: BrandLocaleInput | ProviderOptions): string | undefined {
+	const locale = resolveBrandLocale(options);
 	const parts: string[] = [];
-	if (options?.targetLanguage) parts.push(`Please provide your response in language: ${options.targetLanguage}.`);
-	if (options?.targetMarket) parts.push(`Assume the user's location is: ${options.targetMarket}.`);
+	if (locale.languageName) parts.push(`Please provide your response in language: ${locale.languageName}.`);
+	if (locale.countryName) parts.push(`Assume the user's location is: ${locale.countryName}.`);
 	return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
@@ -26,7 +26,9 @@ export function localeSystemPrompt(options?: ProviderOptions): string | undefine
  * The same hint as an OpenAI-style `messages` prefix — spread into the array so
  * it disappears entirely when the brand has no locale set.
  */
-export function localeSystemMessages(options?: ProviderOptions): Array<{ role: "system"; content: string }> {
+export function localeSystemMessages(
+	options?: BrandLocaleInput | ProviderOptions,
+): Array<{ role: "system"; content: string }> {
 	const content = localeSystemPrompt(options);
 	return content ? [{ role: "system", content }] : [];
 }
@@ -42,10 +44,8 @@ export function localeSystemMessages(options?: ProviderOptions): Array<{ role: "
  * what the prompt says. Reuses the country table the BrightData provider
  * already ships (every UI location in locations.ts has an entry).
  *
- * Returns undefined for an unset or unrecognized market, so the tool keeps its
- * default behaviour rather than being sent a bogus code.
+ * Returns undefined for an unset market; rejects an unrecognized explicit setting.
  */
-export function localeCountryCode(options?: ProviderOptions): string | undefined {
-	if (!options?.targetMarket) return undefined;
-	return BRIGHTDATA_COUNTRIES[options.targetMarket]?.toUpperCase();
+export function localeCountryCode(options?: BrandLocaleInput | ProviderOptions): string | undefined {
+	return resolveBrandLocale(options).countryCode;
 }

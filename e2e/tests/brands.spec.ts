@@ -38,6 +38,10 @@ test.describe("Local brand creation and switching", () => {
 		await page.getByRole("button", { name: switchLabel(BRAND_FLOW_NAME), exact: true }).click();
 		await page.getByRole("button", { name: text("ブランドを追加", "Add brand"), exact: true }).click();
 		await expect(page).toHaveURL(/\/app\/new\?/);
+		await expect(page.getByLabel(text("プロンプト・回答の言語", "Prompt and response language"), { exact: true })).toHaveValue(ja ? "Japanese" : "");
+		await page.getByLabel(text("対象市場", "Target market"), { exact: true }).selectOption("");
+		await expect(page.getByLabel(text("プロンプト・回答の言語", "Prompt and response language"), { exact: true })).toBeEnabled();
+		await page.getByLabel(text("プロンプト・回答の言語", "Prompt and response language"), { exact: true }).selectOption("Japanese");
 		await page.getByLabel(text("ブランド名", "Brand name"), { exact: true }).fill(name);
 		await page.getByLabel(text("ウェブサイト", "Website"), { exact: true }).fill("bad domain");
 		await page.getByRole("button", { name: text("ブランドを作成", "Create brand"), exact: true }).click();
@@ -51,6 +55,8 @@ test.describe("Local brand creation and switching", () => {
 		await page.getByRole("button", { name: text("ブランドを作成", "Create brand"), exact: true }).click();
 		await expect(page.getByRole("button", { name: switchLabel(name), exact: true })).toBeVisible();
 		await expect(page.getByRole("button", { name: text("ブランド分析を開始", "Start brand analysis"), exact: true })).toBeVisible();
+				await expect(page.getByLabel(text("プロンプト・回答の言語", "Prompt and response language"), { exact: true })).toHaveValue("Japanese");
+		await expect(page.getByLabel(text("対象市場", "Target market"), { exact: true })).toHaveValue("");
 		// Saving is the only POST containing the website: opening the new brand does not auto-start AI analysis.
 		expect(brandPosts).toHaveLength(1);
 		const rows = await readCreatedBrand(name);
@@ -59,7 +65,7 @@ test.describe("Local brand creation and switching", () => {
 			name,
 			website: `https://${website}/`,
 			target_market: null,
-			target_language: null,
+			target_language: "Japanese",
 			admins: 1,
 			ga4_connections: 0,
 			views: 0,

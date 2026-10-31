@@ -12,16 +12,19 @@
  * ./onboarding-core.ts, imported only by API routes (server-only).
  */
 import { createServerFn } from "@tanstack/react-start";
+import { analyzeBrand, analyzeCompetitors, analyzePrompts } from "@workspace/lib/onboarding";
 import { z } from "zod";
-import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
-import { analyzeBrand, analyzeBrandInfo, analyzeCompetitors, analyzePrompts } from "@workspace/lib/onboarding";
 import {
+	type AnalyzeBrandStatus,
 	cancelAnalyzeBrand,
 	enqueueAnalyzeBrand,
 	getAnalyzeBrandStatus,
-	type AnalyzeBrandStatus,
 } from "@/lib/analyze-brand-job";
+import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
 import { saveWizardOnboarding, wizardOnboardingInputSchema } from "@/server/onboarding-core";
+import { onboardingLocaleSchemaFields } from "@/server/onboarding-locale-schema";
+import { resolveOnboardingLocale } from "./onboarding-locale";
+import { translateBrandPrompts } from "./onboarding-translations";
 
 /**
  * Kick off brand analysis as a background job.
@@ -39,6 +42,7 @@ export const startAnalyzeBrandFn = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
 			brandId: z.string().min(1),
+			...onboardingLocaleSchemaFields,
 			website: z.string().min(1),
 			brandName: z.string().optional(),
 		}),
@@ -46,7 +50,7 @@ export const startAnalyzeBrandFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
-		await enqueueAnalyzeBrand(data);
+		await enqueueAnalyzeBrand({ ...data, ...(await resolveOnboardingLocale(data.brandId, data)) });
 		return { ok: true };
 	});
 
@@ -58,20 +62,30 @@ export const startAnalyzeBrandFn = createServerFn({ method: "POST" })
  * wizard of the eventual result.
  */
 export const getAnalyzeBrandStatusFn = createServerFn({ method: "POST" })
-	.validator(z.object({ brandId: z.string().min(1) }))
+	.validator(
+		z.object({
+			brandId: z.string().min(1),
+			...onboardingLocaleSchemaFields,
+		}),
+	)
 	.handler(async ({ data }): Promise<AnalyzeBrandStatus> => {
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
-		return getAnalyzeBrandStatus(data.brandId);
+		return getAnalyzeBrandStatus(data.brandId, await resolveOnboardingLocale(data.brandId, data));
 	});
 
 /** Cancel the in-flight brand-analysis job for a brand (e.g. user backs out). */
 export const cancelAnalyzeBrandFn = createServerFn({ method: "POST" })
-	.validator(z.object({ brandId: z.string().min(1) }))
+	.validator(
+		z.object({
+			brandId: z.string().min(1),
+			...onboardingLocaleSchemaFields,
+		}),
+	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
-		await cancelAnalyzeBrand(data.brandId);
+		await cancelAnalyzeBrand(data.brandId, await resolveOnboardingLocale(data.brandId, data));
 		return { ok: true };
 	});
 
@@ -96,6 +110,7 @@ export const analyzeBrandInfoFn = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
 			brandId: z.string().min(1),
+			...onboardingLocaleSchemaFields,
 			website: z.string().min(1),
 			brandName: z.string().optional(),
 		}),
@@ -104,6 +119,7 @@ export const analyzeBrandInfoFn = createServerFn({ method: "POST" })
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
 		return analyzeBrand({
+			...(await resolveOnboardingLocale(data.brandId, data)),
 			website: data.website,
 			brandName: data.brandName,
 			maxCompetitors: 0,
@@ -118,6 +134,7 @@ export const analyzeCompetitorsFn = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
 			brandId: z.string().min(1),
+			...onboardingLocaleSchemaFields,
 			website: z.string().min(1),
 			brandName: z.string().min(1),
 		}),
@@ -126,6 +143,7 @@ export const analyzeCompetitorsFn = createServerFn({ method: "POST" })
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
 		return analyzeCompetitors({
+			...(await resolveOnboardingLocale(data.brandId, data)),
 			website: data.website,
 			brandName: data.brandName,
 		});
@@ -138,6 +156,7 @@ export const analyzePromptsFn = createServerFn({ method: "POST" })
 	.validator(
 		z.object({
 			brandId: z.string().min(1),
+			...onboardingLocaleSchemaFields,
 			website: z.string().min(1),
 			brandName: z.string().min(1),
 			competitorNames: z.array(z.string()).optional(),
@@ -147,8 +166,33 @@ export const analyzePromptsFn = createServerFn({ method: "POST" })
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
 		return analyzePrompts({
+			...(await resolveOnboardingLocale(data.brandId, data)),
 			website: data.website,
 			brandName: data.brandName,
 			competitorNames: data.competitorNames,
 		});
+	});
+
+/** Translation preview only. Adoption creates new prompts through the normal save path. */
+export const translateBrandPromptsFn = createServerFn({ method: "POST" })
+	.validator(
+		z.object({
+			brandId: z.string().min(1),
+			...onboardingLocaleSchemaFields,
+			prompts: z
+				.array(
+					z.object({
+						prompt: z.string().trim().min(1).max(4000),
+						tags: z.array(z.string().max(100)).max(10).optional(),
+					}),
+				)
+				.min(1)
+				.max(30)
+				.optional(),
+		}),
+	)
+	.handler(async ({ data }) => {
+		const session = await requireAuthSession();
+		await requireOrgAccess(session.user.id, data.brandId);
+		return translateBrandPrompts(data);
 	});

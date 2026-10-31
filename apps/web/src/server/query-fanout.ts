@@ -20,6 +20,7 @@ import { getFanoutBreakdown, getFanoutModelTotals, getFanoutPromptTotals } from 
 import { resolveFilteredPrompts } from "@/server/prompt-resolution";
 import { computeFanoutAnalysis, type FanoutAnalysis } from "@/lib/fanout-analysis";
 import { APP_TIMEZONE } from "@/lib/app-locale";
+import { isPromptRunLanguageFilter } from "@/lib/prompt-run-language";
 
 export interface QueryFanoutResponse extends FanoutAnalysis {
 	brandName: string;
@@ -56,6 +57,7 @@ export const getQueryFanoutFn = createServerFn({ method: "GET" })
 			search: z.string().optional(),
 			/** Scope to a single prompt (prompt-details Web Queries tab) — lists come back uncapped. */
 			promptId: z.string().optional(),
+			language: z.string().refine(isPromptRunLanguageFilter).optional().default("all"),
 			timezone: z.string().default(APP_TIMEZONE),
 		}),
 	)
@@ -80,9 +82,9 @@ export const getQueryFanoutFn = createServerFn({ method: "GET" })
 		const promptValueMap = new Map(resolved.map((p) => [p.id, p.value]));
 
 		const [breakdown, modelTotals, promptTotalsRows] = await Promise.all([
-			getFanoutBreakdown(data.brandId, fromDateStr, toDateStr, timezone, promptIds, model),
-			getFanoutModelTotals(data.brandId, fromDateStr, toDateStr, timezone, promptIds, model),
-			getFanoutPromptTotals(data.brandId, fromDateStr, toDateStr, timezone, promptIds, model),
+			getFanoutBreakdown(data.brandId, fromDateStr, toDateStr, timezone, promptIds, model, data.language),
+			getFanoutModelTotals(data.brandId, fromDateStr, toDateStr, timezone, promptIds, model, data.language),
+			getFanoutPromptTotals(data.brandId, fromDateStr, toDateStr, timezone, promptIds, model, data.language),
 		]);
 		const promptRuns = new Map(promptTotalsRows.map((r) => [r.prompt_id, r.runs]));
 

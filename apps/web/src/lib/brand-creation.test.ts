@@ -22,7 +22,7 @@ describe("normalizeBrandCreation", () => {
 			error: { code: "INVALID_WEBSITE", field: "website" },
 		});
 	});
-	it("validates known markets and the selected market's language", () => {
+	it("validates known markets and independently chosen languages", () => {
 		expect(normalizeBrandCreation({ ...input, targetMarket: "invented" })).toMatchObject({
 			ok: false,
 			error: { code: "INVALID_MARKET" },
@@ -30,13 +30,16 @@ describe("normalizeBrandCreation", () => {
 		expect(normalizeBrandCreation({ ...input, targetMarket: "Japan", targetLanguage: "Japanese" })).toMatchObject({
 			ok: true,
 		});
-		expect(normalizeBrandCreation({ ...input, targetMarket: "Japan", targetLanguage: "Albanian" })).toMatchObject({
+		expect(normalizeBrandCreation({ ...input, targetMarket: "Japan", targetLanguage: "invented" })).toMatchObject({
 			ok: false,
 			error: { code: "INVALID_LANGUAGE" },
 		});
-		expect(normalizeBrandCreation({ ...input, targetLanguage: "Japanese" })).toMatchObject({
-			ok: false,
-			error: { code: "INVALID_LANGUAGE" },
+		expect(normalizeBrandCreation({ ...input, targetLanguage: "ja" })).toMatchObject({
+			ok: true,
+			value: { targetLanguage: "Japanese", targetMarket: null },
+		});
+		expect(normalizeBrandCreation({ ...input, targetLanguage: "English", targetMarket: "Japan" })).toMatchObject({
+			ok: true,
 		});
 	});
 	it("accepts browser UUID request keys and rejects arbitrary identities", () => {

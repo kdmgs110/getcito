@@ -138,6 +138,33 @@ describe("cloro provider", () => {
 		expect(result.modelVersion).toBe("gpt-5-3-mini");
 	});
 
+	it.each(["Japanese", "English"])("passes %s as a chat instruction and Japan as native country", async (language) => {
+		vi.useFakeTimers();
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(jsonResponse({ success: true, task: { id: "localized", status: "QUEUED" } }))
+			.mockResolvedValueOnce(
+				jsonResponse({ task: { id: "localized", status: "COMPLETED" }, response: CHATGPT_RESPONSE }),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		const pending = cloro.run("chatgpt", "Rails案件", { targetLanguage: language, targetMarket: "JP" });
+		await vi.runAllTimersAsync();
+		await pending;
+		expect(JSON.parse(fetchMock.mock.calls[0][1].body).payload).toMatchObject({
+			prompt: `Rails案件\nPlease provide your response in ${language}.`,
+			country: "JP",
+		});
+	});
+
+	it("rejects unsupported Google language targeting before changing or submitting a search query", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(cloro.run("google-ai-overview", "Rails案件", { targetLanguage: "Japanese" })).rejects.toThrow(
+			"do not support explicit language targeting",
+		);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it("maps Google AI Overview onto the Google Search task and unwraps the overview", async () => {
 		vi.useFakeTimers();
 		const fetchMock = vi

@@ -3,22 +3,23 @@
  * Replaces apps/web/src/app/api/brands/* API routes.
  */
 import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
-import { requireAuthSession, requireOrgAccess, listUserOrganizations } from "@/lib/auth/helpers";
-import { evaluateRequireCanCreateBrands } from "@/lib/auth/policies";
-import { getDeployment } from "@/lib/config/server";
-import { db } from "@workspace/lib/db/db";
-import { brands, prompts, competitors, type BrandWithPrompts, type Brand } from "@workspace/lib/db/schema";
-import { BrandCreationConflictError, provisionAdditionalLocalBrand } from "@workspace/lib/db/provisioning";
-import { eq, and, count, sql } from "drizzle-orm";
+import { normalizeBrandLocale } from "@workspace/lib/brand-locale";
 import { MAX_COMPETITORS } from "@workspace/lib/constants";
-import { cleanAndValidateDomain } from "@/lib/domain-categories";
-import { validateWebsiteUrl } from "@/lib/brand-website";
-import { normalizeBrandUpdate } from "@/lib/brand-settings";
-import { normalizeBrandCreation, type BrandCreationResult } from "@/lib/brand-creation";
-import { deleteBrandCascade } from "@/server/brand-cascade";
-import { parseScrapeTargets, selectTargetsForBrand } from "@workspace/lib/providers";
+import { db } from "@workspace/lib/db/db";
+import { BrandCreationConflictError, provisionAdditionalLocalBrand } from "@workspace/lib/db/provisioning";
+import { type Brand, type BrandWithPrompts, brands, competitors, prompts } from "@workspace/lib/db/schema";
 import type { ModelConfig } from "@workspace/lib/providers";
+import { parseScrapeTargets, selectTargetsForBrand } from "@workspace/lib/providers";
+import { and, count, eq, sql } from "drizzle-orm";
+import { z } from "zod";
+import { listUserOrganizations, requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
+import { evaluateRequireCanCreateBrands } from "@/lib/auth/policies";
+import { type BrandCreationResult, normalizeBrandCreation } from "@/lib/brand-creation";
+import { normalizeBrandUpdate } from "@/lib/brand-settings";
+import { validateWebsiteUrl } from "@/lib/brand-website";
+import { getDeployment } from "@/lib/config/server";
+import { cleanAndValidateDomain } from "@/lib/domain-categories";
+import { deleteBrandCascade } from "@/server/brand-cascade";
 
 /**
  * Deployment-configured models this brand actually runs, after applying
@@ -67,10 +68,7 @@ function getDefaultBrandDomains(): string[] {
 
 async function getBrandWithPromptsFromDb(
 	brandId: string,
-): Promise<
-	| (BrandWithPrompts & { effectiveModels: string[]; effectiveModelConfigs: ModelConfig[] })
-	| undefined
-> {
+): Promise<(BrandWithPrompts & { effectiveModels: string[]; effectiveModelConfigs: ModelConfig[] }) | undefined> {
 	try {
 		const brand = await db.query.brands.findFirst({
 			where: eq(brands.id, brandId),
@@ -150,8 +148,8 @@ export const createBrandFn = createServerFn({ method: "POST" })
 			brandId: z.string(),
 			brandName: z.string(),
 			website: z.string(),
-			targetMarket: z.string().optional(),
-			targetLanguage: z.string().optional(),
+			targetMarket: z.string().nullable().optional(),
+			targetLanguage: z.string().nullable().optional(),
 		}),
 	)
 	.handler(async ({ data }) => {
@@ -171,8 +169,7 @@ export const createBrandFn = createServerFn({ method: "POST" })
 				id: data.brandId,
 				name: data.brandName,
 				website: urlValidation.formattedUrl,
-				targetMarket: data.targetMarket,
-				targetLanguage: data.targetLanguage,
+				...normalizeBrandLocale(data),
 				enabled: true,
 				...(defaultDomains.length > 0 && { additionalDomains: defaultDomains }),
 			})
@@ -203,8 +200,8 @@ export const createBrandWithOrgFn = createServerFn({ method: "POST" })
 		z.object({
 			brandName: z.string(),
 			website: z.string(),
-			targetMarket: z.string().optional(),
-			targetLanguage: z.string().optional(),
+			targetMarket: z.string().nullable().optional(),
+			targetLanguage: z.string().nullable().optional(),
 			requestId: z.string().optional(),
 		}),
 	)
@@ -243,8 +240,8 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 			brandId: z.string(),
 			name: z.string().optional(),
 			website: z.string().optional(),
-			targetMarket: z.string().optional(),
-			targetLanguage: z.string().optional(),
+			targetMarket: z.string().nullable().optional(),
+			targetLanguage: z.string().nullable().optional(),
 			shortDescription: z.string().optional(),
 			additionalDomains: z.array(z.string()).optional(),
 			aliases: z.array(z.string()).optional(),
@@ -255,6 +252,8 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 		await requireOrgAccess(session.user.id, data.brandId);
 
 		const normalized = normalizeBrandUpdate({
+			targetLanguage: data.targetLanguage,
+			targetMarket: data.targetMarket,
 			name: data.name,
 			website: data.website,
 			additionalDomains: data.additionalDomains,
@@ -263,11 +262,9 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 		if (!normalized.ok) {
 			throw new Error(normalized.error);
 		}
-		const updateData = { 
-			...normalized.updates, 
-			...(data.targetMarket !== undefined && { targetMarket: data.targetMarket }),
-			...(data.targetLanguage !== undefined && { targetLanguage: data.targetLanguage }),
-			...(data.shortDescription !== undefined && { shortDescription: data.shortDescription })
+		const updateData = {
+			...normalized.updates,
+			...(data.shortDescription !== undefined && { shortDescription: data.shortDescription }),
 		};
 
 		const result = await db
@@ -374,12 +371,7 @@ export const addDomainToBrandFn = createServerFn({ method: "POST" })
 				additionalDomains: sql`array_append(${brands.additionalDomains}, ${domain})`,
 				updatedAt: new Date(),
 			})
-			.where(
-				and(
-					eq(brands.id, data.brandId),
-					sql`NOT (${domain} = ANY(${brands.additionalDomains}))`,
-				),
-			)
+			.where(and(eq(brands.id, data.brandId), sql`NOT (${domain} = ANY(${brands.additionalDomains}))`))
 			.returning();
 
 		if (result) return result;

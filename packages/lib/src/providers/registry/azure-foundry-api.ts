@@ -161,6 +161,8 @@ export const azureFoundryApi: Provider = {
 		prompt,
 		schema,
 		version,
+		targetLanguage,
+		targetMarket,
 	}: StructuredResearchOptions<T>): Promise<StructuredResearchResult<T>> {
 		// Foundry exposes OpenAI-compatible `response_format`, so structured
 		// output is the same call `run` makes with a schema attached. Web search
@@ -176,7 +178,7 @@ export const azureFoundryApi: Provider = {
 					headers: foundryHeaders(),
 					body: JSON.stringify({
 						model: targetModel,
-						messages: [{ role: "user", content: prompt }],
+						messages: [...localeSystemMessages({ targetLanguage, targetMarket }), { role: "user", content: prompt }],
 						response_format: {
 							type: "json_schema",
 							json_schema: { name: "research_output", strict: true, schema: jsonSchema },

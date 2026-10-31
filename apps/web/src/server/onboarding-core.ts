@@ -7,14 +7,17 @@
  * client bundle). Server functions live in onboarding.ts; everything else
  * lives here.
  */
-import { z } from "zod";
-import { eq, count } from "drizzle-orm";
-import { db } from "@workspace/lib/db/db";
-import { brands, prompts, competitors } from "@workspace/lib/db/schema";
+
+import { normalizeBrandLocale } from "@workspace/lib/brand-locale";
 import { MAX_COMPETITORS } from "@workspace/lib/constants";
+import { db } from "@workspace/lib/db/db";
+import { brands, competitors, prompts } from "@workspace/lib/db/schema";
 import { computeSystemTags, sanitizeUserTags } from "@workspace/lib/tag-utils";
-import { dedupeDomains, dedupeAliases } from "@/lib/domain-categories";
+import { count, eq } from "drizzle-orm";
+import { z } from "zod";
+import { dedupeAliases, dedupeDomains } from "@/lib/domain-categories";
 import { createMultiplePromptJobSchedulers } from "@/lib/job-scheduler";
+import { onboardingLocaleSchemaFields } from "@/server/onboarding-locale-schema";
 
 // ============================================================================
 // Errors
@@ -61,6 +64,7 @@ type PromptInput = z.infer<typeof promptInputSchema>;
  * (`https://<host>`) and the rest are stored in `additionalDomains`.
  */
 export const createBrandInputSchema = z.object({
+	...onboardingLocaleSchemaFields,
 	id: z.string().min(1),
 	name: z.string().min(1),
 	domains: z.array(z.string()).min(1),
@@ -71,6 +75,7 @@ export const createBrandInputSchema = z.object({
 
 /** PATCH /api/v1/brands/:brandId body. brandId comes from the URL. */
 export const updateBrandBodySchema = z.object({
+	...onboardingLocaleSchemaFields,
 	brandName: z.string().min(1).optional(),
 	domains: z.array(z.string()).min(1).optional(),
 	aliases: z.array(z.string()).optional(),
@@ -82,6 +87,7 @@ export const updateBrandBodySchema = z.object({
 
 /** Wizard save: brand-level fields + new prompts/competitors in one shot. */
 export const wizardOnboardingInputSchema = z.object({
+	...onboardingLocaleSchemaFields,
 	brandId: z.string().min(1),
 	brandName: z.string().min(1).optional(),
 	website: z.string().min(1).optional(),
@@ -96,6 +102,8 @@ export const wizardOnboardingInputSchema = z.object({
 
 /** Internal shape for createBrand — matches storage (website + additionalDomains). */
 export interface CreateBrandInput {
+	targetLanguage?: string | null;
+	targetMarket?: string | null;
 	id: string;
 	name: string;
 	website: string;
@@ -107,6 +115,8 @@ export interface CreateBrandInput {
 
 /** Internal shape for updateBrand — matches storage. */
 export interface UpdateBrandInput {
+	targetLanguage?: string | null;
+	targetMarket?: string | null;
 	brandId: string;
 	brandName?: string;
 	website?: string;
@@ -121,6 +131,8 @@ export interface UpdateBrandInput {
 export type WizardOnboardingInput = z.infer<typeof wizardOnboardingInputSchema>;
 
 export interface BrandResult {
+	targetLanguage: string | null;
+	targetMarket: string | null;
 	id: string;
 	name: string;
 	domains: string[];
@@ -152,6 +164,8 @@ export function buildBrandResult(row: typeof brands.$inferSelect): BrandResult {
 	const websiteHost = new URL(row.website).hostname.replace(/^www\./, "");
 	return {
 		id: row.id,
+		targetLanguage: row.targetLanguage,
+		targetMarket: row.targetMarket,
 		name: row.name,
 		domains: [websiteHost, ...row.additionalDomains],
 		aliases: row.aliases,
@@ -186,6 +200,8 @@ export function apiCreateInputToInternal(input: z.infer<typeof createBrandInputS
 	const { website, additionalDomains } = splitDomainsForStorage(input.domains);
 	return {
 		id: input.id,
+		targetLanguage: input.targetLanguage,
+		targetMarket: input.targetMarket,
 		name: input.name,
 		website,
 		additionalDomains,
@@ -202,6 +218,8 @@ export function apiUpdateInputToInternal(
 ): UpdateBrandInput {
 	const result: UpdateBrandInput = {
 		brandId,
+		targetLanguage: input.targetLanguage,
+		targetMarket: input.targetMarket,
 		brandName: input.brandName,
 		aliases: input.aliases,
 		enabled: input.enabled,
@@ -317,6 +335,7 @@ export async function createBrand(input: CreateBrandInput): Promise<BrandResult>
 		.insert(brands)
 		.values({
 			id: input.id,
+			...normalizeBrandLocale(input),
 			name: input.name,
 			website: formattedWebsite,
 			additionalDomains,
@@ -369,7 +388,10 @@ export async function updateBrand(input: UpdateBrandInput): Promise<BrandResult>
 			? new URL(existing.website).hostname.replace(/^www\./, "")
 			: null;
 
+	const locale = normalizeBrandLocale(input);
 	const patch: Partial<typeof brands.$inferInsert> = { updatedAt: new Date() };
+	if (input.targetLanguage !== undefined) patch.targetLanguage = locale.targetLanguage;
+	if (input.targetMarket !== undefined) patch.targetMarket = locale.targetMarket;
 	if (input.brandName !== undefined) patch.name = input.brandName;
 	if (formattedWebsite !== null) patch.website = formattedWebsite;
 	if (input.additionalDomains !== undefined) {
@@ -393,6 +415,8 @@ export async function updateBrand(input: UpdateBrandInput): Promise<BrandResult>
 export async function saveWizardOnboarding(input: WizardOnboardingInput): Promise<BrandResult> {
 	await updateBrand({
 		brandId: input.brandId,
+		targetLanguage: input.targetLanguage,
+		targetMarket: input.targetMarket,
 		brandName: input.brandName,
 		website: input.website,
 		additionalDomains: input.additionalDomains,

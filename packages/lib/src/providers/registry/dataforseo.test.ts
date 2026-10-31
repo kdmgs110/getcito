@@ -96,6 +96,36 @@ describe("dataforseo provider", () => {
 		});
 	});
 
+	it.each([
+		["chatgpt", "chatgptLlmResponsesLive", true],
+		["perplexity", "perplexityLlmResponsesLive", true],
+		["gemini", "geminiLlmResponsesLive", false],
+	] as const)("uses documented locale fields for %s", async (model, method, nativeCountry) => {
+		dataforseoClient[method].mockResolvedValueOnce({ tasks: [{ status_code: 20000, result: [{ items: [] }] }] });
+		await dataforseo.run(model, "Rails案件", { webSearch: true, targetLanguage: "ja-JP", targetMarket: "JP" });
+		const request = dataforseoClient[method].mock.calls[0][0][0];
+		expect(request.system_message).toContain("language: Japanese");
+		expect(request.system_message).toContain("location is: Japan");
+		expect(request).not.toHaveProperty("language_name");
+		expect(request).not.toHaveProperty("location_name");
+		if (nativeCountry) expect(request.web_search_country_iso_code).toBe("JP");
+		else expect(request).not.toHaveProperty("web_search_country_iso_code");
+	});
+
+	it("keeps explicit English independent of the target market and disabled search", async () => {
+		dataforseoClient.chatgptLlmResponsesLive.mockResolvedValueOnce({
+			tasks: [{ status_code: 20000, result: [{ items: [] }] }],
+		});
+		await dataforseo.run("chatgpt", "Rails案件", {
+			webSearch: false,
+			targetLanguage: "English",
+			targetMarket: "Japan",
+		});
+		const request = dataforseoClient.chatgptLlmResponsesLive.mock.calls[0][0][0];
+		expect(request.system_message).toContain("language: English");
+		expect(request).not.toHaveProperty("web_search_country_iso_code");
+	});
+
 	it("resolves Gemini Vertex grounding-redirect citation URLs to the real source", async () => {
 		const realUrl = "https://www.whathifi.com/best-buys/hi-fi/best-hi-fi-speakers";
 		const redirectUrl = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/ABC123";

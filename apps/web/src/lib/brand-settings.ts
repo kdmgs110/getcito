@@ -1,3 +1,4 @@
+import { normalizeBrandLocale } from "@workspace/lib/brand-locale";
 import { validateWebsiteUrl } from "@/lib/brand-website";
 import { cleanAndValidateDomain } from "@/lib/domain-categories";
 
@@ -17,6 +18,8 @@ import { cleanAndValidateDomain } from "@/lib/domain-categories";
  * of the brand untouched.
  */
 export interface BrandUpdateInput {
+	targetLanguage?: string | null;
+	targetMarket?: string | null;
 	name?: string;
 	website?: string;
 	additionalDomains?: string[];
@@ -24,18 +27,25 @@ export interface BrandUpdateInput {
 }
 
 export interface BrandUpdateFields {
+	targetLanguage?: string | null;
+	targetMarket?: string | null;
 	name?: string;
 	website?: string;
 	additionalDomains?: string[];
 	aliases?: string[];
 }
 
-export type NormalizeBrandUpdateResult =
-	| { ok: true; updates: BrandUpdateFields }
-	| { ok: false; error: string };
+export type NormalizeBrandUpdateResult = { ok: true; updates: BrandUpdateFields } | { ok: false; error: string };
 
 export function normalizeBrandUpdate(input: BrandUpdateInput): NormalizeBrandUpdateResult {
 	const updates: BrandUpdateFields = {};
+	try {
+		const locale = normalizeBrandLocale(input);
+		if (input.targetLanguage !== undefined) updates.targetLanguage = locale.targetLanguage;
+		if (input.targetMarket !== undefined) updates.targetMarket = locale.targetMarket;
+	} catch {
+		return { ok: false, error: "Invalid brand language or market" };
+	}
 
 	if (input.name !== undefined) {
 		if (!input.name.trim()) {

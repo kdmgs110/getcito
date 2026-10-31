@@ -1,16 +1,16 @@
-import { settingsError } from "@/i18n/settings-labels";
-import { t } from "@/i18n";
-import { useState, useRef, useCallback } from "react";
-import { Button } from "@workspace/ui/components/button";
-import { Save } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
-import { useInvalidatePromptsSummary } from "@/hooks/use-prompts-summary";
-import { updatePromptsFn } from "@/server/prompts";
-import { trackEvent } from "@/lib/posthog";
-import { PromptsListEditor, type EditablePrompt } from "@/components/prompts-list-editor";
-import { useRouteContext } from "@tanstack/react-router";
+import { useNavigate, useRouteContext } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
 import { computeSystemTags } from "@workspace/lib/tag-utils";
+import { Button } from "@workspace/ui/components/button";
+import { Save } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { type EditablePrompt, PromptsListEditor } from "@/components/prompts-list-editor";
+import { useInvalidatePromptsSummary } from "@/hooks/use-prompts-summary";
+import { t } from "@/i18n";
+import { settingsError } from "@/i18n/settings-labels";
+import { trackEvent } from "@/lib/posthog";
+import { updatePromptsFn } from "@/server/prompts";
+import { PromptLanguageSuggestions } from "./prompt-language-suggestions";
 
 interface Prompt {
 	id: string;
@@ -117,6 +117,7 @@ export function PromptsEditor({
 				</div>
 			</div>
 
+			<PromptLanguageSuggestions prompts={prompts} onAdopt={setPrompts} disabled={isLoading || isReadOnly} />
 			<PromptsListEditor prompts={prompts} onChange={setPrompts} computeSystemTags={handleComputeSystemTags} />
 
 			<div className="flex gap-2 items-center">

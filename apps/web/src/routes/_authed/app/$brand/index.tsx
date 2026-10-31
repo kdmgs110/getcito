@@ -1,4 +1,19 @@
-import { t, formatNumber } from "@/i18n";
+import {
+	IconActivity,
+	IconArrowRight,
+	IconClock,
+	IconEye,
+	IconInfoCircle,
+	IconList,
+	IconRefresh,
+	IconSpeakerphone,
+} from "@tabler/icons-react";
+import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
+import type { ClientConfig } from "@workspace/config/types";
+import { Button } from "@workspace/ui/components/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
+import { Skeleton } from "@workspace/ui/components/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 /**
  * /app/$brand - Dashboard overview page
  *
@@ -6,30 +21,16 @@ import { t, formatNumber } from "@/i18n";
  * Displays onboarding wizard if brand is not yet onboarded.
  */
 import { useEffect } from "react";
-import { createFileRoute, Link, useRouteContext } from "@tanstack/react-router";
-import { formatDateTime } from "@/lib/app-locale";
-import { getAppName, getBrandName, buildTitle } from "@/lib/route-head";
-import {
-	IconArrowRight,
-	IconEye,
-	IconList,
-	IconActivity,
-	IconClock,
-	IconInfoCircle,
-	IconRefresh,
-	IconSpeakerphone,
-} from "@tabler/icons-react";
 import PromptWizard from "@/components/prompt-wizard";
+import { TrendChart } from "@/components/trend-chart";
 import { useBrand } from "@/hooks/use-brands";
 import { useDashboardSummary } from "@/hooks/use-dashboard-summary";
 import { useShareOfVoice } from "@/hooks/use-share-of-voice";
-import { TrendChart } from "@/components/trend-chart";
-import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { Button } from "@workspace/ui/components/button";
-import { Skeleton } from "@workspace/ui/components/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
-import type { ClientConfig } from "@workspace/config/types";
+import { formatNumber, t } from "@/i18n";
+import { localeText as lt } from "@/i18n/brand-locale-labels";
+import { formatDateTime } from "@/lib/app-locale";
 import { setPersonProperties } from "@/lib/posthog";
+import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
 
 function getVisibilityBgColor(value: number): string {
 	if (value > 75) return "bg-emerald-50 dark:bg-emerald-950/30";
@@ -290,7 +291,7 @@ function DashboardPage() {
 			<div className="space-y-6 max-w-2xl p-4">
 				<PromptWizard
 					key={brandId}
-					autoStart={clientConfig?.mode !== "local"}
+					autoStart={false}
 					onComplete={() => {
 						const template = clientConfig?.branding.onboardingRedirectUrlTemplate;
 						if (template) {
@@ -363,6 +364,7 @@ function DashboardPage() {
 	return (
 		<div className="flex flex-1 flex-col">
 			<div className="m-auto flex w-full max-w-[1600px] flex-col gap-3 p-4">
+				<p className="text-xs text-muted-foreground">{lt("aggregate")}</p>
 				{/* Section 1: AI Visibility */}
 				<section className="space-y-2">
 					<div className="flex items-center justify-between">

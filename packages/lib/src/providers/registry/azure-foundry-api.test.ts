@@ -36,10 +36,7 @@ describe("liveSearchParameters", () => {
 		});
 	});
 
-	it("keeps the defaults rather than guessing when the market isn't a known country", () => {
-		expect(liveSearchParameters({ targetMarket: "Atlantis" })).toEqual({
-			mode: "auto",
-			return_citations: true,
-		});
+	it("rejects an invalid explicit market rather than silently guessing", () => {
+		expect(() => liveSearchParameters({ targetMarket: "Atlantis" })).toThrow("BRAND_MARKET_INVALID");
 	});
 });

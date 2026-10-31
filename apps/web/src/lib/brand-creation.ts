@@ -1,6 +1,4 @@
-import { DATAFORSEO_LANGUAGES } from "@workspace/lib/languages";
-import { DATAFORSEO_LOCATION_LANGUAGES } from "@workspace/lib/location-languages";
-import { TARGET_MARKETS } from "@workspace/lib/locations";
+import { normalizeBrandLocale } from "@workspace/lib/brand-locale";
 import { validateWebsiteUrl } from "./brand-website";
 
 export type BrandCreationErrorCode =
@@ -22,8 +20,8 @@ export type BrandCreationResult = { ok: true; brandId: string } | { ok: false; e
 export type BrandCreationInput = {
 	brandName: string;
 	website: string;
-	targetMarket?: string;
-	targetLanguage?: string;
+	targetMarket?: string | null;
+	targetLanguage?: string | null;
 	requestId?: string;
 };
 
@@ -37,15 +35,21 @@ export function normalizeBrandCreation(input: BrandCreationInput) {
 	if (!website.isValid || /^(?!https?:)[a-z][a-z0-9+.-]*:\/\//i.test(input.website.trim())) {
 		return { ok: false, error: { code: "INVALID_WEBSITE", field: "website" } } as const;
 	}
-	const targetMarket = input.targetMarket?.trim() || null;
-	const targetLanguage = input.targetLanguage?.trim() || null;
-	if (targetMarket && !(TARGET_MARKETS as readonly string[]).includes(targetMarket)) {
-		return { ok: false, error: { code: "INVALID_MARKET", field: "targetMarket" } } as const;
+	let targetMarket: string | null;
+	let targetLanguage: string | null;
+	try {
+		({ targetMarket, targetLanguage } = normalizeBrandLocale(input));
+	} catch (error) {
+		const market = error instanceof Error && error.message === "BRAND_MARKET_INVALID";
+		return {
+			ok: false,
+			error: {
+				code: market ? "INVALID_MARKET" : "INVALID_LANGUAGE",
+				field: market ? "targetMarket" : "targetLanguage",
+			},
+		} as const;
 	}
-	const languages = targetMarket ? DATAFORSEO_LOCATION_LANGUAGES[targetMarket] || DATAFORSEO_LANGUAGES : [];
-	if (targetLanguage && !languages.some((language) => language.name === targetLanguage)) {
-		return { ok: false, error: { code: "INVALID_LANGUAGE", field: "targetLanguage" } } as const;
-	}
+
 	if (
 		input.requestId &&
 		!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)

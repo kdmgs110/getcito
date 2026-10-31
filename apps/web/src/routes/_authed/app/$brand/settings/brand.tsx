@@ -1,5 +1,6 @@
-import { displayMarket, displayLanguage, settingsError } from "@/i18n/settings-labels";
+import { BrandLocaleFields } from "@/components/brand-locale-fields";
 import { t } from "@/i18n";
+import { settingsError } from "@/i18n/settings-labels";
 /**
  * /app/$brand/settings/brand - Brand settings page
  *
@@ -10,20 +11,9 @@ import { IconInfoCircle } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate, useRouteContext } from "@tanstack/react-router";
 import type { ClientConfig } from "@workspace/config/types";
-import { DATAFORSEO_LANGUAGES } from "@workspace/lib/languages";
-import { DATAFORSEO_LOCATION_LANGUAGES } from "@workspace/lib/location-languages";
-import { TARGET_MARKETS } from "@workspace/lib/locations";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
-import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@workspace/ui/components/select";
 import { TagsInput } from "@workspace/ui/components/tags-input";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
@@ -96,21 +86,6 @@ function BrandSettingsPage() {
 	const handleAliasesChange = useCallback((values: string[]) => setAliasesOverride(values), []);
 	const handleDomainsChange = useCallback((values: string[]) => setDomainsOverride(values), []);
 
-	const handleTargetMarketChange = (val: string) => {
-		setMarketOverride(val);
-		if (targetLanguage) {
-			const validLangs = DATAFORSEO_LOCATION_LANGUAGES[val] || DATAFORSEO_LANGUAGES;
-			if (!validLangs.some((l) => l.name === targetLanguage)) {
-				setLanguageOverride("");
-			}
-		}
-	};
-
-	const availableLanguages =
-		targetMarket && DATAFORSEO_LOCATION_LANGUAGES[targetMarket]
-			? DATAFORSEO_LOCATION_LANGUAGES[targetMarket]
-			: DATAFORSEO_LANGUAGES;
-
 	if (isLoading) {
 		return (
 			<div className="space-y-6">
@@ -147,8 +122,8 @@ function BrandSettingsPage() {
 					brandId: brand.id,
 					name,
 					website,
-					targetMarket: targetMarket || undefined,
-					targetLanguage: targetLanguage || undefined,
+					targetMarket: targetMarket || null,
+					targetLanguage: targetLanguage || null,
 					shortDescription: shortDescription || undefined,
 					additionalDomains,
 					aliases,
@@ -242,45 +217,13 @@ function BrandSettingsPage() {
 						<p className="text-xs text-muted-foreground">{t("settings.brieflyDescribeWhatYourBrandDoes")}</p>
 					</div>
 
-					<div className="space-y-2">
-						<Label htmlFor="targetMarket">{t("settings.targetMarket")}</Label>
-						<Select value={targetMarket} onValueChange={handleTargetMarketChange} disabled={isSubmitting}>
-							<SelectTrigger id="targetMarket">
-								<SelectValue placeholder={t("settings.selectTargetMarketEGUnitedStates")} />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectGroup>
-									{TARGET_MARKETS.map((location) => (
-										<SelectItem key={location} value={location}>
-											{displayMarket(location)}
-										</SelectItem>
-									))}
-								</SelectGroup>
-							</SelectContent>
-						</Select>
-						<p className="text-xs text-muted-foreground">{t("settings.theLocationYouWantTheLlmScraperToTarget")}</p>
-					</div>
-
-					<div className="space-y-2">
-						<Label htmlFor="targetLanguage">{t("settings.targetLanguage")}</Label>
-						<Select value={targetLanguage} onValueChange={setLanguageOverride} disabled={isSubmitting || !targetMarket}>
-							<SelectTrigger id="targetLanguage">
-								<SelectValue
-									placeholder={targetMarket ? t("settings.selectTargetLanguage") : t("settings.selectAMarketFirst")}
-								/>
-							</SelectTrigger>
-							<SelectContent>
-								<SelectGroup>
-									{availableLanguages.map((lang) => (
-										<SelectItem key={lang.name} value={lang.name}>
-											{displayLanguage(lang.code, lang.name)}
-										</SelectItem>
-									))}
-								</SelectGroup>
-							</SelectContent>
-						</Select>
-						<p className="text-xs text-muted-foreground">{t("settings.theLanguageYouWantTheLlmScraperToUse")}</p>
-					</div>
+					<BrandLocaleFields
+						targetLanguage={targetLanguage}
+						targetMarket={targetMarket}
+						onLanguageChange={setLanguageOverride}
+						onMarketChange={setMarketOverride}
+						disabled={isSubmitting || isReadOnly}
+					/>
 
 					<div className="space-y-2">
 						<Label className="flex items-center gap-1.5">

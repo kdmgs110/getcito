@@ -73,6 +73,11 @@ jobs:
         run: pnpm exec biome lint src/components/brand-switcher.tsx src/components/app-sidebar.tsx src/components/prompt-wizard.tsx src/lib/brand-navigation*.ts src/lib/brand-creation*.ts src/i18n/brand-labels.ts src/i18n/brand-creation-labels.ts src/routes/_authed/app/new.tsx src/routes/_authed/app/index.tsx 'src/routes/_authed/app/$brand/index.tsx' src/server/brands*.ts
       - name: Lint brand provisioning
         run: pnpm exec biome lint packages/lib/src/db/provisioning*.ts
+      - name: Lint language settings and generation
+        working-directory: apps/web
+        run: pnpm exec biome lint src/components/brand-locale-fields* src/components/prompt-language-*.tsx src/components/prompt-run-context* src/lib/brand-settings.ts src/lib/prompt-suggestions* src/lib/prompt-run-language* src/lib/postgres-read-language.test.ts src/server/onboarding*.ts src/i18n/brand-locale-labels.ts src/hooks/use-batch-chart-data.tsx src/hooks/use-prompt-chart-data.tsx src/hooks/prompt-chart-refresh.test.ts
+      - name: Lint shared language and providers
+        run: pnpm exec biome lint packages/lib/src/brand-locale* packages/lib/src/prompt-run-context* packages/lib/src/providers packages/lib/src/onboarding
       - run: pnpm build
       - run: node packages/lib/scripts/migrate.mjs
       - run: pnpm --filter e2e seed

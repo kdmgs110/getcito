@@ -1,14 +1,14 @@
 import { z } from "zod";
+import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
+import type { Citation } from "../../text-extraction";
+import { localeSystemMessages } from "../locale";
 import type {
 	Provider,
-	ScrapeResult,
 	ProviderOptions,
+	ScrapeResult,
 	StructuredResearchOptions,
 	StructuredResearchResult,
 } from "../types";
-import type { Citation } from "../../text-extraction";
-import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
-import { localeSystemMessages } from "../locale";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const OPENROUTER_API_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
@@ -22,7 +22,8 @@ function openrouterHeaders(): Record<string, string> {
 	return {
 		Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 		"Content-Type": "application/json",
-		"HTTP-Referer": process.env.APP_URL ?? "https://github.com/ai-search-guru/getcito-worlds-first-open-source-aio-aeo-or-geo-tool",
+		"HTTP-Referer":
+			process.env.APP_URL ?? "https://github.com/ai-search-guru/getcito-worlds-first-open-source-aio-aeo-or-geo-tool",
 		"X-Title": "Getcito AEO",
 	};
 }
@@ -82,13 +83,15 @@ export const openrouter: Provider = {
 		prompt,
 		schema,
 		webSearch = true,
+		targetLanguage,
+		targetMarket,
 	}: StructuredResearchOptions<T>): Promise<StructuredResearchResult<T>> {
 		// Raw fetch (no AI SDK) so we can attach the OpenRouter `plugins` field
 		// — the AI SDK's OpenAI-compat path doesn't pass it through.
 		const jsonSchema = z.toJSONSchema(schema as z.ZodType);
 		const body: Record<string, unknown> = {
 			model: DEFAULT_RESEARCH_MODEL,
-			messages: [{ role: "user", content: prompt }],
+			messages: [...localeSystemMessages({ targetLanguage, targetMarket }), { role: "user", content: prompt }],
 			response_format: {
 				type: "json_schema",
 				json_schema: { name: "research_output", strict: true, schema: jsonSchema },
@@ -125,7 +128,7 @@ export const openrouter: Provider = {
 		if (!modelSlug) {
 			throw new Error(
 				`OpenRouter requires a version slug in SCRAPE_TARGETS. ` +
-				`Example: ${model}:openrouter:openai/gpt-5-mini:online`,
+					`Example: ${model}:openrouter:openai/gpt-5-mini:online`,
 			);
 		}
 
@@ -143,7 +146,9 @@ export const openrouter: Provider = {
 			headers: {
 				Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 				"Content-Type": "application/json",
-				"HTTP-Referer": process.env.APP_URL ?? "https://github.com/ai-search-guru/getcito-worlds-first-open-source-aio-aeo-or-geo-tool",
+				"HTTP-Referer":
+					process.env.APP_URL ??
+					"https://github.com/ai-search-guru/getcito-worlds-first-open-source-aio-aeo-or-geo-tool",
 				"X-Title": "Getcito AEO",
 			},
 			body: JSON.stringify({

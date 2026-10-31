@@ -5,17 +5,16 @@
  * on prompt_runs and citations tables.
  */
 
+import { db } from "@workspace/lib/db/db";
 import { type SQL, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
 import { APP_TIMEZONE } from "@/lib/app-locale";
 import {
-	UNAVAILABLE_SENTINEL,
 	type FanoutBreakdownRow,
 	type FanoutModelTotalRow,
 	type FanoutPromptTotalRow,
+	UNAVAILABLE_SENTINEL,
 } from "@/lib/fanout-analysis";
-
-const db = drizzle(process.env.DATABASE_URL!);
+import { promptRunLanguageCondition } from "@/lib/prompt-run-language";
 
 // ============================================================================
 // Types
@@ -668,6 +667,7 @@ export async function getPromptCitationUrlStats(
 	fromDate: string,
 	toDate: string,
 	timezone: string,
+	language = "all",
 ): Promise<CitationUrlStats[]> {
 	const rows = await queryPg<CitationUrlStats>(sql`
 		SELECT
@@ -681,6 +681,14 @@ export async function getPromptCitationUrlStats(
 		WHERE prompt_id = ${promptId}
 			AND created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
+			${
+				language === "all"
+					? sql``
+					: sql`AND EXISTS (
+				SELECT 1 FROM prompt_runs pr WHERE pr.id = citations.prompt_run_id
+				AND ${promptRunLanguageCondition(sql`pr.request_context`, language)}
+			)`
+			}
 		GROUP BY url, domain
 		ORDER BY count DESC
 	`);
@@ -1257,6 +1265,7 @@ export async function getFanoutBreakdown(
 	timezone: string,
 	enabledPromptIds?: string[],
 	model?: string,
+	language = "all",
 ): Promise<FanoutBreakdownRow[]> {
 	if (!enabledPromptIds?.length) return [];
 	return queryPg<FanoutBreakdownRow>(sql`
@@ -1276,6 +1285,7 @@ export async function getFanoutBreakdown(
 			AND pr.created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			AND pr.prompt_id IN (${uuidList(enabledPromptIds)})
 			${model ? sql`AND pr.model = ${model}` : sql``}
+			AND ${promptRunLanguageCondition(sql`pr.request_context`, language)}
 		GROUP BY pr.prompt_id, pr.model, fq.query
 	`);
 }
@@ -1288,6 +1298,7 @@ export async function getFanoutModelTotals(
 	timezone: string,
 	enabledPromptIds?: string[],
 	model?: string,
+	language = "all",
 ): Promise<FanoutModelTotalRow[]> {
 	if (!enabledPromptIds?.length) return [];
 	// `runs` counts every web-search-enabled run ("Search Prompt Runs"); `fanout_runs`
@@ -1312,6 +1323,7 @@ export async function getFanoutModelTotals(
 			AND pr.created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			AND pr.prompt_id IN (${uuidList(enabledPromptIds)})
 			${model ? sql`AND pr.model = ${model}` : sql``}
+			AND ${promptRunLanguageCondition(sql`pr.request_context`, language)}
 		GROUP BY pr.model
 		ORDER BY total_queries DESC
 	`);
@@ -1329,6 +1341,7 @@ export async function getFanoutPromptTotals(
 	timezone: string,
 	enabledPromptIds?: string[],
 	model?: string,
+	language = "all",
 ): Promise<FanoutPromptTotalRow[]> {
 	if (!enabledPromptIds?.length) return [];
 	return queryPg<FanoutPromptTotalRow>(sql`
@@ -1345,6 +1358,7 @@ export async function getFanoutPromptTotals(
 			AND pr.created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			AND pr.prompt_id IN (${uuidList(enabledPromptIds)})
 			${model ? sql`AND pr.model = ${model}` : sql``}
+			AND ${promptRunLanguageCondition(sql`pr.request_context`, language)}
 		GROUP BY pr.prompt_id
 	`);
 }
