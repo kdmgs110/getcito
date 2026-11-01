@@ -138,6 +138,7 @@ function PromptHistoryPage() {
 					attemptId: record.attemptId ?? undefined,
 					runId: record.runId ?? undefined,
 					targetKey: record.targetKey,
+					model: !record.targetKey.startsWith("legacy:") ? record.targetKey : previous.model,
 					pageScopeKey: undefined,
 				}),
 				replace: true,
@@ -413,6 +414,10 @@ function PromptHistoryPage() {
 								search: (previous) => ({
 									...previous,
 									targetKey: selection.targetKey,
+									model:
+										selection.targetKey && !selection.targetKey.startsWith("legacy:")
+											? selection.targetKey
+											: previous.model,
 									pageScopeKey: selection.scopeKey,
 									attemptId: selection.attemptId,
 									runId: selection.runId,
@@ -431,6 +436,7 @@ function PromptHistoryPage() {
 									attemptId: answer.attemptId ?? undefined,
 									runId: answer.runId ?? undefined,
 									targetKey: answer.targetKey,
+									model: !answer.targetKey.startsWith("legacy:") ? answer.targetKey : previous.model,
 								}),
 								replace: true,
 								resetScroll: false,
@@ -497,6 +503,7 @@ function PromptHistoryPage() {
 											attemptId: answer.attemptId ?? undefined,
 											runId: answer.runId ?? undefined,
 											targetKey: answer.targetKey,
+											model: !answer.targetKey.startsWith("legacy:") ? answer.targetKey : previous.model,
 										}),
 										replace: true,
 										resetScroll: false,

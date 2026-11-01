@@ -164,6 +164,7 @@ test.describe("Existing prompt detail measurement comparison", () => {
   await expect(table).toContainText(PAGE_EVIDENCE_TITLE);
   await page.getByRole("combobox",{name:/^計測対象$|^Measurement target$/}).selectOption(WEB_TARGET);
   await expect.poll(() => new URL(page.url()).searchParams.get("targetKey")).toBe(WEB_TARGET);
+  expect(new URL(page.url()).searchParams.get("model")).toBe(WEB_TARGET);
   await expect(table).toContainText(/検索結果取得 1\/1回答|Search coverage 1\/1 answers/);
   await expect(table).toContainText(/参照元取得 1\/1回答|Source coverage 1\/1 answers/);
   await expect(table).not.toContainText(PAGE_EVIDENCE_TITLE);
