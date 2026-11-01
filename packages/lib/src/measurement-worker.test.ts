@@ -1,6 +1,7 @@
 import type { Job } from "pg-boss";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MeasurementEvidence } from "./measurement";
+import type { PromptRunRequestContext } from "./prompt-run-context";
 import type { ScrapeResult } from "./providers/types";
 
 const harness = vi.hoisted(() => ({
@@ -51,6 +52,7 @@ type Attempt = {
 	status: string;
 	evidence?: MeasurementEvidence;
 	promptRunId?: string | null;
+	requestContext?: PromptRunRequestContext;
 };
 const attempts = new Map<string, Attempt>();
 const answers: Array<Record<string, unknown>> = [];
@@ -101,16 +103,19 @@ beforeEach(() => {
 		values: (values: Record<string, unknown>) => {
 			if (table === measurementAttempts) {
 				return {
-					onConflictDoUpdate: () => ({
+					onConflictDoUpdate: ({ set }: { set: Record<string, unknown> }) => ({
 						returning: async () => {
 							const key = `${values.batchId}/${values.targetKey}/${values.iteration}`;
 							const previous = attempts.get(key);
 							if (previous && previous.status !== "failed") return [];
-							const attempt = {
-								id: previous?.id ?? `attempt-${++nextId}`,
-								targetKey: String(values.targetKey),
-								status: "running",
-							};
+							const attempt: Attempt = previous
+								? { ...previous, ...set }
+								: {
+										id: `attempt-${++nextId}`,
+										targetKey: String(values.targetKey),
+										status: "running",
+										requestContext: values.requestContext as PromptRunRequestContext,
+									};
 							attempts.set(key, attempt);
 							return [attempt];
 						},
@@ -190,6 +195,47 @@ describe("bounded Web measurement jobs", () => {
 		await processPromptJob([job()]);
 		expect(harness.run).not.toHaveBeenCalled();
 		expect(answers).toEqual([]);
+	});
+
+	it("records the updated submitted prompt and locale when reclaiming a failed attempt", async () => {
+		const targetKeys = ["chatgpt:brightdata:online"];
+		harness.run.mockRejectedValueOnce(new Error("temporary acquisition failure"));
+		await expect(processPromptJob([job({ targetKeys })])).rejects.toThrow("MEASUREMENT_BATCH_PARTIALLY_FAILED");
+		const key = "batch-1/chatgpt:brightdata:online/1";
+		expect(attempts.get(key)?.requestContext).toMatchObject({
+			prompt: "おすすめの案件は？",
+			targetLanguage: "Japanese",
+			targetMarket: "Japan",
+		});
+		harness.findPrompt.mockResolvedValue({
+			id: "prompt-1",
+			brandId: "brand-1",
+			value: "Which projects are recommended?",
+			enabled: true,
+		});
+		harness.findBrand.mockResolvedValue({
+			id: "brand-1",
+			name: "Brand",
+			website: "https://example.com",
+			enabled: true,
+			targetLanguage: "English",
+			targetMarket: "US",
+		});
+		await processPromptJob([job({ targetKeys })]);
+		expect(harness.run).toHaveBeenLastCalledWith(
+			"chatgpt",
+			"Which projects are recommended?",
+			expect.objectContaining({ targetLanguage: "English", targetMarket: "United States" }),
+		);
+		expect(attempts.get(key)?.requestContext).toEqual(answers[0].requestContext);
+		expect(attempts.get(key)?.requestContext).toMatchObject({
+			prompt: "Which projects are recommended?",
+			targetLanguage: "English",
+			targetMarket: "United States",
+			languageCode: "en",
+			countryCode: "US",
+		});
+		expect(harness.run).toHaveBeenCalledTimes(2);
 	});
 
 	it("does not save malformed acquisitions as successful answers", async () => {
