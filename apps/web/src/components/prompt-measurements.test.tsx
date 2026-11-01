@@ -92,9 +92,51 @@ describe("measurement response cards", () => {
 		expect(html).toContain("取得元から未提供");
 		expect(html).toContain("検索なしを意味するものではありません");
 	});
+	it("labels provider-confirmed unused search without claiming the request disabled search", () => {
+		const html = renderToStaticMarkup(
+			<PromptMeasurementCard
+				label="ChatGPT Web"
+				configured
+				record={record({
+					queries: [],
+					evidence: { ...measurementEvidenceFallback("回答", [], true), queryStatus: "not_used" },
+				})}
+			/>,
+		);
+		expect(html).toContain("ウェブ検索未使用");
+		expect(html).not.toContain("ウェブ検索なしの設定");
+		expect(html).not.toContain("検索なしを意味するものではありません");
+	});
 });
 
 describe("exact-answer query evidence", () => {
+	it("retains a provider-observed search matching the original question verbatim", () => {
+		const query = "案件を比較して";
+		const html = renderToStaticMarkup(
+			<PromptMeasurementEvidence
+				record={record({
+					queries: [query],
+					evidence: {
+						...measurementEvidenceFallback("回答", [query], true),
+						queryEvidence: [
+							{
+								query,
+								sourceField: "search_steps[0].results",
+								urls: [{ url: "https://example.com/verbatim-search", title: "実際の検索結果", role: "search_result" }],
+							},
+						],
+					},
+				})}
+			/>,
+		);
+		const queryDetails = html.slice(html.indexOf("<details"), html.indexOf("</details>") + 10);
+		expect(queryDetails).toContain(query);
+		expect(queryDetails).toContain("https://example.com/verbatim-search");
+		expect(queryDetails).toContain("実際の検索結果");
+		expect(queryDetails).toContain("search_steps[0].results");
+		expect(html).not.toContain("取得元から未提供");
+		expect(html).not.toContain("検索なしを意味するものではありません");
+	});
 	it("never puts answer-wide sources underneath queries lacking explicit URL evidence", () => {
 		const html = renderToStaticMarkup(<PromptMeasurementEvidence record={record()} />);
 		const queryDetails = html.slice(html.indexOf("<details"), html.indexOf("</details>") + 10);

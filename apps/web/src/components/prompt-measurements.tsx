@@ -62,7 +62,7 @@ const mt = createTranslator({
 	noSources: { ja: "回答全体の参照ページは取得されていません。", en: "No answer-wide source pages were captured." },
 	queries: { ja: "ウェブ検索クエリ", en: "Web search queries" },
 	noQueryClaim: { ja: "検索なしを意味するものではありません。", en: "This does not mean that no search occurred." },
-	noSearch: { ja: "ウェブ検索なしの設定", en: "Web search disabled in the request" },
+	noSearch: { ja: "ウェブ検索未使用", en: "Web search not used" },
 	viewQueries: { ja: "ウェブ検索クエリで確認 →", en: "View web search queries →" },
 	raw: { ja: "元の出力", en: "Raw output" },
 	submitted: { ja: "取得元へ実際に送信した入力", en: "Input actually sent to the provider" },
@@ -446,10 +446,7 @@ export function measurementQueryWords(queries: string[]): string[] {
 }
 
 export function PromptMeasurementEvidence({ record }: { record: PromptMeasurementRecord }) {
-	const queries = observedQueries([
-		...record.queries,
-		...record.evidence.queryEvidence.map((item) => item.query),
-	]).filter((query) => query.trim().toLowerCase() !== record.requestContext?.prompt.trim().toLowerCase());
+	const queries = observedQueries([...record.queries, ...record.evidence.queryEvidence.map((item) => item.query)]);
 	const words = measurementQueryWords(queries);
 	return (
 		<Tabs defaultValue="fanout" className="gap-4">
