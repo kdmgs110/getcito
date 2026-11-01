@@ -68,7 +68,9 @@ test.describe("Existing prompt detail measurement comparison", () => {
   await expect(page.getByTestId("measurement-target-chatgpt_web")).toContainText(/取得失敗|Failed/);
   const overview=page.getByTestId("measurement-target-google_ai_overview");
   await expect(overview).toContainText(/AI Overview非表示|AI Overview not shown/);
-  await expect(overview).not.toContainText(/取得失敗|Failed/);
+  // Explanatory prose and the original question may mention failure. Assert
+  // the status label itself, rather than forbidding that word everywhere.
+  await expect(overview.getByText(/^(取得失敗|Failed)$/)).toHaveCount(0);
   await expect(overview).toContainText(/検索なしを意味するものではありません|does not mean that no search occurred/);
  });
 });
