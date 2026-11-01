@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
 	auth: vi.fn(),
+	saveTargets: vi.fn(),
 	provision: vi.fn(),
 	canCreate: true,
 	readOnly: false,
@@ -41,6 +42,8 @@ import { BrandCreationConflictError } from "@workspace/lib/db/provisioning";
 
 vi.mock("@workspace/lib/db/db", () => ({ db: { update: mocks.update } }));
 
+vi.mock("@/server/brand-measurement-settings", () => ({ saveBrandMeasurementTargets: mocks.saveTargets }));
+
 import { createBrandWithOrgFn, updateBrandMeasurementTargetsFn } from "./brands";
 
 const data = {
@@ -50,6 +53,14 @@ const data = {
 };
 
 beforeEach(() => {
+	mocks.saveTargets
+		.mockReset()
+		.mockResolvedValue({
+			targetKeys: ["chatgpt:brightdata:online"],
+			queuedPrompts: 2,
+			addedTargetKeys: ["chatgpt:brightdata:online"],
+			measurementBatchId: "batch",
+		});
 	mocks.auth.mockReset().mockResolvedValue({ user: { id: "owner" } });
 	mocks.provision.mockReset().mockResolvedValue({ orgId: "new-brand" });
 	mocks.canCreate = true;
@@ -113,10 +124,16 @@ describe("updateBrandMeasurementTargetsFn", () => {
 		try {
 			await expect(
 				updateBrandMeasurementTargetsFn({ data: { brandId: "brand", targetKeys: ["chatgpt:brightdata:online"] } }),
-			).resolves.toEqual({ targetKeys: ["chatgpt:brightdata:online"] });
+			).resolves.toEqual({
+				targetKeys: ["chatgpt:brightdata:online"],
+				queuedPrompts: 2,
+				addedTargetKeys: ["chatgpt:brightdata:online"],
+				measurementBatchId: "batch",
+			});
 			expect(mocks.org).toHaveBeenCalledWith("owner", "brand");
-			expect(mocks.set).toHaveBeenCalledWith(
-				expect.objectContaining({ enabledTargets: ["chatgpt:brightdata:online"] }),
+			expect(mocks.saveTargets).toHaveBeenCalledWith(
+				{ brandId: "brand", targetKeys: ["chatgpt:brightdata:online"] },
+				expect.any(Array),
 			);
 		} finally {
 			vi.unstubAllEnvs();
@@ -127,6 +144,7 @@ describe("updateBrandMeasurementTargetsFn", () => {
 		await expect(updateBrandMeasurementTargetsFn({ data: { brandId: "other", targetKeys: [] } })).rejects.toThrow(
 			"Forbidden",
 		);
+		expect(mocks.saveTargets).not.toHaveBeenCalled();
 		expect(mocks.update).not.toHaveBeenCalled();
 	});
 	it("rejects read-only deployments before writing", async () => {
@@ -134,6 +152,7 @@ describe("updateBrandMeasurementTargetsFn", () => {
 		await expect(updateBrandMeasurementTargetsFn({ data: { brandId: "brand", targetKeys: [] } })).rejects.toThrow(
 			"Read-only",
 		);
+		expect(mocks.saveTargets).not.toHaveBeenCalled();
 		expect(mocks.update).not.toHaveBeenCalled();
 	});
 	it("validates targets against deployment configuration", async () => {
@@ -144,6 +163,7 @@ describe("updateBrandMeasurementTargetsFn", () => {
 					data: { brandId: "brand", targetKeys: ["chatgpt:openai-api:gpt-5:online"] },
 				}),
 			).rejects.toThrow("enabledTargets");
+			expect(mocks.saveTargets).not.toHaveBeenCalled();
 			expect(mocks.update).not.toHaveBeenCalled();
 		} finally {
 			vi.unstubAllEnvs();

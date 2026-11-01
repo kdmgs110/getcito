@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { cleanupMeasurementSettingsFixtures, readMeasurementSettingsQueue, seedMeasurementSettingsFixtures, settingsMeasurementTarget, SETTINGS_BRAND, SETTINGS_ENABLED_PROMPTS } from "../measurement-settings-fixtures";
 import { SCRAPER_TARGET, SCRAPER_ATTEMPT, SCRAPER_ANSWER, SCRAPER_QUERY, SCRAPER_SOURCE, AIO_TARGET, AIO_ANSWER, ANSWER_SOURCE, API_ANSWER, cleanupMeasurementFixtures, MEASUREMENT_BRAND, MEASUREMENT_PROMPT, MEASUREMENT_STATUS_PROMPT, OLD_QUERY, OLDER_WEB_ATTEMPT, QUERY_SOURCE, seedMeasurementFixtures, WEB_ANSWER, WEB_ATTEMPT, WEB_QUERY, WEB_TARGET } from "../measurement-fixtures";
 
 test.describe("Existing prompt detail measurement comparison", () => {
@@ -117,5 +118,51 @@ test.describe("Existing prompt detail measurement comparison", () => {
   // the status label itself, rather than forbidding that word everywhere.
   await expect(overview.getByText(/^(取得失敗|Failed)$/)).toHaveCount(0);
   await expect(overview).toContainText(/検索なしを意味するものではありません|does not mean that no search occurred/);
+ });
+});
+
+
+test.describe("Measurement settings enqueue immediate real jobs", () => {
+ test.beforeAll(seedMeasurementSettingsFixtures);
+ test.afterAll(cleanupMeasurementSettingsFixtures);
+
+ test("queues newly enabled targets once for enabled prompts and does not queue unchanged or empty selections", async ({page}) => {
+  const target=settingsMeasurementTarget();
+  await page.goto(`/app/${SETTINGS_BRAND}/settings/llms`);
+  const checkbox=page.locator(`[id="target-${target}"]`);
+  const save=page.getByRole("button",{name:/^計測対象を保存$|^Save targets$/});
+  await expect(checkbox).not.toBeChecked();
+  await expect.poll(async () => (await readMeasurementSettingsQueue()).jobs.length).toBe(0);
+  await checkbox.check();
+  await save.click();
+  await expect(page.getByRole("status")).toContainText(/2.*(?:プロンプト|prompts)/);
+  await expect.poll(async () => (await readMeasurementSettingsQueue()).jobs.length).toBe(2);
+  const queued=await readMeasurementSettingsQueue();
+  expect(queued.enabled_targets).toEqual([target]);
+  expect(queued.jobs.map((job) => job.data.promptId).sort()).toEqual([...SETTINGS_ENABLED_PROMPTS].sort());
+  const batchId=queued.jobs[0].data.measurementBatchId;
+  expect(batchId).toMatch(/^[0-9a-f-]{36}$/i);
+  for (const job of queued.jobs) {
+   expect(job).toMatchObject({priority:100,state:"created",immediate:true});
+   expect(job.data).toMatchObject({singleRun:true,settingsChange:true,targetKeys:[target],measurementBatchId:batchId});
+  }
+  const jobIds=queued.jobs.map((job) => job.id);
+
+  // An identical save may persist settings, but must not duplicate jobs or runs.
+  await save.click();
+  await expect(page.getByRole("status")).toContainText(/計測対象を保存しました|Measurement targets saved/);
+  expect((await readMeasurementSettingsQueue()).jobs.map((job) => job.id)).toEqual(jobIds);
+
+  await checkbox.uncheck();
+  await save.click();
+  await expect(page.getByRole("status")).toContainText(/計測対象を保存しました|Measurement targets saved/);
+  const disabled=await readMeasurementSettingsQueue();
+  expect(disabled.enabled_targets).toEqual([]);
+  expect(disabled.jobs.map((job) => job.id)).toEqual(jobIds);
+  // CI has no worker: queued jobs remain unexecuted and no provider attempt occurs.
+  expect(disabled.runs).toBe(0);
+  expect(disabled.attempts).toBe(0);
+  await page.reload();
+  await expect(checkbox).not.toBeChecked();
  });
 });

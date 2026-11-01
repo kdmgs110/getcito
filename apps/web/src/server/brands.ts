@@ -26,6 +26,7 @@ import { validateWebsiteUrl } from "@/lib/brand-website";
 import { getDeployment } from "@/lib/config/server";
 import { cleanAndValidateDomain } from "@/lib/domain-categories";
 import { deleteBrandCascade } from "@/server/brand-cascade";
+import { saveBrandMeasurementTargets } from "@/server/brand-measurement-settings";
 
 /**
  * Deployment-configured models this brand actually runs, after applying
@@ -299,7 +300,7 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 		return result[0];
 	});
 
-/** Future runs use exact provider targets; changing this never rewrites history. */
+/** Newly enabled targets run immediately; historical results remain unchanged. */
 export const updateBrandMeasurementTargetsFn = createServerFn({ method: "POST" })
 	.validator(z.object({ brandId: z.string().min(1), targetKeys: z.array(z.string().min(1).max(300)).max(100) }))
 	.handler(async ({ data }) => {
@@ -309,13 +310,7 @@ export const updateBrandMeasurementTargetsFn = createServerFn({ method: "POST" }
 		const configured = parseScrapeTargets(process.env.SCRAPE_TARGETS);
 		const selected = selectTargetsForBrand(configured, null, data.targetKeys);
 		const targetKeys = [...new Set(selected.map(measurementTargetKey))];
-		const [saved] = await db
-			.update(brands)
-			.set({ enabledTargets: targetKeys, updatedAt: new Date() })
-			.where(eq(brands.id, data.brandId))
-			.returning({ id: brands.id });
-		if (!saved) throw new Error("Brand not found");
-		return { targetKeys };
+		return saveBrandMeasurementTargets({ brandId: data.brandId, targetKeys }, configured);
 	});
 
 /**

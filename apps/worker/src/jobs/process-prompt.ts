@@ -31,6 +31,8 @@ export interface ProcessPromptData {
 	promptId: string;
 	/** Operator-requested, bounded remeasurement; never changes recurring scheduling. */
 	singleRun?: boolean;
+	/** Settings-triggered runs must still respect the current enabled targets. */
+	settingsChange?: boolean;
 	allowDisabledPrompt?: boolean;
 	targetKeys?: string[];
 	measurementBatchId?: string;
@@ -354,9 +356,16 @@ export async function processPromptJob(jobs: Job<ProcessPromptData>[]): Promise<
 
 		let selectedConfigs = selectTargetsForBrand(scrapeConfigs, brand.enabledModels, brand.enabledTargets);
 		if (singleRun && job.data.targetKeys) {
-			const available = new Set(scrapeConfigs.map(measurementTargetKey));
-			if (job.data.targetKeys.some((key) => !available.has(key))) throw new Error("UNKNOWN_MEASUREMENT_TARGET");
-			selectedConfigs = scrapeConfigs.filter((config) => job.data.targetKeys?.includes(measurementTargetKey(config)));
+			const requested = new Set(job.data.targetKeys);
+			if (job.data.settingsChange) {
+				// A queued setting change can become stale before execution. Never
+				// re-enable a target that has since been deselected or removed.
+				selectedConfigs = selectedConfigs.filter((config) => requested.has(measurementTargetKey(config)));
+			} else {
+				const available = new Set(scrapeConfigs.map(measurementTargetKey));
+				if (job.data.targetKeys.some((key) => !available.has(key))) throw new Error("UNKNOWN_MEASUREMENT_TARGET");
+				selectedConfigs = scrapeConfigs.filter((config) => requested.has(measurementTargetKey(config)));
+			}
 		}
 		if (selectedConfigs.length === 0) {
 			console.log(`Prompt ${promptId} for brand ${brand.id} has no targets (brand.enabledModels=[])`);

@@ -56,10 +56,14 @@ function LlmsSettingsPage() {
 		setSaving(true);
 		setMessage("");
 		try {
-			await updateBrandMeasurementTargetsFn({ data: { brandId: brand.id, targetKeys: selected } });
+			const result = await updateBrandMeasurementTargetsFn({ data: { brandId: brand.id, targetKeys: selected } });
 			await revalidate();
 			await queryClient.invalidateQueries({ queryKey: ["brands"] });
-			setMessage(llmSettingsLabels("saved"));
+			setMessage(
+				result.queuedPrompts > 0
+					? llmSettingsLabels("queued", { count: result.queuedPrompts })
+					: llmSettingsLabels("saved"),
+			);
 		} catch {
 			setMessage(llmSettingsLabels("failed"));
 		} finally {

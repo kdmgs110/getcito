@@ -11,12 +11,16 @@ import { createTranslator, t } from "@/i18n";
 export const llmSettingsLabels = createTranslator({
 	choose: { en: "Choose measurement targets", ja: "計測対象を選択" },
 	help: {
-		en: "Applies to future scheduled runs. Each selected target makes a separate provider request; past results remain available.",
-		ja: "次回以降の定期計測に適用します。選択した対象ごとに取得リクエストが発生します。過去の結果は保持されます。",
+		en: "Newly enabled targets are queued immediately for active prompts, then continue on schedule. Each target makes a separate request; past results remain available.",
+		ja: "追加・切り替えた計測対象は、有効なプロンプトですぐに計測キューへ登録され、その後も定期計測されます。対象ごとに取得リクエストが発生します。過去の結果は保持されます。",
 	},
 	save: { en: "Save targets", ja: "計測対象を保存" },
 	saving: { en: "Saving…", ja: "保存中…" },
 	saved: { en: "Measurement targets saved.", ja: "計測対象を保存しました。" },
+	queued: {
+		en: "Targets saved. {count} prompts were queued for immediate measurement.",
+		ja: "計測対象を保存し、{count}件のプロンプトを即時計測キューに登録しました。",
+	},
 	failed: {
 		en: "Could not save measurement targets. Please retry.",
 		ja: "計測対象を保存できませんでした。再試行してください。",
