@@ -87,6 +87,11 @@ jobs:
       - name: Lint measurement comparison and exact target scopes
         working-directory: apps/web
         run: pnpm exec biome lint src/components/prompt-measurements* src/components/llm-settings-view.tsx src/lib/measurement-* src/lib/prompt-measurements* src/server/prompt-measurements.ts src/server/brand-measurement-settings* src/components/filter-bar.tsx src/components/history-button.tsx 'src/routes/_authed/app/$brand/prompts/$promptId.tsx' 'src/routes/_authed/app/$brand/settings/llms.tsx'
+      - name: Lint search appearance and citation evidence
+        working-directory: apps/web
+        run: pnpm exec biome lint src/lib/page-evidence* src/server/prompt-page-evidence* src/hooks/use-prompt-page-evidence* src/components/page-evidence-table* src/components/prompt-page-evidence.tsx
+      - name: Lint shared page evidence
+        run: pnpm exec biome lint packages/lib/src/page-evidence*
       - name: Lint measurement worker and shared contract
         run: pnpm exec biome lint packages/lib/src/measurement*.ts apps/worker/src/jobs/process-prompt.ts
       - run: pnpm build
