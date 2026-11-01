@@ -1,5 +1,12 @@
 # @workspace/config
 
+## 9.2.0
+
+### Patch Changes
+
+- 936b291: Add GA4 traffic analysis with AI referral trends, page-level reports, and shared saved views.
+- bd252bf: Add password reset emails and a screen for choosing a new password.
+
 ## 9.1.0
 
 ### Minor Changes
