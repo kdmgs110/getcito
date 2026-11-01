@@ -62,18 +62,28 @@ function periodConditions(data: z.infer<typeof baseSchema>, table: typeof measur
 
 type Attempt = typeof measurementAttempts.$inferSelect;
 type Run = typeof promptRuns.$inferSelect;
+type AttemptSummary = Omit<Attempt, "rawOutput">;
+type RunSummary = Omit<Run, "rawOutput"> & { rawOutput?: Run["rawOutput"] };
 type CitationRow = Pick<typeof citations.$inferSelect, "promptRunId" | "url" | "title">;
 
 function recordFromAttempt(
-	attempt: Attempt,
-	run: Run | undefined,
+	attempt: AttemptSummary,
+	run: RunSummary | undefined,
 	citationRows: CitationRow[],
 ): PromptMeasurementRecord {
 	const queries = observedQueries([
 		...(run?.webQueries ?? []),
 		...(attempt.evidence?.queryEvidence.map((item) => item.query) ?? []),
 	]);
-	const text = run ? extractTextContent(run.rawOutput, run.provider ?? run.model) : "";
+	// Normalized answers are stored with the attempt. Do not load or parse the
+	// much larger provider payload just to render the comparison list.
+	const evidence =
+		attempt.evidence ??
+		measurementEvidenceFallback(
+			run?.rawOutput != null ? extractTextContent(run.rawOutput, run.provider ?? run.model) : "",
+			queries,
+			attempt.webSearchEnabled,
+		);
 	return {
 		id: attempt.id,
 		attemptId: attempt.id,
@@ -86,9 +96,7 @@ function recordFromAttempt(
 		createdAt: attempt.createdAt.toISOString(),
 		completedAt: attempt.completedAt?.toISOString() ?? null,
 		requestContext: attempt.requestContext ?? run?.requestContext ?? null,
-		evidence: safeMeasurementEvidence(
-			attempt.evidence ?? measurementEvidenceFallback(text, queries, attempt.webSearchEnabled),
-		),
+		evidence: safeMeasurementEvidence(evidence),
 		queries,
 		citations: safeMeasurementCitations(citationRows.filter((row) => row.promptRunId === attempt.promptRunId)),
 	};
@@ -190,6 +198,7 @@ export const getPromptMeasurementsFn = createServerFn({ method: "GET" })
 		const attemptLists = await Promise.all(
 			[...targetMap.values()].map((target) =>
 				db.query.measurementAttempts.findMany({
+					columns: { rawOutput: false },
 					where: and(attemptsScope, eq(measurementAttempts.targetKey, target.key)),
 					orderBy: desc(measurementAttempts.createdAt),
 					limit: 20,
@@ -200,6 +209,7 @@ export const getPromptMeasurementsFn = createServerFn({ method: "GET" })
 		const linkedRunIds = attempts.flatMap((item) => (item.promptRunId ? [item.promptRunId] : []));
 		const linkedRuns = linkedRunIds.length
 			? await db.query.promptRuns.findMany({
+					columns: { rawOutput: false },
 					where: and(
 						eq(promptRuns.brandId, data.brandId),
 						eq(promptRuns.promptId, data.promptId),

@@ -216,6 +216,23 @@ describe("authenticated measurement read API", () => {
 		expect(result.records[0]).toMatchObject({ status: "failed", runId: null, requestContext: context });
 		expect(result.records[0].rawOutput).toBeUndefined();
 	});
+	it("does not load or inspect large provider payloads when listing normalized attempts", async () => {
+		mocks.attempts.mockResolvedValueOnce([attempt()]).mockResolvedValueOnce([]);
+		const linkedRun = {
+			...run(),
+			get rawOutput() {
+				throw new Error("Raw provider output must stay on demand");
+			},
+		};
+		mocks.runs.mockResolvedValueOnce([linkedRun]).mockResolvedValueOnce([]);
+		const result = await getPromptMeasurementsFn({ data: scope });
+		for (const [query] of mocks.attempts.mock.calls) expect(query.columns).toEqual({ rawOutput: false });
+		expect(mocks.runs.mock.calls[0][0].columns).toEqual({ rawOutput: false });
+		expect(result.records[0].evidence.answerText).toBe("日本語の回答");
+		expect(result.records[0].version).toBe("web-returned-version");
+		expect(result.records[0].queries).toEqual(["Rails 案件"]);
+		expect(result.records[0]).not.toHaveProperty("rawOutput");
+	});
 	it("retains absent Overview raw evidence without creating or borrowing a successful run", async () => {
 		const rawOutput = { ai_overview: null, organic: [{ url: "https://example.com/organic" }] };
 		mocks.attempt.mockResolvedValue({
