@@ -71,7 +71,8 @@ test.describe("Existing prompt detail measurement comparison", () => {
   await expect(queryDetails).toContainText(/対応は未提供|対応は、取得元から提供されていません|did not expose query-to-URL/);
   // Answer-wide citations are not asserted to be results of the fan-out query.
   await expect(queryDetails.getByRole("link")).toHaveCount(0);
-  await expect(page.getByRole("link",{name:/E2E 回答全体の参照元/})).toHaveAttribute("href",SCRAPER_SOURCE);
+  const answerWideSource=page.getByTestId("page-evidence-table").getByRole("link").filter({hasText:SCRAPER_SOURCE});
+  await expect(answerWideSource).toHaveAttribute("href",SCRAPER_SOURCE);
   await expect(page.getByText(WEB_QUERY,{exact:true})).toHaveCount(0);
   await expect(page.getByText(OLD_QUERY,{exact:true})).toHaveCount(0);
   await expect(page.locator(`a[href="${QUERY_SOURCE}"]`)).toHaveCount(0);

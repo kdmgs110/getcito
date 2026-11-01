@@ -30,6 +30,10 @@ const et = createTranslator({
 		ja: "検索語とAI取得URLの対応は未提供です。回答全体のページ情報と回数は下に表示します。",
 		en: "The provider did not expose query-to-URL relationships. Answer-wide page evidence and counts are shown below.",
 	},
+	search_result: { ja: "検索結果", en: "Search result" },
+	visited: { ja: "閲覧", en: "Visited" },
+	citation: { ja: "引用", en: "Citation" },
+	unknown: { ja: "役割未提供", en: "Role not provided" },
 	relationship: { ja: "取得元にクエリとURLの対応情報あり", en: "Provider-reported query-to-URL relationship" },
 	answers: { ja: "この検索語を含む回答", en: "Answers containing this search query" },
 	answer: { ja: "LLMの回答を見る", en: "View LLM answer" },
@@ -115,8 +119,13 @@ export function PromptPageEvidence({
 							<option value={data.selectedTargetKey}>{data.selectedTargetKey}</option>
 						)}
 						{data.targets.map((target) => (
-							<option key={target.key} value={target.key}>
+							<option key={target.key} value={target.key} title={target.key}>
 								{target.label} / {target.provider}
+								{target.key.startsWith("legacy:")
+									? " / legacy"
+									: target.key.split(":").length > 2
+										? ` / ${target.key.split(":").slice(2).join(":")}`
+										: ""}
 							</option>
 						))}
 					</select>
@@ -137,6 +146,9 @@ export function PromptPageEvidence({
 							})
 						}
 					>
+						{data.selectedScopeKey && !data.scopes.some((scope) => scope.key === data.selectedScopeKey) && (
+							<option value={data.selectedScopeKey}>{data.selectedScopeKey}</option>
+						)}
 						{data.scopes.map((scope) => (
 							<option key={scope.key} value={scope.key}>
 								{scope.label}
@@ -212,7 +224,7 @@ export function PromptPageEvidence({
 																	</span>
 																	<span className="mt-1 block break-all text-xs text-blue-600">{url}</span>
 																	<span className="mt-1 block text-xs text-muted-foreground">
-																		{relation.sourceField}
+																		{et(relation.role)} · {relation.sourceField}
 																	</span>
 																</a>
 															) : null;
