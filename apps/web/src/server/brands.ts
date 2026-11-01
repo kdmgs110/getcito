@@ -8,11 +8,17 @@ import { MAX_COMPETITORS } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
 import { BrandCreationConflictError, provisionAdditionalLocalBrand } from "@workspace/lib/db/provisioning";
 import { type Brand, type BrandWithPrompts, brands, competitors, prompts } from "@workspace/lib/db/schema";
+import { measurementTargetKey } from "@workspace/lib/measurement";
 import type { ModelConfig } from "@workspace/lib/providers";
 import { parseScrapeTargets, selectTargetsForBrand } from "@workspace/lib/providers";
 import { and, count, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { listUserOrganizations, requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
+import {
+	listUserOrganizations,
+	requireAuthSession,
+	requireOrgAccess,
+	requireOrgManageAccess,
+} from "@/lib/auth/helpers";
 import { evaluateRequireCanCreateBrands } from "@/lib/auth/policies";
 import { type BrandCreationResult, normalizeBrandCreation } from "@/lib/brand-creation";
 import { normalizeBrandUpdate } from "@/lib/brand-settings";
@@ -35,19 +41,22 @@ import { deleteBrandCascade } from "@/server/brand-cascade";
 function computeEffectiveModels(brand: Brand): {
 	effectiveModels: string[];
 	effectiveModelConfigs: ModelConfig[];
+	availableModelConfigs: ModelConfig[];
 } {
+	let configs: ModelConfig[] = [];
 	try {
-		const configs = parseScrapeTargets(process.env.SCRAPE_TARGETS);
-		const effective = selectTargetsForBrand(configs, brand.enabledModels);
+		configs = parseScrapeTargets(process.env.SCRAPE_TARGETS);
+		const effective = selectTargetsForBrand(configs, brand.enabledModels, brand.enabledTargets);
 		return {
-			effectiveModels: effective.map((c) => c.model),
+			effectiveModels: [...new Set(effective.map((c) => c.model))],
 			effectiveModelConfigs: effective,
+			availableModelConfigs: configs,
 		};
 	} catch {
 		// A misconfigured SCRAPE_TARGETS would already be surfacing via
 		// `validateScrapeTargets` at boot; here we'd rather degrade to empty
 		// lists than crash the brand fetch.
-		return { effectiveModels: [], effectiveModelConfigs: [] };
+		return { effectiveModels: [], effectiveModelConfigs: [], availableModelConfigs: configs };
 	}
 }
 
@@ -66,9 +75,14 @@ function getDefaultBrandDomains(): string[] {
 // Helper functions (migrated from apps/web/src/lib/metadata.ts)
 // ============================================================================
 
-async function getBrandWithPromptsFromDb(
-	brandId: string,
-): Promise<(BrandWithPrompts & { effectiveModels: string[]; effectiveModelConfigs: ModelConfig[] }) | undefined> {
+async function getBrandWithPromptsFromDb(brandId: string): Promise<
+	| (BrandWithPrompts & {
+			effectiveModels: string[];
+			effectiveModelConfigs: ModelConfig[];
+			availableModelConfigs: ModelConfig[];
+	  })
+	| undefined
+> {
 	try {
 		const brand = await db.query.brands.findFirst({
 			where: eq(brands.id, brandId),
@@ -117,8 +131,13 @@ export const getBrands = createServerFn({ method: "GET" }).handler(async () => {
 	);
 
 	return brandsData.filter(
-		(brand): brand is BrandWithPrompts & { effectiveModels: string[]; effectiveModelConfigs: ModelConfig[] } =>
-			brand !== null,
+		(
+			brand,
+		): brand is BrandWithPrompts & {
+			effectiveModels: string[];
+			effectiveModelConfigs: ModelConfig[];
+			availableModelConfigs: ModelConfig[];
+		} => brand !== null,
 	);
 });
 
@@ -278,6 +297,25 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 		}
 
 		return result[0];
+	});
+
+/** Future runs use exact provider targets; changing this never rewrites history. */
+export const updateBrandMeasurementTargetsFn = createServerFn({ method: "POST" })
+	.validator(z.object({ brandId: z.string().min(1), targetKeys: z.array(z.string().min(1).max(300)).max(100) }))
+	.handler(async ({ data }) => {
+		const session = await requireAuthSession();
+		await requireOrgManageAccess(session.user.id, data.brandId);
+		if (getDeployment().features.readOnly) throw new Error("Read-only deployment");
+		const configured = parseScrapeTargets(process.env.SCRAPE_TARGETS);
+		const selected = selectTargetsForBrand(configured, null, data.targetKeys);
+		const targetKeys = [...new Set(selected.map(measurementTargetKey))];
+		const [saved] = await db
+			.update(brands)
+			.set({ enabledTargets: targetKeys, updatedAt: new Date() })
+			.where(eq(brands.id, data.brandId))
+			.returning({ id: brands.id });
+		if (!saved) throw new Error("Brand not found");
+		return { targetKeys };
 	});
 
 /**

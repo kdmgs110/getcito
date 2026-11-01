@@ -1,6 +1,6 @@
 import { useRef } from "react";
+import { VisibilityBar, VisibilityBarEmpty, VisibilityBarSkeleton } from "@/components/visibility-bar";
 import { useFilteredVisibility } from "@/hooks/use-filtered-visibility";
-import { VisibilityBar, VisibilityBarSkeleton, VisibilityBarEmpty } from "@/components/visibility-bar";
 import { useListFilters } from "@/hooks/use-list-filters";
 import { ALL_MODELS_VALUE } from "@/lib/model-filter";
 
@@ -34,7 +34,13 @@ export function VisibilityBarSection({ brandId }: { brandId: string | undefined 
 	// Keep the last-known visibility around so we don't flash the skeleton
 	// on a refetch (react-query's isValidating flips true while the new data
 	// is in flight even though we already have a prior result to show).
+	const scope = JSON.stringify([brandId, lookback, model, tags, search]);
+	const scopeRef = useRef(scope);
 	const lastRef = useRef(filteredVisibility);
+	if (scopeRef.current !== scope) {
+		scopeRef.current = scope;
+		lastRef.current = undefined;
+	}
 	if (filteredVisibility) lastRef.current = filteredVisibility;
 	const stable = filteredVisibility || lastRef.current;
 

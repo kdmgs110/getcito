@@ -1,5 +1,6 @@
 import type { ModelConfig } from "@workspace/config/scrape-targets";
 import type { z } from "zod";
+import type { MeasurementEvidence } from "../measurement";
 import type { Citation } from "../text-extraction";
 
 // Canonical definition lives next to the SCRAPE_TARGETS parser in
@@ -13,6 +14,8 @@ export interface ScrapeResult {
 	webQueries: string[];
 	citations: Citation[];
 	modelVersion?: string;
+	/** Normalized observable evidence; absent for legacy acquisition adapters. */
+	measurement?: MeasurementEvidence;
 }
 
 export interface ProviderOptions {

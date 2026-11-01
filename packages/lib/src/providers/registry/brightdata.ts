@@ -1,8 +1,10 @@
 import { bdclient } from "@brightdata/sdk";
 import { resolveBrandLocale } from "../../brand-locale";
 import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
-import type { Citation } from "../../text-extraction";
 import type { ModelConfig, Provider, ProviderOptions, ScrapeResult } from "../types";
+import { BrightDataEvidenceError, normalizeBrightDataEvidence } from "./brightdata-evidence";
+
+class BrightDataAcquisitionError extends Error {}
 
 const BD_DATASET_IDS: Record<string, string> = {
 	chatgpt: "gd_m7aof0k82r803d5bjm",
@@ -26,71 +28,6 @@ const BD_BASE_URL: Record<string, string> = {
 
 function createClient(): bdclient {
 	return new bdclient({ apiKey: process.env.BRIGHTDATA_API_TOKEN });
-}
-
-function normalizeAnswer(record: Record<string, any>): string {
-	for (const key of [
-		"aio_text",
-		"answer_text_markdown",
-		"answer_text",
-		"answer",
-		"response_raw",
-		"response",
-		"text",
-		"content",
-	]) {
-		if (typeof record[key] === "string" && record[key].trim()) return record[key].trim();
-	}
-	// If this is a Google Search result without an AI overview, we don't want to return the raw JSON
-	if (record.general?.search_engine === "google" || record.input?.url === "https://google.com/aimode") {
-		return "No Google AI mode invoked.";
-	}
-	return JSON.stringify(record).slice(0, 2000);
-}
-
-function extractSources(record: Record<string, any>): Citation[] {
-	const citations: Citation[] = [];
-	const seen = new Set<string>();
-	let idx = 0;
-
-	for (const field of ["citations", "links_attached", "sources"]) {
-		const arr = record[field];
-		if (!Array.isArray(arr)) continue;
-		for (const item of arr) {
-			const url = typeof item === "string" ? item : item?.url;
-			if (!url || typeof url !== "string" || !url.startsWith("http")) continue;
-			if (seen.has(url)) continue;
-			seen.add(url);
-			try {
-				const parsed = new URL(url);
-				citations.push({
-					url,
-					title: item?.title ?? undefined,
-					domain: parsed.hostname.replace(/^www\./, ""),
-					citationIndex: idx++,
-				});
-			} catch (e) {
-				console.warn(`BrightData: skipping invalid citation URL: ${url}`, e);
-			}
-		}
-	}
-	return citations;
-}
-
-function extractWebQueries(record: Record<string, any>): string[] {
-	// web_search_query is a direct array of strings (e.g. grok)
-	if (Array.isArray(record.web_search_query)) {
-		return record.web_search_query.filter((q: any) => typeof q === "string" && q.trim());
-	}
-	// search_model_queries may be nested in metadata (e.g. chatgpt)
-	const smq = record.metadata?.search_model_queries ?? record.search_model_queries;
-	if (smq?.queries && Array.isArray(smq.queries)) {
-		return smq.queries.filter((q: any) => typeof q === "string" && q.trim());
-	}
-	if (Array.isArray(smq)) {
-		return smq.filter((q: any) => typeof q === "string" && q.trim());
-	}
-	return [];
 }
 
 export const brightdata: Provider = {
@@ -136,12 +73,16 @@ export const brightdata: Provider = {
 					? `${prompt}\nPlease provide your response in ${locale.languageName}.`
 					: prompt;
 
-			let payloadData: any = {
+			let payloadData: Record<string, unknown> = {
 				url: BD_BASE_URL[model] ?? "",
 				prompt: finalPrompt,
 				index: 1,
 				...(model === "chatgpt" ? { web_search: options?.webSearch ?? false } : {}),
-				...(locale.countryCode ? { country: locale.countryCode.toLowerCase() } : {}),
+				// ChatGPT validates countries against its uppercase ISO enum (JP works,
+				// jp is rejected). Other existing engine contracts use lowercase.
+				...(locale.countryCode
+					? { country: model === "chatgpt" ? locale.countryCode : locale.countryCode.toLowerCase() }
+					: {}),
 				...(model === "google-ai-mode" ? { hl: locale.languageCode ?? "en" } : {}),
 			};
 
@@ -152,7 +93,7 @@ export const brightdata: Provider = {
 					language: locale.languageCode ?? "en",
 					country: locale.countryCode?.toLowerCase() ?? "us",
 					start_page: 1,
-					end_page: 10,
+					end_page: 1,
 					collapse_aio: false,
 				};
 			}
@@ -169,7 +110,8 @@ export const brightdata: Provider = {
 			if (triggerRes.status === 400) {
 				const errorText = await triggerRes.text();
 				if (errorText.includes('"country"')) {
-					if (locale.countryCode) throw new Error("BrightData does not support the selected market for this engine");
+					if (locale.countryCode)
+						throw new BrightDataAcquisitionError("BrightData does not support the selected market for this engine");
 					// The scraper doesn't support this specific country, retry without it
 					delete payloadData.country;
 					triggerRes = await fetch(triggerUrl, {
@@ -181,12 +123,12 @@ export const brightdata: Provider = {
 						body: JSON.stringify([payloadData]),
 					});
 				} else {
-					throw new Error(`BrightData trigger failed (400): ${errorText}`);
+					throw new BrightDataAcquisitionError("BrightData trigger failed (400)");
 				}
 			}
 
 			if (!triggerRes.ok) {
-				throw new Error(`BrightData trigger failed (${triggerRes.status}): ${await triggerRes.text()}`);
+				throw new BrightDataAcquisitionError(`BrightData trigger failed (${triggerRes.status})`);
 			}
 
 			({ snapshot_id: snapshotId } = (await triggerRes.json()) as { snapshot_id: string });
@@ -197,40 +139,39 @@ export const brightdata: Provider = {
 				try {
 					payload = await client.scrape.snapshot.fetch(snapshotId, { format: "json" });
 					break;
-				} catch (err: any) {
-					if (i === 4 || !err.message?.toLowerCase().includes("not ready")) throw err;
+				} catch (err) {
+					if (i === 4 || !(err instanceof Error) || !err.message.toLowerCase().includes("not ready")) throw err;
 					await new Promise((resolve) => setTimeout(resolve, 3000));
 				}
 			}
 			consumed = true;
 
 			const record = (Array.isArray(payload) ? payload[0] : payload) ?? {};
-			const answer = normalizeAnswer(record);
+			const normalized = normalizeBrightDataEvidence(record, model, options?.webSearch ?? false, finalPrompt);
 
-			const webQueries = extractWebQueries(record);
-			const citations = extractSources(record);
-
-			// Drop large HTML fields that aren't used for extraction.
-			// Keeps all structured data (shopping, recommendations, citations, etc.)
-			const { answer_html, response_raw, answer_section_html, ...trimmed } = record;
+			// Retain raw protocol evidence (including response_raw) so actual searches
+			// can be audited. Drop only HTML representations not used for extraction.
+			const { answer_html, answer_section_html, page_html, ...trimmed } = record;
 			const rawOutput = Array.isArray(payload) ? [trimmed] : trimmed;
 
 			return {
 				rawOutput,
-				textContent: answer,
-				// Only mark web queries as "unavailable" when web search was enabled
-				// and citations exist but no query strings were exposed.
-				// When web search is disabled, webQueries is always empty.
-				webQueries: options?.webSearch
-					? webQueries.length > 0
-						? webQueries
-						: citations.length > 0
-							? [WEB_QUERIES_UNAVAILABLE]
-							: []
-					: [],
-				citations,
-				modelVersion: record?.model ?? undefined,
+				textContent: normalized.measurement.answerText,
+				webQueries:
+					normalized.measurement.queryStatus === "not_exposed" ? [WEB_QUERIES_UNAVAILABLE] : normalized.queries,
+				citations: normalized.citations,
+				modelVersion: normalized.modelVersion,
+				measurement: normalized.measurement,
 			};
+		} catch (error) {
+			if (
+				error instanceof BrightDataAcquisitionError ||
+				error instanceof BrightDataEvidenceError ||
+				(error instanceof Error && ["BRAND_LANGUAGE_INVALID", "BRAND_MARKET_INVALID"].includes(error.message))
+			) {
+				throw error;
+			}
+			throw new Error("BrightData acquisition failed");
 		} finally {
 			// A triggered snapshot we never consumed (timeout, terminal failure, an
 			// unknown status we gave up on, or any thrown error) keeps running on
@@ -239,7 +180,11 @@ export const brightdata: Provider = {
 			// jobs don't accumulate. (Worker SIGTERM mid-poll still leaks; those need
 			// the periodic snapshot sweep.)
 			if (snapshotId && !consumed) await cancelSnapshot(client, snapshotId);
-			await client.close();
+			try {
+				await client.close();
+			} catch {
+				console.warn("BrightData client cleanup failed");
+			}
 		}
 	},
 };
@@ -259,14 +204,14 @@ async function pollUntilReady(snapshotId: string): Promise<void> {
 		const status = await getSnapshotStatus(snapshotId);
 		if (status === "ready") return;
 		if (TERMINAL_FAILURE.has(status)) {
-			throw new Error(`BrightData snapshot ${snapshotId} ${status}`);
+			throw new BrightDataAcquisitionError(`BrightData snapshot ${snapshotId} ${status}`);
 		}
 
 		const delay = Math.min(BASE_DELAY * 2 ** Math.floor(attempt / 5), MAX_DELAY);
 		await new Promise((resolve) => setTimeout(resolve, delay));
 	}
 
-	throw new Error(`BrightData snapshot ${snapshotId} timed out`);
+	throw new BrightDataAcquisitionError(`BrightData snapshot ${snapshotId} timed out`);
 }
 
 /** Read snapshot status straight from datasets/v3/progress. We bypass the SDK's
@@ -294,7 +239,7 @@ async function getSnapshotStatus(snapshotId: string): Promise<string> {
 async function cancelSnapshot(client: bdclient, snapshotId: string): Promise<void> {
 	try {
 		await client.scrape.snapshot.cancel(snapshotId);
-	} catch (e) {
-		console.warn(`BrightData: failed to cancel snapshot ${snapshotId}`, e);
+	} catch {
+		console.warn(`BrightData: failed to cancel snapshot ${snapshotId}`);
 	}
 }

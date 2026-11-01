@@ -1,8 +1,8 @@
-import { t, UI_LOCALE } from "@/i18n";
 import { useSearch } from "@tanstack/react-router";
+import { parseScrapeTargets } from "@workspace/config/scrape-targets";
+import { measurementTargetLabel } from "@workspace/lib/measurement";
 import { getModelMeta } from "@workspace/lib/providers/models";
 import { Button } from "@workspace/ui/components/button";
-import { Checkbox } from "@workspace/ui/components/checkbox";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -18,7 +18,14 @@ import { MdSelectAll } from "react-icons/md";
 import { SiAnthropic, SiGithubcopilot, SiGoogle, SiMistralai, SiOpenai, SiPerplexity, SiX } from "react-icons/si";
 import { CustomRangeCalendar, formatCustomRangeLabel } from "@/components/custom-range-calendar";
 import { useBrand } from "@/hooks/use-brands";
+import { t, UI_LOCALE } from "@/i18n";
 import { getDefaultLookbackPeriod, type LookbackPeriod, parseCustomLookback } from "@/lib/chart-utils";
+import {
+	historicalMeasurementConfig,
+	measurementFilterOptions,
+	orderedMeasurementConfigs,
+	resolveMeasurementFilter,
+} from "@/lib/measurement-filters";
 
 export { ALL_MODELS_VALUE, getAvailableModels } from "@/lib/model-filter";
 
@@ -43,7 +50,7 @@ export type ModelFilterValue = string;
  *  a reasonable trigger glyph. */
 export function iconForModel(model: string, className = "size-3.5") {
 	if (model === ALL_MODELS_VALUE) return <MdSelectAll className={className} />;
-	const { iconId } = getModelMeta(model);
+	const { iconId } = getModelMeta(model.split(":")[0]);
 	switch (iconId) {
 		case "openai":
 			return <SiOpenai className={className} />;
@@ -66,6 +73,14 @@ export function iconForModel(model: string, className = "size-3.5") {
 
 export function labelForModel(model: string): string {
 	if (model === ALL_MODELS_VALUE) return t("core.allModels");
+	if (model.includes(":")) {
+		try {
+			const config = parseScrapeTargets(model)[0];
+			return measurementTargetLabel(config.model, config.provider);
+		} catch {
+			return model;
+		}
+	}
 	return getModelMeta(model).label;
 }
 
@@ -134,33 +149,40 @@ export function FilterTriggerButton({
 // ------------------------------------------------------------------
 
 export function ModelDropdown({ availableModels }: { availableModels: string[] }) {
-	const defaultModel = availableModels.includes(ALL_MODELS_VALUE)
-		? ALL_MODELS_VALUE
-		: (availableModels[0] ?? ALL_MODELS_VALUE);
+	const { brand } = useBrand();
 	const urlModel = useSearch({ strict: false, select: (s) => s.model });
+	const configs = orderedMeasurementConfigs(brand?.effectiveModelConfigs, [
+		...(brand?.availableModelConfigs ?? []),
+		...historicalMeasurementConfig(urlModel),
+	]);
+	const exactOptions = measurementFilterOptions(configs);
+	const options =
+		exactOptions.length > 0
+			? exactOptions
+			: availableModels.map((model) => ({ value: model, label: labelForModel(model), model }));
+	const defaultModel = options[0]?.value ?? ALL_MODELS_VALUE;
 	const setFilters = useFilterNavigate();
-	// If the URL has a model that isn't valid for this brand (e.g. stale deep
-	// link after a deployment change), fall back to the default rather than
-	// showing a trigger with an unknown value.
-	const selected = urlModel && availableModels.includes(urlModel) ? urlModel : defaultModel;
-
-	const handleChange = (next: string) => {
-		setFilters({ model: next === defaultModel ? undefined : next });
-	};
-
-	if (availableModels.length <= 1) return null;
-	const isFiltered = selected !== ALL_MODELS_VALUE;
+	const resolved = resolveMeasurementFilter(urlModel, configs) ?? urlModel;
+	const selected = resolved && options.some((option) => option.value === resolved) ? resolved : defaultModel;
+	const handleChange = (next: string) => setFilters({ model: next === defaultModel ? undefined : next });
+	if (options.length <= 1) return null;
+	const label = options.find((option) => option.value === selected)?.label ?? labelForModel(selected);
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<FilterTriggerButton icon={iconForModel(selected)} label={labelForModel(selected)} active={isFiltered} />
+				<FilterTriggerButton
+					icon={iconForModel(selected)}
+					label={label}
+					active={selected !== defaultModel}
+					aria-label={UI_LOCALE.startsWith("ja") ? "計測対象" : "Measurement target"}
+				/>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="start" className="w-48">
+			<DropdownMenuContent align="start" className="min-w-64">
 				<DropdownMenuRadioGroup value={selected} onValueChange={handleChange}>
-					{availableModels.map((model) => (
-						<DropdownMenuRadioItem key={model} value={model} className="cursor-pointer gap-2">
-							{iconForModel(model)}
-							{labelForModel(model)}
+					{options.map((option) => (
+						<DropdownMenuRadioItem key={option.value} value={option.value} className="cursor-pointer gap-2">
+							{iconForModel(option.model)}
+							{option.label}
 						</DropdownMenuRadioItem>
 					))}
 				</DropdownMenuRadioGroup>
@@ -292,28 +314,27 @@ export function TagsDropdown({ availableTags }: { availableTags: readonly string
 						{availableTags.map((tag) => {
 							const checked = selected.includes(tag);
 							return (
-								<div
+								<button
+									type="button"
+									aria-pressed={checked}
 									key={tag}
-									role="button"
-									tabIndex={0}
 									onClick={(e) => {
 										e.preventDefault();
 										e.stopPropagation();
 										toggle(tag);
 									}}
-									onKeyDown={(e) => {
-										if (e.key === "Enter" || e.key === " ") {
-											e.preventDefault();
-											toggle(tag);
-										}
-									}}
-									className={`flex items-center gap-2.5 py-1.5 px-3 cursor-pointer text-left text-sm ${
+									className={`w-full flex items-center gap-2.5 py-1.5 px-3 cursor-pointer text-left text-sm ${
 										checked ? "bg-accent" : "hover:bg-muted"
 									}`}
 								>
-									<Checkbox checked={checked} className="pointer-events-none" />
+									<span
+										aria-hidden="true"
+										className={`size-4 rounded-[4px] border flex items-center justify-center text-xs ${checked ? "bg-primary border-primary text-primary-foreground" : "border-input"}`}
+									>
+										{checked ? "✓" : ""}
+									</span>
 									<span className="capitalize flex-1">{tag}</span>
-								</div>
+								</button>
 							);
 						})}
 					</div>
@@ -355,8 +376,8 @@ export function SearchInput({ placeholder = t("core.searchPrompts") }: { placeho
 			setLocal(value);
 			return;
 		}
-		if (value !== local) setLocal(value);
-	}, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+		setLocal((current) => (current === value ? current : value));
+	}, [value]);
 
 	useEffect(() => {
 		if (local === value) return;

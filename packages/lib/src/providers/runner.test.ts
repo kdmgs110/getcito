@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { selectTargetsForBrand } from "./runner";
 import type { ModelConfig } from "./types";
 
@@ -9,6 +9,19 @@ const configs: ModelConfig[] = [
 ];
 
 describe("selectTargetsForBrand", () => {
+	it("selects a Web target without also enabling the API with the same model", () => {
+		const alternatives = [...configs, { model: "chatgpt", provider: "openai-api", version: "gpt-4o", webSearch: true }];
+		expect(selectTargetsForBrand(alternatives, null, ["chatgpt:brightdata:online"])).toEqual([configs[0]]);
+	});
+	it("keeps an explicit empty target selection disabled even with legacy enabled models", () => {
+		expect(selectTargetsForBrand(configs, ["chatgpt"], [])).toEqual([]);
+	});
+	it("rejects unknown exact targets", () => {
+		expect(() => selectTargetsForBrand(configs, null, ["chatgpt:openai-api:gpt-4o:online"])).toThrow(/enabledTargets/);
+	});
+	it("retains legacy model behavior for a null target override", () => {
+		expect(selectTargetsForBrand(configs, ["chatgpt"], null)).toEqual([configs[0]]);
+	});
 	it("returns all configs when enabledModels is null", () => {
 		expect(selectTargetsForBrand(configs, null)).toEqual(configs);
 	});
@@ -34,9 +47,7 @@ describe("selectTargetsForBrand", () => {
 	});
 
 	it("throws when enabledModels mixes known and unknown models", () => {
-		expect(() => selectTargetsForBrand(configs, ["chatgpt", "does-not-exist"])).toThrow(
-			/does-not-exist/,
-		);
+		expect(() => selectTargetsForBrand(configs, ["chatgpt", "does-not-exist"])).toThrow(/does-not-exist/);
 	});
 
 	it("keeps duplicates in configs when the model is allowed (multi-sample case)", () => {

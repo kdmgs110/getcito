@@ -13,6 +13,7 @@ import {
 	uuid,
 } from "drizzle-orm/pg-core";
 import type { AnalyticsMeasurementMode, TrafficCondition } from "../analytics/types";
+import type { MeasurementEvidence } from "../measurement";
 import type { PromptRunRequestContext } from "../prompt-run-context";
 
 // Better-auth tables & relations — re-exported so `import * as schema` sees everything.
@@ -35,6 +36,8 @@ export const brands = pgTable("brands", {
 	onboarded: boolean("onboarded").default(false).notNull(),
 	delayOverrideHours: integer("delay_override_hours"),
 	enabledModels: text("enabled_models").array(),
+	/** Exact deployment target keys. Null retains the legacy model selection. */
+	enabledTargets: text("enabled_targets").array(),
 	targetMarket: text("target_market"),
 	targetLanguage: text("target_language"),
 	shortDescription: text("short_description"),
@@ -235,6 +238,53 @@ export const promptRuns = pgTable(
 		// Deleting a brand deletes its runs by brand_id; without this the delete
 		// sequentially scans the largest table in the schema.
 		brandIdIdx: index("prompt_runs_brand_id_idx").on(table.brandId),
+	}),
+).enableRLS();
+
+/** Per-target acquisition state, including non-answers and failed attempts. */
+export const measurementAttempts = pgTable(
+	"measurement_attempts",
+	{
+		id: uuid("id").defaultRandom().primaryKey().notNull(),
+		batchId: uuid("batch_id").notNull(),
+		brandId: text("brand_id")
+			.references(() => brands.id, { onDelete: "cascade" })
+			.notNull(),
+		promptId: uuid("prompt_id")
+			.references(() => prompts.id, { onDelete: "cascade" })
+			.notNull(),
+		targetKey: text("target_key").notNull(),
+		model: text("model").notNull(),
+		provider: text("provider").notNull(),
+		requestedVersion: text("requested_version"),
+		webSearchEnabled: boolean("web_search_enabled").notNull(),
+		iteration: integer("iteration").default(1).notNull(),
+		status: text("status").$type<"queued" | "running" | "succeeded" | "failed">().notNull(),
+		requestContext: jsonb("request_context").$type<PromptRunRequestContext>().notNull(),
+		evidence: jsonb("evidence").$type<MeasurementEvidence>(),
+		/** Retains the response for valid observations without an answer/run. */
+		rawOutput: jsonb("raw_output"),
+		promptRunId: uuid("prompt_run_id").references(() => promptRuns.id, { onDelete: "set null" }),
+		/** Sanitized category only; upstream errors remain in the admin usage log. */
+		errorCode: text("error_code"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+		completedAt: timestamp("completed_at", { withTimezone: true }),
+	},
+	(table) => ({
+		batchTargetIdx: uniqueIndex("measurement_attempts_batch_target_idx").on(
+			table.batchId,
+			table.promptId,
+			table.targetKey,
+			table.iteration,
+		),
+		promptTargetIdx: index("measurement_attempts_prompt_target_idx").on(
+			table.promptId,
+			table.targetKey,
+			table.createdAt,
+		),
+		brandCreatedIdx: index("measurement_attempts_brand_created_idx").on(table.brandId, table.createdAt),
+		promptRunIdx: index("measurement_attempts_prompt_run_idx").on(table.promptRunId),
 	}),
 ).enableRLS();
 

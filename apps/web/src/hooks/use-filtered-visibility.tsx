@@ -45,7 +45,6 @@ export function useFilteredVisibility(brandId?: string, filters?: FilteredVisibi
 		refetchOnWindowFocus: true,
 		refetchOnReconnect: true,
 		refetchInterval: 60_000,
-		placeholderData: (prev) => prev,
 	});
 
 	return {
