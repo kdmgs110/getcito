@@ -26,13 +26,13 @@ vi.mock("@workspace/lib/db/db", () => ({
 		transaction: harness.transaction,
 	},
 }));
-vi.mock("@workspace/lib/providers", () => ({
+vi.mock("@workspace/lib/providers", async () => ({
 	getProvider: () => ({ id: "brightdata", run: harness.run }),
 	parseScrapeTargets: () => [
 		{ model: "chatgpt", provider: "brightdata", webSearch: true },
 		{ model: "google-ai-overview", provider: "brightdata", webSearch: true },
 	],
-	selectTargetsForBrand: (configs: unknown[]) => configs,
+	selectTargetsForBrand: (await import("./providers/runner")).selectTargetsForBrand,
 	withProviderCallTracking: (_context: unknown, call: () => unknown) => call(),
 }));
 vi.mock("../../../apps/worker/src/boss", () => ({ default: { send: harness.send } }));
@@ -260,6 +260,81 @@ describe("bounded Web measurement jobs", () => {
 		await processPromptJob([job({ targetKeys: ["google-ai-overview:brightdata:online"] })]);
 		expect(harness.run.mock.calls.map(([model]) => model)).toEqual(["google-ai-overview"]);
 		expect(answers).toHaveLength(1);
+		expect(harness.send).not.toHaveBeenCalled();
+	});
+
+	it("discards a settings-change job after its requested targets have been deselected or removed", async () => {
+		harness.findBrand.mockResolvedValue({
+			id: "brand-1",
+			enabled: true,
+			enabledTargets: ["chatgpt:brightdata:online"],
+		});
+		await processPromptJob([
+			job({
+				settingsChange: true,
+				targetKeys: ["google-ai-overview:brightdata:online", "chatgpt:removed-provider:online"],
+			}),
+		]);
+		expect(harness.run).not.toHaveBeenCalled();
+		expect(attempts.size).toBe(0);
+		expect(harness.send).not.toHaveBeenCalled();
+	});
+
+	it("measures only the requested settings targets that are still currently enabled", async () => {
+		harness.findBrand.mockResolvedValue({
+			id: "brand-1",
+			name: "Brand",
+			website: "https://example.com",
+			enabled: true,
+			enabledTargets: ["chatgpt:brightdata:online"],
+		});
+		await processPromptJob([
+			job({
+				settingsChange: true,
+				targetKeys: ["google-ai-overview:brightdata:online", "chatgpt:brightdata:online"],
+			}),
+		]);
+		expect(harness.run.mock.calls.map(([model]) => model)).toEqual(["chatgpt"]);
+		expect(answers.map((answer) => answer.model)).toEqual(["chatgpt"]);
+		expect(harness.send).not.toHaveBeenCalled();
+	});
+
+	it("preserves an explicit manual one-off override of the selected brand targets", async () => {
+		harness.findBrand.mockResolvedValue({
+			id: "brand-1",
+			name: "Brand",
+			website: "https://example.com",
+			enabled: true,
+			enabledTargets: ["chatgpt:brightdata:online"],
+		});
+		await processPromptJob([job({ targetKeys: ["google-ai-overview:brightdata:online"] })]);
+		expect(harness.run.mock.calls.map(([model]) => model)).toEqual(["google-ai-overview"]);
+		expect(harness.send).not.toHaveBeenCalled();
+	});
+
+	it("does not expand an older settings job to targets enabled by a later change", async () => {
+		harness.findBrand.mockResolvedValue({
+			id: "brand-1",
+			name: "Brand",
+			website: "https://example.com",
+			enabled: true,
+			enabledTargets: ["chatgpt:brightdata:online", "google-ai-overview:brightdata:online"],
+		});
+		await processPromptJob([job({ settingsChange: true, targetKeys: ["chatgpt:brightdata:online"] })]);
+		expect(harness.run.mock.calls.map(([model]) => model)).toEqual(["chatgpt"]);
+		expect(harness.send).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		"prompt",
+		"brand",
+	] as const)("skips settings-change measurements when the %s is disabled without rescheduling", async (disabled) => {
+		if (disabled === "prompt")
+			harness.findPrompt.mockResolvedValue({ id: "prompt-1", brandId: "brand-1", enabled: false });
+		else harness.findBrand.mockResolvedValue({ id: "brand-1", enabled: false });
+		await processPromptJob([job({ settingsChange: true, targetKeys: ["chatgpt:brightdata:online"] })]);
+		expect(harness.run).not.toHaveBeenCalled();
+		expect(attempts.size).toBe(0);
 		expect(harness.send).not.toHaveBeenCalled();
 	});
 });
