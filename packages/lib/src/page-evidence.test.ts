@@ -75,6 +75,37 @@ describe("page evidence normalization", () => {
 		expect(evidence.search.status).toBe("known");
 		expect(evidence.citations.status).toBe("known");
 	});
+	it("uses explicit query search-result edges only when answer-wide results are unknown", () => {
+		const queryEvidence = [
+			{
+				query: "Rails",
+				sourceField: "search_model_queries[].results",
+				urls: [
+					{ url: A, role: "search_result" as const },
+					{ url: A, role: "search_result" as const },
+					{ url: B, role: "citation" as const },
+					{ url: C, role: "unknown" as const },
+					{ url: "https://visited.example/", role: "visited" as const },
+				],
+			},
+		];
+		const options = { provider: "brightdata", model: "chatgpt", queryEvidence };
+		const nested = normalizePageEvidence({}, options);
+		expect(nested.search.status).toBe("known");
+		expect(nested.search.items.map((item) => item.url)).toEqual([A, A]);
+		expect(nested.search.items[0]?.sourceField).toBe("search_model_queries[].results");
+		const root = normalizePageEvidence({ search_results: [{ url: B }] }, options);
+		expect(root.search.items.map((item) => item.url)).toEqual([B]);
+		expect(
+			normalizePageEvidence(
+				{},
+				{ ...options, queryEvidence: [{ ...queryEvidence[0], urls: queryEvidence[0].urls.slice(2) }] },
+			).search.status,
+		).toBe("unknown");
+		expect(normalizePageEvidence({ search_results: [], web_search_triggered: false }, options).search.items).toEqual(
+			[],
+		);
+	});
 	it("does not use organic results as AI Overview retrievals or citations", () => {
 		const evidence = normalizePageEvidence(
 			{ organic: [{ url: A }], aio_citations: [{ url: B }] },

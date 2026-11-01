@@ -138,6 +138,7 @@ function PromptHistoryPage() {
 					attemptId: record.attemptId ?? undefined,
 					runId: record.runId ?? undefined,
 					targetKey: record.targetKey,
+					pageScopeKey: undefined,
 				}),
 				replace: true,
 				resetScroll: false,

@@ -62,6 +62,8 @@ export function buildPageEvidenceResponse(records: PageEvidenceReadRecord[], fil
 	const selectedRecords = byTarget.filter(
 		(r) =>
 			scopeKey(r) === selectedScopeKey &&
+			(!filters.language || filters.language === "all" || locale(r).language === filters.language) &&
+			(!filters.country || locale(r).country === filters.country) &&
 			(!filters.attemptId || r.attemptId === filters.attemptId) &&
 			(!filters.runId || r.runId === filters.runId),
 	);

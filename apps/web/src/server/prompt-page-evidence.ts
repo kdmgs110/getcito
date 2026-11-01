@@ -32,6 +32,7 @@ export const pageEvidenceSchema = z.object({
 
 /** Select only evidence fields, never response prose or full raw payloads. */
 function rawProjection(raw: ReturnType<typeof sql>) {
+	raw = sql`(CASE WHEN jsonb_typeof(${raw}) = 'array' THEN ${raw}->0 ELSE ${raw} END)`;
 	return sql`jsonb_build_object('status_code',${raw}->'status_code','tasks', jsonb_build_array(jsonb_build_object('status_code',${raw}->'tasks'->0->'status_code','result',jsonb_build_array(jsonb_build_object('markdown',CASE WHEN length(${raw}->'tasks'->0->'result'->0->>'markdown')>0 THEN '[stored answer]' ELSE NULL END,'web_search_triggered',${raw}->'tasks'->0->'result'->0->'web_search_triggered','search_results',${raw}->'tasks'->0->'result'->0->'search_results','sources',${raw}->'tasks'->0->'result'->0->'sources','web_search',${raw}->'tasks'->0->'result'->0->'web_search')))), 'citations',${raw}->'citations','links_attached',${raw}->'links_attached','sources',${raw}->'sources','references',${raw}->'references','search_results',${raw}->'search_results','aio_citations',${raw}->'aio_citations','web_search_triggered',${raw}->'web_search_triggered')`;
 }
 
@@ -126,9 +127,11 @@ export const getPromptPageEvidenceFn = createServerFn({ method: "GET" })
 			for (const record of selected) {
 				const row = byId.get(record.runId);
 				record.evidence = (row?.evidence ??
-					normalizePageEvidence(row?.raw, { provider: record.provider, model: record.model })) as NonNullable<
-					PageEvidenceReadRecord["evidence"]
-				>;
+					normalizePageEvidence(row?.raw, {
+						provider: record.provider,
+						model: record.model,
+						queryEvidence: record.queryEvidence,
+					})) as NonNullable<PageEvidenceReadRecord["evidence"]>;
 			}
 		}
 		const { selectedRecords, ...response } = initial;

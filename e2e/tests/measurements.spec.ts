@@ -157,6 +157,25 @@ test.describe("Existing prompt detail measurement comparison", () => {
   await expect(page.getByText(PAGE_EVIDENCE_ANSWER,{exact:false})).toBeVisible();
  });
 
+ test("uses BrightData array-wrapped saved evidence when the selected provider changes", async ({page}) => {
+  const params=new URLSearchParams({tab:"web-queries",lookback:"1m",language:"ja",targetKey:SCRAPER_TARGET});
+  await page.goto(`/app/${MEASUREMENT_BRAND}/prompts/${PAGE_EVIDENCE_PROMPT}?${params}`);
+  const table=page.getByTestId("page-evidence-table");
+  await expect(table).toContainText(PAGE_EVIDENCE_TITLE);
+  await page.getByRole("combobox",{name:/^計測対象$|^Measurement target$/}).selectOption(WEB_TARGET);
+  await expect.poll(() => new URL(page.url()).searchParams.get("targetKey")).toBe(WEB_TARGET);
+  await expect(table).toContainText(/検索結果取得 1\/1回答|Search coverage 1\/1 answers/);
+  await expect(table).toContainText(/参照元取得 1\/1回答|Source coverage 1\/1 answers/);
+  await expect(table).not.toContainText(PAGE_EVIDENCE_TITLE);
+  const row=table.getByRole("row").filter({has:page.getByRole("button",{name:"E2E 別プロバイダー専用記事",exact:true})});
+  await expect(row.getByRole("cell").nth(1)).toContainText(/1 \/ 1(?:回答|answers)/);
+  await expect(row.getByRole("cell").nth(2)).toContainText(/1 \/ 1(?:回答|answers)/);
+  await expect(row.getByRole("cell").nth(3)).toContainText("100.0%");
+  await expect(row.getByRole("link")).toHaveAttribute("href","https://other.measurement-test.example.com/");
+  await expect(page.getByText("E2E 別プロバイダー専用検索語",{exact:true})).toBeVisible();
+  await expect(page.getByText("E2E ページ集計 検索語 1",{exact:true})).toHaveCount(0);
+ });
+
  test("keeps a missing source list unknown and excludes it from search-only classification", async ({page}) => {
   const params=new URLSearchParams({tab:"web-queries",lookback:"1m",language:"ja",targetKey:SCRAPER_TARGET,attemptId:PAGE_EVIDENCE_ATTEMPTS[2]});
   await page.goto(`/app/${MEASUREMENT_BRAND}/prompts/${PAGE_EVIDENCE_PROMPT}?${params}`);

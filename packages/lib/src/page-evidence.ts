@@ -1,4 +1,4 @@
-import { safeEvidenceUrl } from "./measurement";
+import { type QueryEvidence, safeEvidenceUrl } from "./measurement";
 
 export interface EvidencePage {
 	url: string;
@@ -174,7 +174,7 @@ function field(value: unknown, sourceField: string, explicitEmpty = false): Page
 /** Only provider-reported search results and final-answer sources; no reference SERP or inferred edges. */
 export function normalizePageEvidence(
 	raw: unknown,
-	options: { provider: string; model: string; webSearch?: boolean },
+	options: { provider: string; model: string; webSearch?: boolean; queryEvidence?: QueryEvidence[] },
 ): PageEvidence {
 	let payload = raw;
 	if (typeof payload === "string") {
@@ -217,11 +217,25 @@ export function normalizePageEvidence(
 		const citationItems = citationFields.flatMap((name) => field(root[name], name, noSearch).items);
 		const citationKnown =
 			citationItems.length > 0 || citationFields.some((name) => field(root[name], name, noSearch).status === "known");
+		let search =
+			options.model === "google-ai-overview" ? unknown() : field(root.search_results, "search_results", noSearch);
+		// An independent answer-wide result set takes precedence. Only explicit
+		// provider query→search-result edges may fill an otherwise unknown set;
+		// citation, visited and unknown-role URLs are never retrieval results.
+		if (search.status === "unknown" && options.model !== "google-ai-overview") {
+			const items = (options.queryEvidence ?? []).flatMap((entry) =>
+				entry.urls.flatMap((item) => {
+					if (item.role !== "search_result") return [];
+					const page = normalizeEvidencePage(item, entry.sourceField);
+					return page ? [page] : [];
+				}),
+			);
+			if (items.length) search = { status: "known", sourceField: "queryEvidence", items };
+		}
 		return {
 			version: 1,
 			// Organic Google results are not AI Overview retrieval evidence.
-			search:
-				options.model === "google-ai-overview" ? unknown() : field(root.search_results, "search_results", noSearch),
+			search,
 			citations: {
 				status: citationKnown ? "known" : "unknown",
 				sourceField: citationFields.join(","),

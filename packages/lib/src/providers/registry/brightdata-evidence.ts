@@ -188,7 +188,12 @@ export function normalizeBrightDataEvidence(
 			answerStatus: confirmedNoAio ? "not_shown" : "shown",
 			queryStatus,
 			queryEvidence: webSearch ? evidence : [],
-			pageEvidence: normalizePageEvidence(value, { provider: "brightdata", model, webSearch }),
+			pageEvidence: normalizePageEvidence(value, {
+				provider: "brightdata",
+				model,
+				webSearch,
+				queryEvidence: webSearch ? evidence : [],
+			}),
 			...(submittedPrompt ? { submittedPrompt } : {}),
 		},
 		queries: webSearch ? queries : [],

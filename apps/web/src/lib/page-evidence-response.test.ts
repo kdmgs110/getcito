@@ -53,4 +53,14 @@ describe("page evidence exact scope", () => {
 		expect(result.country).toBe("US");
 		expect(result.queries[0].relations).toEqual([]);
 	});
+	it("never substitutes another country or language for contradictory or absent locale filters", () => {
+		const rows = [row("a")];
+		expect(buildPageEvidenceResponse(rows, { country: "US" }).selectedRecords).toEqual([]);
+		expect(
+			buildPageEvidenceResponse(rows, { country: "US", scopeKey: JSON.stringify(["ja", "JP"]) }).selectedRecords,
+		).toEqual([]);
+		expect(
+			buildPageEvidenceResponse(rows, { language: "en", scopeKey: JSON.stringify(["ja", "JP"]) }).selectedRecords,
+		).toEqual([]);
+	});
 });
