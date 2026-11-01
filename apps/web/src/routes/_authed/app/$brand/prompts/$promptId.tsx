@@ -122,6 +122,7 @@ function PromptHistoryPage() {
 
 	const activeTab = Route.useSearch({ select: (s) => s.tab ?? "mentions" });
 	const navigate = Route.useNavigate();
+	const historyModel = Route.useSearch({ select: (search) => search.model === "all" ? undefined : search.model });
 	const language = Route.useSearch({ select: (search) => search.language ?? "all" });
 	const measurementSelection = Route.useSearch({
 		select: (search) => ({ attemptId: search.attemptId, runId: search.runId, targetKey: search.targetKey }),
@@ -176,6 +177,7 @@ function PromptHistoryPage() {
 		isLoading: isRunsLoading,
 		isError: isRunsError,
 	} = usePromptRunsOnly(shouldFetchRuns ? promptId : "", {
+		model: historyModel,
 		page: currentPage,
 		limit: 15,
 		days,
@@ -183,10 +185,10 @@ function PromptHistoryPage() {
 		language,
 	});
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: A language change must reset the history pagination.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: A language or target change must reset the history pagination.
 	useEffect(() => {
 		setCurrentPage(1);
-	}, [language]);
+	}, [language, historyModel]);
 
 	// Fetch prompt metadata
 	useEffect(() => {
@@ -459,6 +461,7 @@ function PromptHistoryPage() {
 							<PromptMeasurementComparison
 								key={`${brandId}:${promptId}`}
 								scope={measurementScope}
+								preferredTargetKey={measurementSelection.targetKey ?? historyModel}
 								onQueries={showMeasurementQueries}
 							/>
 						) : (

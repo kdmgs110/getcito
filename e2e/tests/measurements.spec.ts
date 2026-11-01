@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { AIO_ANSWER, ANSWER_SOURCE, API_ANSWER, cleanupMeasurementFixtures, MEASUREMENT_BRAND, MEASUREMENT_PROMPT, MEASUREMENT_STATUS_PROMPT, OLD_QUERY, OLDER_WEB_ATTEMPT, QUERY_SOURCE, seedMeasurementFixtures, WEB_ANSWER, WEB_ATTEMPT, WEB_QUERY, WEB_TARGET } from "../measurement-fixtures";
+import { SCRAPER_TARGET, SCRAPER_ATTEMPT, SCRAPER_ANSWER, SCRAPER_QUERY, SCRAPER_SOURCE, AIO_TARGET, AIO_ANSWER, ANSWER_SOURCE, API_ANSWER, cleanupMeasurementFixtures, MEASUREMENT_BRAND, MEASUREMENT_PROMPT, MEASUREMENT_STATUS_PROMPT, OLD_QUERY, OLDER_WEB_ATTEMPT, QUERY_SOURCE, seedMeasurementFixtures, WEB_ANSWER, WEB_ATTEMPT, WEB_QUERY, WEB_TARGET } from "../measurement-fixtures";
 
 test.describe("Existing prompt detail measurement comparison", () => {
  test.describe.configure({mode:"serial"});
@@ -53,6 +53,51 @@ test.describe("Existing prompt detail measurement comparison", () => {
   await expect(page).toHaveURL(new RegExp(`attemptId=${OLDER_WEB_ATTEMPT}`));
   await expect(page.getByText(OLD_QUERY,{exact:true})).toBeVisible();
   await expect(page.getByText(WEB_QUERY,{exact:true})).toHaveCount(0);
+ });
+
+ test("selects scraper answers and preserves their exact query provenance without borrowing BrightData evidence", async ({page}) => {
+  await page.goto(detail());
+  const web=page.getByTestId("measurement-target-chatgpt_web");
+  const source=web.getByRole("combobox",{name:/計測対象|Measurement target/});
+  await source.selectOption(SCRAPER_TARGET);
+  await expect(web).toContainText(SCRAPER_ANSWER);
+  await expect(web).not.toContainText(WEB_ANSWER);
+  await web.getByTestId("measurement-queries").click();
+  await expect(page).toHaveURL(new RegExp(`attemptId=${SCRAPER_ATTEMPT}`));
+  expect(new URL(page.url()).searchParams.get("targetKey")).toBe(SCRAPER_TARGET);
+  await page.getByText(SCRAPER_QUERY,{exact:true}).click();
+  const queryDetails=page.locator("details").filter({has:page.locator("summary").filter({hasText:SCRAPER_QUERY})});
+  await expect(queryDetails).toContainText(/対応は、取得元から提供されていません|did not expose pages associated/);
+  // Answer-wide citations are not asserted to be results of the fan-out query.
+  await expect(queryDetails.getByRole("link")).toHaveCount(0);
+  await expect(page.getByRole("link",{name:/E2E 回答全体の参照元/})).toHaveAttribute("href",SCRAPER_SOURCE);
+  await expect(page.getByText(WEB_QUERY,{exact:true})).toHaveCount(0);
+  await expect(page.getByText(OLD_QUERY,{exact:true})).toHaveCount(0);
+  await expect(page.locator(`a[href="${QUERY_SOURCE}"]`)).toHaveCount(0);
+ });
+
+ test("a zero-mention visibility answer opens the same exact source in comparison", async ({page}) => {
+  const params=new URLSearchParams({model:SCRAPER_TARGET,lookback:"1m",q:"E2E 同じ質問のウェブ回答比較"});
+  await page.goto(`/app/${MEASUREMENT_BRAND}/visibility?${params}`);
+  await expect(page.getByText(/回答を1件取得済み|1 answers collected/)).toBeVisible();
+  await page.getByRole("link",{name:/^回答を表示$|^View answers$/}).click();
+  await expect(page.getByTestId("measurement-comparison")).toBeVisible();
+  const url=new URL(page.url());
+  expect(url.searchParams.get("model")).toBe(SCRAPER_TARGET);
+  expect(url.searchParams.get("targetKey")).toBe(SCRAPER_TARGET);
+  expect(url.searchParams.get("view")).toBe("compare");
+  const web=page.getByTestId("measurement-target-chatgpt_web");
+  await expect(web.getByRole("combobox",{name:/計測対象|Measurement target/})).toHaveValue(SCRAPER_TARGET);
+  await expect(web).toContainText(SCRAPER_ANSWER);
+  await expect(web).not.toContainText(WEB_ANSWER);
+ });
+
+ test("an Overview with no answer row remains reachable from the visibility measurement CTA", async ({page}) => {
+  const params=new URLSearchParams({model:AIO_TARGET,lookback:"1m",q:"E2E 取得失敗と非表示の区別"});
+  await page.goto(`/app/${MEASUREMENT_BRAND}/visibility?${params}`);
+  await page.getByRole("link",{name:/^計測結果を表示$|^View measurement results$/}).click();
+  expect(new URL(page.url()).searchParams.get("targetKey")).toBe(AIO_TARGET);
+  await expect(page.getByTestId("measurement-target-google_ai_overview")).toContainText(/AI Overview非表示|AI Overview not shown/);
  });
 
  test("an exact answer link cannot cross its recorded language scope", async ({page}) => {

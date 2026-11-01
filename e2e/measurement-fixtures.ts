@@ -8,6 +8,11 @@ export const MEASUREMENT_BRAND = "brand-measurements-e2e";
 export const MEASUREMENT_PROMPT = "00000000-0000-4000-8000-550000000001";
 export const MEASUREMENT_STATUS_PROMPT = "00000000-0000-4000-8000-550000000002";
 export const WEB_TARGET = "chatgpt:brightdata:online";
+export const SCRAPER_TARGET = "chatgpt:dataforseo-scraper:online";
+export const SCRAPER_ATTEMPT = "00000000-0000-4000-8000-550000000013";
+export const SCRAPER_ANSWER = "E2E DataForSEO ChatGPT Web 言及なしの回答です。";
+export const SCRAPER_QUERY = "E2E DataForSEO 実行専用 ファンアウト検索語";
+export const SCRAPER_SOURCE = "https://measurement-test.example.com/scraper-answer-source";
 export const AIO_TARGET = "google-ai-overview:brightdata:online";
 export const WEB_ATTEMPT = "00000000-0000-4000-8000-550000000011";
 export const OLDER_WEB_ATTEMPT = "00000000-0000-4000-8000-550000000012";
@@ -58,15 +63,19 @@ export async function seedMeasurementFixtures() {
     [OLDER_WEB_ATTEMPT,"chatgpt","brightdata",WEB_TARGET,"E2E ChatGPT Web 過去の回答です。",OLD_QUERY,30],
     [WEB_ATTEMPT,"chatgpt","brightdata",WEB_TARGET,WEB_ANSWER,WEB_QUERY,10],
     [randomUUID(),"google-ai-overview","brightdata",AIO_TARGET,AIO_ANSWER,AIO_QUERY,9],
+    [SCRAPER_ATTEMPT,"chatgpt","dataforseo-scraper",SCRAPER_TARGET,SCRAPER_ANSWER,SCRAPER_QUERY,8],
     [randomUUID(),"chatgpt","openai-api","chatgpt:openai-api:gpt-5:online",API_ANSWER,"E2E API QUERY MUST NOT LEAK",1],
    ] as const) {
     const runId = randomUUID();
-    const evidence = {version:1,answerText:answer,answerStatus:"shown",queryStatus:"observed",queryEvidence:[{query,sourceField:"search_queries[0].results",urls:[{url:QUERY_SOURCE,title:"E2E クエリに対応する参照元",role:"search_result"},{url:"javascript:alert(1)",title:"E2E unsafe query URL",role:"unknown"}]}]};
+    const isScraper = provider === "dataforseo-scraper";
+    // Scraper exposes actual queries, but no query-to-source relationships.
+    const evidence = {version:1,answerText:answer,answerStatus:"shown",queryStatus:"observed",queryEvidence:isScraper ? [] : [{query,sourceField:"search_queries[0].results",urls:[{url:QUERY_SOURCE,title:"E2E クエリに対応する参照元",role:"search_result"},{url:"javascript:alert(1)",title:"E2E unsafe query URL",role:"unknown"}]}]};
+    const rawOutput = isScraper ? {tasks:[{result:[{markdown:answer,fan_out_queries:[query],sources:[{url:SCRAPER_SOURCE}]}]}]} : {answer};
     await client.query(`INSERT INTO prompt_runs(id,prompt_id,brand_id,model,provider,version,web_search_enabled,raw_output,brand_mentioned,web_queries,request_context,created_at)
-     VALUES($1,$2,$3,$4,$5,'upstream-returned-version',true,$6::json,true,$7,$8::jsonb,NOW()-$9*INTERVAL '1 minute')`, [runId,MEASUREMENT_PROMPT,MEASUREMENT_BRAND,model,provider,JSON.stringify({answer}),[query],JSON.stringify(context),minutes]);
+     VALUES($1,$2,$3,$4,$5,'upstream-returned-version',true,$6::json,$10,$7,$8::jsonb,NOW()-$9*INTERVAL '1 minute')`, [runId,MEASUREMENT_PROMPT,MEASUREMENT_BRAND,model,provider,JSON.stringify(rawOutput),[query],JSON.stringify(context),minutes,!isScraper]);
     await client.query(`INSERT INTO measurement_attempts(id,batch_id,brand_id,prompt_id,target_key,model,provider,status,web_search_enabled,request_context,evidence,prompt_run_id,created_at,completed_at)
      VALUES($1,$2,$3,$4,$5,$6,$7,'succeeded',true,$8::jsonb,$9::jsonb,$10,NOW()-$11*INTERVAL '1 minute',NOW()-$11*INTERVAL '1 minute')`, [attemptId,randomUUID(),MEASUREMENT_BRAND,MEASUREMENT_PROMPT,target,model,provider,JSON.stringify(context),JSON.stringify(evidence),runId,minutes]);
-    for (const [url,title] of [[ANSWER_SOURCE,"E2E 回答全体の参照元"],["javascript:alert(1)","E2E unsafe citation"]]) {
+    for (const [url,title] of [[isScraper ? SCRAPER_SOURCE : ANSWER_SOURCE,"E2E 回答全体の参照元"],["javascript:alert(1)","E2E unsafe citation"]]) {
      await client.query("INSERT INTO citations(prompt_run_id,prompt_id,brand_id,model,url,domain,title,citation_index,created_at) VALUES($1,$2,$3,$4,$5,'measurement-test.example.com',$6,1,NOW())", [runId,MEASUREMENT_PROMPT,MEASUREMENT_BRAND,model,url,title]);
     }
    }

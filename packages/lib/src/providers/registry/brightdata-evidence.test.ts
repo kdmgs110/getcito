@@ -2,6 +2,34 @@ import { describe, expect, it } from "vitest";
 import { normalizeBrightDataEvidence } from "./brightdata-evidence";
 
 describe("BrightData observable evidence", () => {
+	it("rejects the exact prompt-only Overview navigation shell as an incomplete acquisition", () => {
+		const prompt = "Railsで実務経験2年レベルで、実装工程のみ任せてくれる案件を探して";
+		const record = {
+			keyword: prompt,
+			aio_text: `AI による概要 ${prompt} に対する AI モードの回答`,
+			aio_markdown: `**AI による概要**\n\n### ${prompt} に対する AI モードの回答`,
+			aio_citations: null,
+		};
+		expect(() => normalizeBrightDataEvidence(record, "google-ai-overview", true, prompt)).toThrow(
+			"incomplete Overview navigation shell",
+		);
+		expect(() => normalizeBrightDataEvidence(record, "google-ai-overview", true)).toThrow(
+			"incomplete Overview navigation shell",
+		);
+		const actual = normalizeBrightDataEvidence(
+			{
+				...record,
+				aio_text: `${record.aio_text}\n実装に集中できる業務委託案件があります。`,
+				aio_markdown: `${record.aio_markdown}\n\n実装に集中できる業務委託案件があります。`,
+			},
+			"google-ai-overview",
+			true,
+			prompt,
+		);
+		expect(actual.measurement.answerStatus).toBe("shown");
+		expect(actual.measurement.answerText).toContain("実装に集中できる業務委託案件があります。");
+	});
+
 	it("extracts AIO markdown and aio_citations instead of organic SERP links", () => {
 		const result = normalizeBrightDataEvidence(
 			{

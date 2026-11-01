@@ -9,9 +9,13 @@ interface HistoryButtonProps {
 	promptId?: string;
 	/** Prompt-details tab to land on (e.g. "web-queries"); defaults to the first tab. */
 	tab?: "mentions" | "web-queries" | "citations" | "responses";
+	model?: string;
+	label?: string;
+	view?: "compare";
+	targetKey?: string;
 }
 
-export function HistoryButton({ brandId, promptId, tab }: HistoryButtonProps) {
+export function HistoryButton({ brandId, promptId, tab, model, label, view, targetKey }: HistoryButtonProps) {
 	if (!brandId || !promptId) {
 		return null;
 	}
@@ -21,10 +25,15 @@ export function HistoryButton({ brandId, promptId, tab }: HistoryButtonProps) {
 			<Link
 				to="/app/$brand/prompts/$promptId"
 				params={{ brand: brandId, promptId }}
-				search={(previous) => ({ ...previous, tab })}
+				search={(previous) => ({
+					...previous,
+					tab,
+					...(model ? { model: model === "all" ? undefined : model } : {}),
+					...(tab === "responses" ? { view, targetKey, attemptId: undefined, runId: undefined } : {}),
+				})}
 			>
 				<GoStack className="size-3 mr-0.5" />
-				<span className="text-xs font-normal">{t("core.viewDetails")}</span>
+				<span className="text-xs font-normal">{label ?? t("core.viewDetails")}</span>
 			</Link>
 		</Button>
 	);

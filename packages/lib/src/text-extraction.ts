@@ -8,6 +8,8 @@
  * at write time, so these functions are primarily for reading historical data.
  */
 
+import { safeEvidenceUrl } from "./measurement";
+
 // ============================================================================
 // Text extraction by provider
 // ============================================================================
@@ -173,7 +175,7 @@ export function extractTextFromBrightdata(rawOutput: any): string {
 		]) {
 			if (typeof record[key] === "string" && record[key].trim()) return record[key].trim();
 		}
-		
+
 		if (record.general?.search_engine === "google" || record.input?.url === "https://google.com/aimode") {
 			return "No Google AI mode invoked.";
 		}
@@ -189,9 +191,9 @@ export function extractTextFromOxylabs(rawOutput: any): string {
 		const content = rawOutput?.results?.[0]?.content;
 		if (!content) return "No content in Oxylabs output.";
 		for (const key of [
-			"markdown_text",       // ChatGPT parsed
-			"answer_results_md",   // Perplexity parsed
-			"response_text",       // ChatGPT / Google AI Mode fallback
+			"markdown_text", // ChatGPT parsed
+			"answer_results_md", // Perplexity parsed
+			"response_text", // ChatGPT / Google AI Mode fallback
 			"answer_text",
 			"answer",
 		]) {
@@ -245,6 +247,12 @@ export function extractTextContent(rawOutput: any, providerOrEngine: string): st
 			return extractTextFromAnthropic(rawOutput);
 		case "mistral-api":
 			return extractTextFromMistral(rawOutput);
+		case "dataforseo-scraper": {
+			const markdown = rawOutput?.tasks?.[0]?.result?.[0]?.markdown;
+			return typeof markdown === "string" && markdown.trim()
+				? markdown.trim()
+				: "No text content found in DataForSEO LLM Scraper output.";
+		}
 		case "dataforseo":
 		case "google":
 		case "google-ai-mode":
@@ -285,6 +293,29 @@ export type Citation = {
 	domain: string;
 	citationIndex: number;
 };
+
+/** Only explicitly cited answer sources; retrieved search results are separate. */
+export function extractCitationsFromDataforseoScraper(rawOutput: unknown): Citation[] {
+	const payload = rawOutput as { tasks?: Array<{ result?: Array<{ sources?: unknown }> }> } | null;
+	const sources = payload?.tasks?.[0]?.result?.[0]?.sources;
+	if (!Array.isArray(sources)) return [];
+	const seen = new Set<string>();
+	return sources.flatMap((source: unknown) => {
+		if (!source || typeof source !== "object" || Array.isArray(source)) return [];
+		const value = source as Record<string, unknown>;
+		const url = safeEvidenceUrl(value.url);
+		if (!url || seen.has(url)) return [];
+		seen.add(url);
+		return [
+			{
+				url,
+				title: typeof value.title === "string" && value.title.trim() ? value.title.trim() : undefined,
+				domain: new URL(url).hostname.replace(/^www\./, ""),
+				citationIndex: seen.size - 1,
+			},
+		];
+	});
+}
 
 function parseCitationUrl(url: string, title: string | undefined, idx: number): Citation | null {
 	try {
@@ -577,7 +608,10 @@ export function extractCitationsFromOxylabs(rawOutput: any): Citation[] {
 			if (typeof url !== "string" || !url.startsWith("http") || seen.has(url)) return;
 			seen.add(url);
 			const c = parseCitationUrl(url, typeof title === "string" ? title : undefined, idx);
-			if (c) { citations.push(c); idx++; }
+			if (c) {
+				citations.push(c);
+				idx++;
+			}
 		};
 
 		// Common citation fields across Oxylabs parsed AI sources.
@@ -651,6 +685,8 @@ export function extractCitationsFromCloro(rawOutput: any): Citation[] {
  */
 export function extractCitations(rawOutput: any, providerOrEngine: string): Citation[] {
 	switch (providerOrEngine) {
+		case "dataforseo-scraper":
+			return extractCitationsFromDataforseoScraper(rawOutput);
 		case "openai-api":
 		case "openai":
 		case "chatgpt":

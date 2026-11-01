@@ -3,6 +3,7 @@ import { azureFoundryApi } from "./registry/azure-foundry-api";
 import { brightdata } from "./registry/brightdata";
 import { cloro } from "./registry/cloro";
 import { dataforseo } from "./registry/dataforseo";
+import { dataforseoScraper } from "./registry/dataforseo-scraper";
 import { mistralApi } from "./registry/mistral-api";
 import { olostep } from "./registry/olostep";
 import { openaiApi } from "./registry/openai-api";
@@ -35,6 +36,7 @@ const providerMap: Record<string, Provider> = {
 	"anthropic-api": anthropicApi,
 	"mistral-api": mistralApi,
 	dataforseo,
+	"dataforseo-scraper": dataforseoScraper,
 	openrouter,
 	"azure-foundry-api": azureFoundryApi,
 };

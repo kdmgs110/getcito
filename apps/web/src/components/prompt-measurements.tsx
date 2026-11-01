@@ -320,14 +320,16 @@ function ComparisonColumn({
 	records,
 	scope,
 	onQueries,
+	preferredTargetKey,
 }: {
 	surface: "chatgpt_web" | "google_ai_overview";
 	targets: PromptMeasurementTarget[];
 	records: PromptMeasurementRecord[];
 	scope: PromptMeasurementScope;
 	onQueries: (record: PromptMeasurementRecord) => void;
+	preferredTargetKey?: string;
 }) {
-	const [targetSelection, setTargetSelection] = useState("");
+	const [targetSelection, setTargetSelection] = useState(preferredTargetKey ?? "");
 	const [recordSelection, setRecordSelection] = useState("");
 	const options = targets
 		.filter((target) => target.surface === surface)
@@ -391,9 +393,11 @@ function ComparisonColumn({
 export function PromptMeasurementComparison({
 	scope,
 	onQueries,
+	preferredTargetKey,
 }: {
 	scope: PromptMeasurementScope;
 	onQueries: (record: PromptMeasurementRecord) => void;
+	preferredTargetKey?: string;
 }) {
 	const result = useQuery({
 		queryKey: ["prompt-measurements", scope],
@@ -420,8 +424,9 @@ export function PromptMeasurementComparison({
 			<div className="grid items-start gap-4 xl:grid-cols-2">
 				{(["chatgpt_web", "google_ai_overview"] as const).map((surface) => (
 					<ComparisonColumn
-						key={`${surface}:${scope.lookback}:${scope.language}`}
+						key={`${surface}:${scope.lookback}:${scope.language}:${preferredTargetKey ?? ""}`}
 						surface={surface}
+						preferredTargetKey={preferredTargetKey}
 						targets={result.data.targets}
 						records={result.data.records}
 						scope={scope}

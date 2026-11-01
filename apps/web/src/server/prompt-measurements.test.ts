@@ -184,6 +184,40 @@ describe("authenticated measurement read API", () => {
 			"Unsupported measurement surface",
 		);
 	});
+	it("includes DataForSEO Web scraper attempts without borrowing BrightData or API answers and queries", async () => {
+		const scraperTarget = "chatgpt:dataforseo-scraper:online";
+		vi.stubEnv("SCRAPE_TARGETS", `chatgpt:brightdata:online,${scraperTarget},chatgpt:dataforseo:online`);
+		const scraperRun = {
+			...run(),
+			provider: "dataforseo-scraper",
+			webQueries: ["Rails 実際のファンアウト"],
+		};
+		mocks.runs.mockResolvedValueOnce([scraperRun]).mockResolvedValueOnce([]);
+		mocks.attempts.mockImplementation(async ({ where }) => {
+			const params = sql(where).params;
+			if (!params.includes(scraperTarget) || !params.includes("dataforseo-scraper")) return [];
+			return [
+				{
+					...attempt(),
+					targetKey: scraperTarget,
+					provider: "dataforseo-scraper",
+					evidence: { ...attempt().evidence, answerText: "スクレイパー自身の回答" },
+				},
+			];
+		});
+		const result = await getPromptMeasurementsFn({ data: scope });
+		expect(result.targets.map((target) => target.key)).toEqual([targetKey, scraperTarget]);
+		expect(result.records).toHaveLength(1);
+		expect(result.records[0]).toMatchObject({
+			targetKey: scraperTarget,
+			provider: "dataforseo-scraper",
+			queries: ["Rails 実際のファンアウト"],
+			evidence: { answerText: "スクレイパー自身の回答", queryEvidence: [] },
+		});
+		const legacyScope = sql(mocks.runs.mock.calls[1][0].where);
+		expect(legacyScope.params).toContain("dataforseo-scraper");
+		expect(legacyScope.params).not.toContain("dataforseo");
+	});
 	it("reads answer-wide citations only for the exact prompt/run and returns original locale plus on-demand raw output", async () => {
 		mocks.attempt.mockResolvedValue(attempt());
 		mocks.run.mockResolvedValue(run());
