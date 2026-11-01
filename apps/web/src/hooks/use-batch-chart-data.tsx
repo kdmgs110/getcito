@@ -43,7 +43,6 @@ export function batchChartQueryOptions(resolvedBrandId?: string, filters?: Batch
 		refetchOnReconnect: true,
 		// Evaluation results arrive asynchronously; refresh the open chart as they are saved.
 		refetchInterval: 60_000,
-		placeholderData: (prev) => prev, // Keep previous data while loading
 	});
 }
 

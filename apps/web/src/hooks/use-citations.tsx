@@ -35,7 +35,6 @@ export function useCitations(brandId?: string, filters?: CitationFilters) {
 		staleTime: 30_000,
 		refetchOnWindowFocus: true,
 		refetchInterval: 60_000,
-		placeholderData: (prev) => prev, // Keep previous data while refetching with new filters
 	});
 
 	return {

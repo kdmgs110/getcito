@@ -1,46 +1,59 @@
-import { t, formatNumber } from "@/i18n";
+import { IconInfoCircle } from "@tabler/icons-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { measurementTargetLabel } from "@workspace/lib/measurement";
+import { extractTextContent } from "@workspace/lib/text-extraction";
+import { Badge } from "@workspace/ui/components/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
+import { Separator } from "@workspace/ui/components/separator";
+import { Skeleton } from "@workspace/ui/components/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 /**
  * /app/$brand/prompts/$promptId - Prompt detail page
  *
  * Shows prompt details with tabs: Mentions, Web Queries, Citations, LLM Responses.
  */
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { getAppName, getBrandName, buildTitle } from "@/lib/route-head";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { Badge } from "@workspace/ui/components/badge";
-import { Skeleton } from "@workspace/ui/components/skeleton";
-import { Separator } from "@workspace/ui/components/separator";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@workspace/ui/components/tooltip";
-import { IconInfoCircle } from "@tabler/icons-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
-import { ProgressBarChart } from "@/components/progress-bar-chart";
-import { ListPagination } from "@/components/list-pagination";
-import { CitationsDisplay, type CitationData } from "@/components/citations-display";
-import { LookbackSelector, useLookbackPeriod } from "@/components/lookback-selector";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { type CitationData, CitationsDisplay } from "@/components/citations-display";
 import {
 	InfoTip,
 	QueryWordsSection,
 	UnknownQueriesNote,
-	VariationsList,
 	type VariationModelCount,
+	VariationsList,
 } from "@/components/fanout-sections";
+import { ListPagination } from "@/components/list-pagination";
+import { LookbackSelector, useLookbackPeriod } from "@/components/lookback-selector";
+import { ProgressBarChart } from "@/components/progress-bar-chart";
+import { PromptLanguageFilter } from "@/components/prompt-language-filter";
+import { PromptMeasurementComparison, PromptMeasurementEvidencePanel } from "@/components/prompt-measurements";
+import { PromptRunContext } from "@/components/prompt-run-context";
+import { WebLogo } from "@/components/web-logo";
+import { useBrand, useCompetitors } from "@/hooks/use-brands";
+import { usePromptRunsOnly } from "@/hooks/use-prompt-runs-only";
+import { usePromptStats } from "@/hooks/use-prompt-stats";
+import { useQueryFanout } from "@/hooks/use-query-fanout";
+import { createTranslator, formatNumber, t } from "@/i18n";
 import { formatDateTime } from "@/lib/app-locale";
 import { getDaysFromLookback, parseCustomLookback } from "@/lib/chart-utils";
-import { getModelDisplayName } from "@/lib/utils";
 import { promptKeywords } from "@/lib/fanout-analysis";
-import { useBrand, useCompetitors } from "@/hooks/use-brands";
-import { usePromptStats } from "@/hooks/use-prompt-stats";
-import { usePromptRunsOnly } from "@/hooks/use-prompt-runs-only";
-import { useQueryFanout } from "@/hooks/use-query-fanout";
-import { getPromptMetadataFn } from "@/server/prompts";
-import { extractTextContent } from "@workspace/lib/text-extraction";
-import ReactMarkdown from "react-markdown";
-import { shareOfVoiceColorMap } from "@/lib/share-of-voice-palette";
-import { WebLogo } from "@/components/web-logo";
-import { PromptRunContext } from "@/components/prompt-run-context";
-import { PromptLanguageFilter } from "@/components/prompt-language-filter";
+import type { PromptMeasurementRecord } from "@/lib/prompt-measurements";
 import { isPromptRunLanguageFilter } from "@/lib/prompt-run-language";
+import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
+import { shareOfVoiceColorMap } from "@/lib/share-of-voice-palette";
+import { getModelDisplayName } from "@/lib/utils";
+import { getPromptMetadataFn } from "@/server/prompts";
+
+const measurementViewText = createTranslator({
+	history: { ja: "実行履歴", en: "Run history" },
+	compare: { ja: "回答比較", en: "Compare answers" },
+	unknownProvider: { ja: "取得元未記録", en: "Provider not recorded" },
+});
+const measurementId = (value: unknown): string | undefined =>
+	typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+		? value
+		: undefined;
 
 // -------------------------------------------------------------------
 // Types
@@ -69,9 +82,22 @@ const TABS: { key: TabKey; label: string }[] = [
 export const Route = createFileRoute("/_authed/app/$brand/prompts/$promptId")({
 	// `tab` is part of the route's search schema so links can target a specific
 	// tab (e.g. View Details → web-queries). Absent means the default tab.
-	validateSearch: (search: Record<string, unknown>): { tab?: TabKey; language?: string } => ({
+	validateSearch: (
+		search: Record<string, unknown>,
+	): {
+		tab?: TabKey;
+		language?: string;
+		view?: "compare";
+		attemptId?: string;
+		runId?: string;
+		targetKey?: string;
+	} => ({
 		tab: TAB_KEYS.includes(search.tab as TabKey) ? (search.tab as TabKey) : undefined,
 		language: isPromptRunLanguageFilter(search.language) ? search.language : undefined,
+		view: search.view === "compare" ? "compare" : undefined,
+		attemptId: measurementId(search.attemptId),
+		runId: measurementId(search.runId),
+		targetKey: typeof search.targetKey === "string" && search.targetKey.length <= 500 ? search.targetKey : undefined,
 	}),
 	head: ({ matches, match }) => {
 		const appName = getAppName(match);
@@ -97,6 +123,28 @@ function PromptHistoryPage() {
 	const activeTab = Route.useSearch({ select: (s) => s.tab ?? "mentions" });
 	const navigate = Route.useNavigate();
 	const language = Route.useSearch({ select: (search) => search.language ?? "all" });
+	const measurementSelection = Route.useSearch({
+		select: (search) => ({ attemptId: search.attemptId, runId: search.runId, targetKey: search.targetKey }),
+	});
+	const comparisonView = Route.useSearch({ select: (search) => search.view === "compare" });
+	const measurementScope = { brandId, promptId, lookback, language };
+	const showMeasurementQueries = useCallback(
+		(record: PromptMeasurementRecord) => {
+			setVisitedTabs((previous) => new Set([...previous, "web-queries"]));
+			navigate({
+				search: (previous) => ({
+					...previous,
+					tab: "web-queries",
+					attemptId: record.attemptId ?? undefined,
+					runId: record.runId ?? undefined,
+					targetKey: record.targetKey,
+				}),
+				replace: true,
+				resetScroll: false,
+			});
+		},
+		[navigate],
+	);
 	const setActiveTab = useCallback(
 		(tab: TabKey) =>
 			navigate({
@@ -121,7 +169,7 @@ function PromptHistoryPage() {
 		aggregations,
 	} = usePromptStats(shouldFetchStats ? promptId : "", { days, endDate, language });
 
-	const shouldFetchRuns = visitedTabs.has("responses");
+	const shouldFetchRuns = visitedTabs.has("responses") && !comparisonView;
 	const {
 		runs,
 		pagination,
@@ -135,6 +183,7 @@ function PromptHistoryPage() {
 		language,
 	});
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: A language change must reset the history pagination.
 	useEffect(() => {
 		setCurrentPage(1);
 	}, [language]);
@@ -181,7 +230,10 @@ function PromptHistoryPage() {
 	const userTags = promptMeta?.tags || [];
 	const hasTags = systemTags.length > 0 || userTags.length > 0;
 
-	if (isStatsError || isRunsError) {
+	if (
+		((activeTab === "mentions" || activeTab === "citations") && isStatsError) ||
+		(activeTab === "responses" && !comparisonView && isRunsError)
+	) {
 		return (
 			<div className="space-y-6">
 				<div className="flex justify-between items-start">
@@ -347,15 +399,28 @@ function PromptHistoryPage() {
 					/>
 				)}
 
-				{activeTab === "web-queries" && (
-					<WebQueriesTab
-						brandId={brandId}
-						promptId={promptId}
-						promptValue={promptMeta?.value ?? ""}
-						lookback={lookback}
-						language={language}
-					/>
-				)}
+				{activeTab === "web-queries" &&
+					(measurementSelection.attemptId || measurementSelection.runId ? (
+						<PromptMeasurementEvidencePanel
+							scope={measurementScope}
+							selection={measurementSelection}
+							onClear={() =>
+								navigate({
+									search: (previous) => ({ ...previous, attemptId: undefined, runId: undefined, targetKey: undefined }),
+									replace: true,
+									resetScroll: false,
+								})
+							}
+						/>
+					) : (
+						<WebQueriesTab
+							brandId={brandId}
+							promptId={promptId}
+							promptValue={promptMeta?.value ?? ""}
+							lookback={lookback}
+							language={language}
+						/>
+					))}
 
 				{activeTab === "citations" && (
 					<CitationsTab
@@ -367,14 +432,46 @@ function PromptHistoryPage() {
 				)}
 
 				{activeTab === "responses" && (
-					<ResponsesTab
-						runs={runs}
-						pagination={pagination}
-						isLoading={isRunsLoading}
-						currentPage={currentPage}
-						onPageChange={handlePageChange}
-						brandName={brand?.name}
-					/>
+					<div className="space-y-4">
+						<fieldset
+							className="inline-flex gap-1 rounded-md border bg-muted/30 p-1"
+							aria-label={t("dashboard.llmResponses")}
+						>
+							{([false, true] as const).map((compare) => (
+								<button
+									key={String(compare)}
+									type="button"
+									aria-pressed={comparisonView === compare}
+									className={`rounded px-3 py-1.5 text-sm ${comparisonView === compare ? "bg-background font-medium shadow-sm" : "text-muted-foreground"}`}
+									onClick={() =>
+										navigate({
+											search: (previous) => ({ ...previous, view: compare ? "compare" : undefined }),
+											replace: true,
+											resetScroll: false,
+										})
+									}
+								>
+									{measurementViewText(compare ? "compare" : "history")}
+								</button>
+							))}
+						</fieldset>
+						{comparisonView ? (
+							<PromptMeasurementComparison
+								key={`${brandId}:${promptId}`}
+								scope={measurementScope}
+								onQueries={showMeasurementQueries}
+							/>
+						) : (
+							<ResponsesTab
+								runs={runs}
+								pagination={pagination}
+								isLoading={isRunsLoading}
+								currentPage={currentPage}
+								onPageChange={handlePageChange}
+								brandName={brand?.name}
+							/>
+						)}
+					</div>
 				)}
 			</div>
 		</div>
@@ -394,8 +491,8 @@ function TabLoadingSkeleton({ lines = 3 }: { lines?: number }) {
 			</CardHeader>
 			<Separator />
 			<CardContent className="space-y-4 pt-6">
-				{Array.from({ length: lines }).map((_, i) => (
-					<Skeleton key={i} className="h-8 w-full" />
+				{Array.from({ length: lines }, (_, index) => `line-${index}`).map((key) => (
+					<Skeleton key={key} className="h-8 w-full" />
 				))}
 			</CardContent>
 		</Card>
@@ -623,23 +720,23 @@ function ResponsesTab({
 	onPageChange,
 	brandName,
 }: {
-	runs: any[];
-	pagination: any;
+	runs: ReturnType<typeof usePromptRunsOnly>["runs"];
+	pagination: ReturnType<typeof usePromptRunsOnly>["pagination"];
 	isLoading: boolean;
 	currentPage: number;
 	onPageChange: (page: number) => void;
 	brandName?: string;
 }) {
-	const formatDate = (dateString: string) => formatDateTime(dateString, { timeZoneName: "short" });
+	const formatDate = (dateString: string | Date) => formatDateTime(dateString, { timeZoneName: "short" });
 
-	const formatRawOutput = (rawOutput: any) =>
+	const formatRawOutput = (rawOutput: unknown) =>
 		typeof rawOutput === "string" ? rawOutput : JSON.stringify(rawOutput, null, 2);
 
 	if (isLoading && runs.length === 0) {
 		return (
 			<div className="space-y-4">
-				{Array.from({ length: 3 }).map((_, i) => (
-					<Card key={i}>
+				{["first", "second", "third"].map((key) => (
+					<Card key={key}>
 						<CardHeader className="pb-0 gap-y-0">
 							<div className="grid grid-cols-3 gap-x-4">
 								<div>
@@ -678,13 +775,20 @@ function ResponsesTab({
 		<div className="space-y-4">
 			<h3 className="text-base font-medium">{t("dashboard.individualPromptRuns")}</h3>
 
-			{runs.map((run: any) => (
+			{runs.map((run) => (
 				<Card key={run.id}>
 					<CardHeader className="pb-0 gap-y-0">
 						<div className="grid grid-cols-3 gap-x-4 text-sm">
 							<div>
 								<span className="text-muted-foreground block text-xs mb-0.5">{t("dashboard.model")}</span>
-								<span>{getModelDisplayName(run.model)}</span>
+								<span>
+									{["chatgpt", "google-ai-overview", "google-ai-mode"].includes(run.model)
+										? measurementTargetLabel(run.model, run.provider)
+										: getModelDisplayName(run.model)}
+								</span>
+								<span className="block text-xs text-muted-foreground">
+									{run.provider ?? measurementViewText("unknownProvider")}
+								</span>
 							</div>
 							<div>
 								<span className="text-muted-foreground block text-xs mb-0.5">{t("dashboard.version")}</span>
@@ -706,8 +810,8 @@ function ResponsesTab({
 							<div>
 								<span className="text-xs text-muted-foreground block mb-1.5">{t("dashboard.webQueries")}</span>
 								<div className="flex flex-wrap gap-1.5">
-									{run.webQueries.map((query: string, qIndex: number) => (
-										<Badge key={qIndex} variant="outline" className="text-xs font-normal">
+									{[...new Set(run.webQueries)].map((query) => (
+										<Badge key={query} variant="outline" className="text-xs font-normal">
 											{query}
 										</Badge>
 									))}
@@ -719,8 +823,8 @@ function ResponsesTab({
 							<span className="text-xs text-muted-foreground block mb-1.5">{t("dashboard.brandsMentioned")}</span>
 							<div className="flex flex-wrap gap-1.5">
 								{run.brandMentioned && brandName && <Badge className="text-xs font-normal">{brandName}</Badge>}
-								{run.competitorsMentioned?.map((competitor: string, cIndex: number) => (
-									<Badge key={cIndex} variant="outline" className="text-xs font-normal">
+								{[...new Set(run.competitorsMentioned ?? [])].map((competitor) => (
+									<Badge key={competitor} variant="outline" className="text-xs font-normal">
 										{competitor}
 									</Badge>
 								))}

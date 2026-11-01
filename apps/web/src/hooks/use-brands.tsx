@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import type { BrandWithPrompts, Competitor } from "@workspace/lib/db/schema";
+import type { BrandWithPrompts } from "@workspace/lib/db/schema";
 import type { ModelConfig } from "@workspace/lib/providers/types";
-import { getBrands, getBrand, getCompetitors } from "@/server/brands";
+import { getBrand, getBrands, getCompetitors } from "@/server/brands";
 
 export type BrandWithPromptsAndDataInfo = BrandWithPrompts & {
 	earliestDataDate?: string | null;
@@ -13,6 +13,8 @@ export type BrandWithPromptsAndDataInfo = BrandWithPrompts & {
 	/** Same as `effectiveModels` but with provider / version / webSearch
 	 *  metadata, for pages that render per-model details. */
 	effectiveModelConfigs: ModelConfig[];
+	/** All deployment targets, including targets disabled for future runs. */
+	availableModelConfigs?: ModelConfig[];
 };
 
 // ============================================================================

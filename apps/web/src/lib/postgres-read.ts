@@ -14,6 +14,7 @@ import {
 	type FanoutPromptTotalRow,
 	UNAVAILABLE_SENTINEL,
 } from "@/lib/fanout-analysis";
+import { measurementModelFilter } from "@/lib/measurement-scope";
 import { promptRunLanguageCondition } from "@/lib/prompt-run-language";
 
 // ============================================================================
@@ -150,10 +151,7 @@ function promptIdFilter(enabledPromptIds?: string[]): SQL {
 	return sql`AND prompt_id IN (${uuidList(enabledPromptIds)})`;
 }
 
-function modelFilter(model?: string): SQL {
-	if (!model) return sql``;
-	return sql`AND model = ${model}`;
-}
+const modelFilter = measurementModelFilter;
 
 function webSearchFilter(webSearchEnabled?: boolean): SQL {
 	if (webSearchEnabled === undefined) return sql``;
@@ -393,7 +391,7 @@ export async function getCitationsTotalCount(
 			AND created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			${promptIdFilter(enabledPromptIds)}
-			${modelFilter(model)}
+			${modelFilter(model, "citations")}
 	`);
 	return Number(rows[0]?.total ?? 0);
 }
@@ -619,7 +617,7 @@ export async function getCitationDomainStats(
 			AND created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			${promptIdFilter(enabledPromptIds)}
-			${modelFilter(model)}
+			${modelFilter(model, "citations")}
 		GROUP BY domain
 		ORDER BY count DESC
 	`);
@@ -651,7 +649,7 @@ export async function getCitationUrlStats(
 			AND created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			${promptIdFilter(enabledPromptIds)}
-			${modelFilter(model)}
+			${modelFilter(model, "citations")}
 		GROUP BY url, domain
 		ORDER BY count DESC
 	`);
@@ -762,7 +760,7 @@ export async function getDailyCitationStats(
 			AND created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			${promptIdFilter(enabledPromptIds)}
-			${modelFilter(model)}
+			${modelFilter(model, "citations")}
 		GROUP BY date, domain
 		ORDER BY date
 	`);
@@ -800,7 +798,7 @@ export async function getPerPromptDailyCitationStats(
 			AND created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			${promptIdFilter(enabledPromptIds)}
-			${modelFilter(model)}
+			${modelFilter(model, "citations")}
 		GROUP BY prompt_id, date, domain
 		ORDER BY prompt_id, date
 	`);
@@ -992,7 +990,7 @@ export async function getPerPromptCitationPages(
 		WHERE brand_id = ${brandId}
 			${dateFilter(fromDate, toDate, timezone)}
 			${promptIdFilter(enabledPromptIds)}
-			${modelFilter(model)}
+			${modelFilter(model, "citations")}
 		GROUP BY prompt_id, url, domain
 		ORDER BY prompt_id, count DESC
 	`);
@@ -1031,7 +1029,7 @@ export async function getPerPromptDailyCitationPages(
 		WHERE brand_id = ${brandId}
 			${dateFilter(fromDate, toDate, timezone)}
 			${promptIdFilter(enabledPromptIds)}
-			${modelFilter(model)}
+			${modelFilter(model, "citations")}
 		GROUP BY prompt_id, date, url, domain
 		ORDER BY prompt_id, date
 	`);
@@ -1284,7 +1282,7 @@ export async function getFanoutBreakdown(
 			AND pr.created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND pr.created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			AND pr.prompt_id IN (${uuidList(enabledPromptIds)})
-			${model ? sql`AND pr.model = ${model}` : sql``}
+			${modelFilter(model, "pr")}
 			AND ${promptRunLanguageCondition(sql`pr.request_context`, language)}
 		GROUP BY pr.prompt_id, pr.model, fq.query
 	`);
@@ -1322,7 +1320,7 @@ export async function getFanoutModelTotals(
 			AND pr.created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND pr.created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			AND pr.prompt_id IN (${uuidList(enabledPromptIds)})
-			${model ? sql`AND pr.model = ${model}` : sql``}
+			${modelFilter(model, "pr")}
 			AND ${promptRunLanguageCondition(sql`pr.request_context`, language)}
 		GROUP BY pr.model
 		ORDER BY total_queries DESC
@@ -1357,7 +1355,7 @@ export async function getFanoutPromptTotals(
 			AND pr.created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND pr.created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
 			AND pr.prompt_id IN (${uuidList(enabledPromptIds)})
-			${model ? sql`AND pr.model = ${model}` : sql``}
+			${modelFilter(model, "pr")}
 			AND ${promptRunLanguageCondition(sql`pr.request_context`, language)}
 		GROUP BY pr.prompt_id
 	`);

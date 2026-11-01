@@ -2,6 +2,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 import { useBrand } from "@/hooks/use-brands";
 import { coerceLookbackPeriod, getDefaultLookbackPeriod, type LookbackPeriod } from "@/lib/chart-utils";
+import { orderedMeasurementConfigs, resolveMeasurementFilter } from "@/lib/measurement-filters";
 import { ALL_MODELS_VALUE } from "@/lib/model-filter";
 
 /** The shared dashboard filter params. Validated once at the `$brand` layout
@@ -79,7 +80,8 @@ export function useListFilters() {
 	const urlFilters: BrandFilterSearch = useSearch({ strict: false });
 	const setFilters = useFilterNavigate();
 
-	const model = urlFilters.model ?? ALL_MODELS_VALUE;
+	const availableTargets = orderedMeasurementConfigs(brand?.effectiveModelConfigs, brand?.availableModelConfigs);
+	const model = resolveMeasurementFilter(urlFilters.model, availableTargets) ?? ALL_MODELS_VALUE;
 	const tags = useMemo(() => splitTags(urlFilters.tags), [urlFilters.tags]);
 	const search = urlFilters.q ?? "";
 
@@ -91,7 +93,7 @@ export function useListFilters() {
 		/** True when any narrowing filter is active (lookback never narrows to
 		 *  zero on its own, so it doesn't count). Gates which empty state a
 		 *  page shows: "no data" vs "no matches for your filters". */
-		isFiltered: Boolean(search) || tags.length > 0 || model !== ALL_MODELS_VALUE,
+		isFiltered: Boolean(search) || tags.length > 0 || Boolean(urlFilters.model),
 		clearFilters: () => setFilters({ q: undefined, tags: undefined, model: undefined }),
 	};
 }

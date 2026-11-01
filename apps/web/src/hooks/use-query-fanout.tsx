@@ -40,7 +40,11 @@ export function useQueryFanout(brandId?: string, filters?: QueryFanoutFilters) {
 		enabled: !!resolvedBrandId,
 		staleTime: 30_000,
 		placeholderData: (prev, previousQuery) =>
-			(previousQuery?.queryKey[2] as QueryFanoutFilters | undefined)?.language === filters?.language ? prev : undefined,
+			(previousQuery?.queryKey[2] as QueryFanoutFilters | undefined)?.language === filters?.language &&
+			(previousQuery?.queryKey[2] as QueryFanoutFilters | undefined)?.model === filters?.model &&
+			previousQuery?.queryKey[1] === resolvedBrandId
+				? prev
+				: undefined,
 	});
 
 	return {

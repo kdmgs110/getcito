@@ -39,7 +39,6 @@ export function usePromptsSummary(brandId?: string, filters?: PromptsSummaryFilt
 		refetchOnWindowFocus: true,
 		refetchOnReconnect: true,
 		refetchInterval: 60_000,
-		placeholderData: (prev) => prev, // Keep previous data while refetching
 	});
 
 	return {

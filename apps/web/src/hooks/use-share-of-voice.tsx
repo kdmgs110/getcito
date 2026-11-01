@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { APP_TIMEZONE } from "@/lib/app-locale";
-import { getShareOfVoiceFn } from "@/server/analysis";
 import type { LookbackPeriod } from "@/lib/chart-utils";
+import { getShareOfVoiceFn } from "@/server/analysis";
 
 export interface ShareOfVoiceFilters {
 	lookback?: LookbackPeriod;
@@ -34,7 +34,6 @@ export function useShareOfVoice(brandId?: string, filters?: ShareOfVoiceFilters)
 			}),
 		enabled: !!resolvedBrandId,
 		staleTime: 30_000,
-		placeholderData: (prev) => prev,
 	});
 
 	return {

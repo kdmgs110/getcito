@@ -35,7 +35,8 @@
     "./providers/types": "./src/providers/types.ts",
     "./analytics": "./src/analytics/index.ts",
     "./analytics/server": "./src/analytics/server.ts",
-    "./analytics/conversions-server": "./src/analytics/conversions-server.ts"
+    "./analytics/conversions-server": "./src/analytics/conversions-server.ts",
+    "./measurement": "./src/measurement.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.84",

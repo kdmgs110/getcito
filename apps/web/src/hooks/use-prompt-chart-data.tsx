@@ -56,7 +56,6 @@ export function promptChartQueryOptions(
 		refetchOnReconnect: true,
 		refetchInterval: 60_000,
 		retry: 3,
-		placeholderData: (prev) => prev, // Keep previous data while refetching with new filters
 	});
 }
 
