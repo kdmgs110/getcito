@@ -168,6 +168,9 @@ export function LlmSettingsView({
 							</CardHeader>
 							<CardContent className="space-y-4 pt-4">
 								<div className="space-y-3 text-sm">
+									<p className="text-xs text-muted-foreground">
+										{t("settings.provider")}: {config.provider}
+									</p>
 									<p>{descriptions(`${measurementSurface(config.model, config.provider)}.summary`)}</p>
 									<div className="space-y-1.5 rounded-md bg-muted/40 p-3">
 										<p className="text-xs font-medium">{llmSettingsLabels("measures")}</p>

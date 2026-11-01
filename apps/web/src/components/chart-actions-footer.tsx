@@ -70,7 +70,7 @@ export function ChartActionsFooter({
 		<ChartFooter>
 			<div className="flex flex-wrap items-center justify-between gap-2 w-full">
 				<div className="flex flex-wrap items-center gap-2">
-					<HistoryButton promptName={promptName} promptId={promptId} brandId={brandId} />
+					<HistoryButton promptName={promptName} promptId={promptId} brandId={brandId} model={selectedModel} />
 					{onDownload && (
 						<Button
 							onClick={onDownload}

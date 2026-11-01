@@ -266,8 +266,10 @@ For the optional Google Analytics integration, see [GA4 traffic analysis setup](
 | `BRIGHTDATA_API_TOKEN` | brightdata | BrightData API token. |
 | `OXYLABS_USERNAME` / `OXYLABS_PASSWORD` | oxylabs | Oxylabs Web Scraper API credentials. |
 | `OLOSTEP_API_KEY` | olostep | Olostep API key. |
-| `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | dataforseo | DataForSEO account credentials. |
+| `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | dataforseo, dataforseo-scraper | DataForSEO account credentials. |
 | `CLORO_API_KEY` | cloro | Cloro API key. Cloro targets must use `:online`. |
+
+`chatgpt:dataforseo-scraper:online` uses the [ChatGPT LLM Scraper](https://docs.dataforseo.com/v3/ai_optimization/chat_gpt/llm_scraper/live/advanced/) to collect ChatGPT Web answers and reported `fan_out_queries`. It shares the existing DataForSEO credentials, supports the brand's market/language settings, and does not select a model version. Search queries are not guaranteed on every run. This is a separate acquisition from both `chatgpt:brightdata:online` and DataForSEO LLM Responses (`chatgpt:dataforseo:…`): queries from one run must not be attached to another run's answer. Answer-level sources do not establish individual query-to-URL relationships.
 
 ### Direct LLM providers (required when referenced by `SCRAPE_TARGETS`)
 

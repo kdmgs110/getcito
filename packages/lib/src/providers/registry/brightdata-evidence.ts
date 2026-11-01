@@ -142,6 +142,25 @@ export function normalizeBrightDataEvidence(
 	// A different/unknown response shape is not evidence of Overview absence.
 	const hasAioField = Object.hasOwn(record, "aio_text") || Object.hasOwn(record, "aio_markdown");
 	const hasAioReferences = Array.isArray(record.aio_citations) && record.aio_citations.some((item) => source(item));
+	// A known Google navigation shell can contain only the submitted question,
+	// with no Overview prose. It is an incomplete acquisition, not an answer or
+	// evidence of absence. Match this exact shell only; short answers are valid.
+	const shellText = (value: string) => value.replace(/[*#]/g, "").replace(/\s+/g, " ").trim();
+	const shellPrompts = [submittedPrompt, text(record.keyword)].filter((value): value is string => Boolean(value));
+	const aioContents = [text(record.aio_markdown), text(record.aio_text)].filter((value): value is string =>
+		Boolean(value),
+	);
+	if (
+		aio &&
+		!hasAioReferences &&
+		aioContents.length > 0 &&
+		aioContents.every((content) =>
+			shellPrompts.some(
+				(prompt) => shellText(content) === shellText(`AI による概要 ${prompt} に対する AI モードの回答`),
+			),
+		)
+	)
+		throw new BrightDataEvidenceError("BrightData returned an incomplete Overview navigation shell");
 	const confirmedNoAio =
 		aio &&
 		!answer &&

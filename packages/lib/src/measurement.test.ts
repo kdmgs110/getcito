@@ -6,6 +6,8 @@ describe("measurement identity", () => {
 		expect(measurementSurface("chatgpt", "brightdata")).toBe("chatgpt_web");
 		expect(measurementSurface("chatgpt", "openai-api")).toBe("llm_api");
 		expect(measurementSurface("chatgpt", "dataforseo")).toBe("llm_api");
+		expect(measurementSurface("chatgpt", "dataforseo-scraper")).toBe("chatgpt_web");
+		expect(measurementTargetLabel("chatgpt", "dataforseo-scraper")).toBe("ChatGPT Web");
 		expect(measurementSurface("google-ai-overview", "brightdata")).toBe("google_ai_overview");
 		expect(measurementSurface("google-ai-mode", "dataforseo")).toBe("google_ai_mode");
 		expect(measurementSurface("chatgpt", null)).toBe("unknown");

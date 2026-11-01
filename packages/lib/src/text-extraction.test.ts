@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
 	extractCitations,
+	extractCitationsFromChatCompletion,
 	extractCitationsFromDataforseoLlm,
 	extractCitationsFromGoogle,
-	extractCitationsFromChatCompletion,
 	extractCitationsFromOpenAI,
 	extractCitationsFromOxylabs,
 	extractTextContent,
@@ -251,6 +251,27 @@ describe("text-extraction", () => {
 	});
 
 	describe("extractTextContent", () => {
+		it("reads stored ChatGPT Web scraper markdown without using API sections or search snippets", () => {
+			const raw = {
+				tasks: [
+					{
+						result: [
+							{
+								markdown: "## ChatGPT Webの回答\n\n日本語の結果です。",
+								search_results: [{ description: "検索結果の断片" }],
+								items: [{ sections: [{ text: "別契約のAPI回答" }] }],
+							},
+						],
+					},
+				],
+			};
+			expect(extractTextContent(raw, "dataforseo-scraper")).toBe("## ChatGPT Webの回答\n\n日本語の結果です。");
+			for (const value of [null, {}, { tasks: [] }, { tasks: [{ result: [{ markdown: 42 }] }] }]) {
+				expect(extractTextContent(value, "dataforseo-scraper")).toBe(
+					"No text content found in DataForSEO LLM Scraper output.",
+				);
+			}
+		});
 		it("should route by provider name", () => {
 			const openaiOutput = {
 				output: [{ type: "message", content: [{ type: "output_text", text: "OpenAI text" }] }],
@@ -398,9 +419,7 @@ describe("text-extraction", () => {
 				choices: [
 					{
 						message: {
-							annotations: [
-								{ type: "url_citation", url_citation: { url: "https://a.com/x", title: "A" } },
-							],
+							annotations: [{ type: "url_citation", url_citation: { url: "https://a.com/x", title: "A" } }],
 						},
 					},
 				],
@@ -485,9 +504,7 @@ describe("text-extraction", () => {
 				results: [
 					{
 						content: {
-							citations: [
-								{ url: "https://www.forbes.com/article", title: "Best Speakers" },
-							],
+							citations: [{ url: "https://www.forbes.com/article", title: "Best Speakers" }],
 						},
 					},
 				],
@@ -511,10 +528,7 @@ describe("text-extraction", () => {
 							citations: [
 								{
 									text: "The JBL Xtreme 5 is a newly released option.",
-									urls: [
-										"https://www.bgr.com/best-speakers",
-										"https://www.soundguys.com/jbl-xtreme-5",
-									],
+									urls: ["https://www.bgr.com/best-speakers", "https://www.soundguys.com/jbl-xtreme-5"],
 								},
 								{ text: "Other mentions.", urls: ["https://www.rtings.com/speaker"] },
 							],
@@ -524,11 +538,7 @@ describe("text-extraction", () => {
 			};
 
 			const citations = extractCitationsFromOxylabs(rawOutput);
-			expect(citations.map((c) => c.domain)).toEqual([
-				"bgr.com",
-				"soundguys.com",
-				"rtings.com",
-			]);
+			expect(citations.map((c) => c.domain)).toEqual(["bgr.com", "soundguys.com", "rtings.com"]);
 			expect(citations[0].citationIndex).toBe(0);
 			expect(citations[2].citationIndex).toBe(2);
 		});
@@ -539,9 +549,7 @@ describe("text-extraction", () => {
 					{
 						content: {
 							additional_results: {
-								sources_results: [
-									{ url: "https://www.rtings.com/best", title: "Best Bluetooth Speakers" },
-								],
+								sources_results: [{ url: "https://www.rtings.com/best", title: "Best Bluetooth Speakers" }],
 							},
 						},
 					},
@@ -568,10 +576,7 @@ describe("text-extraction", () => {
 			};
 
 			const citations = extractCitationsFromOxylabs(rawOutput);
-			expect(citations.map((c) => c.url)).toEqual([
-				"https://example.com/x",
-				"https://other.com/y",
-			]);
+			expect(citations.map((c) => c.url)).toEqual(["https://example.com/x", "https://other.com/y"]);
 		});
 
 		it("should skip invalid URLs and handle empty output gracefully", () => {
@@ -585,6 +590,34 @@ describe("text-extraction", () => {
 	});
 
 	describe("extractCitations", () => {
+		it("extracts only safe explicit DataForSEO scraper answer sources", () => {
+			const raw = {
+				tasks: [
+					{
+						result: [
+							{
+								sources: [
+									{ url: "https://www.answer.example/page", title: "回答の出典" },
+									{ url: "https://www.answer.example/page" },
+									{ url: "https://user:private@example.com/" },
+									{ url: "javascript:alert(1)" },
+								],
+								search_results: [{ url: "https://unused.example/" }],
+							},
+						],
+					},
+				],
+			};
+			expect(extractCitations(raw, "dataforseo-scraper")).toEqual([
+				{ url: "https://www.answer.example/page", title: "回答の出典", domain: "answer.example", citationIndex: 0 },
+			]);
+			expect(
+				extractCitations(
+					{ tasks: [{ result: [{ search_results: [{ url: "https://unused.example/" }] }] }] },
+					"dataforseo-scraper",
+				),
+			).toEqual([]);
+		});
 		it("should route to correct extractor based on model group", () => {
 			const openaiOutput = {
 				output: [

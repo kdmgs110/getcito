@@ -36,7 +36,7 @@ const baseSchema = z.object({
 	timezone: z.string().max(100).default(APP_TIMEZONE),
 });
 
-const WEB_PROVIDERS = ["brightdata", "olostep", "cloro", "oxylabs"];
+const WEB_PROVIDERS = ["brightdata", "olostep", "cloro", "oxylabs", "dataforseo-scraper"];
 const WEB_MODELS = ["chatgpt", "google-ai-overview"];
 
 async function authorizePrompt(brandId: string, promptId: string) {

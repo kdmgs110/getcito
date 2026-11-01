@@ -34,6 +34,7 @@ import {
 } from "@/lib/domain-categories";
 import { classifyUrl } from "@/lib/domain-categories.server";
 import { buildGoogleModule } from "@/lib/google-module";
+import { measurementRunCondition } from "@/lib/measurement-scope";
 import { isPromptRunLanguageFilter, promptRunLanguageCondition } from "@/lib/prompt-run-language";
 // Server Functions
 // ============================================================================
@@ -460,6 +461,7 @@ export const getPromptRunsFn = createServerFn({ method: "GET" })
 	.validator(
 		z.object({
 			promptId: z.string(),
+			model: z.string().optional(),
 			page: z.number().optional().default(1),
 			limit: z.number().optional().default(10),
 			days: z.number().optional().default(7),
@@ -485,17 +487,17 @@ export const getPromptRunsFn = createServerFn({ method: "GET" })
 			gte(promptRuns.createdAt, fromDate),
 			lte(promptRuns.createdAt, toDate),
 			promptRunLanguageCondition(promptRuns.requestContext, data.language),
+			data.model && data.model !== "all" ? measurementRunCondition(data.model) : undefined,
 		);
 
 		const offset = (data.page - 1) * data.limit;
 
 		const [runs, totalResult] = await Promise.all([
-			db.query.promptRuns.findMany({
-				where: and(eq(promptRuns.promptId, data.promptId), timeCondition),
-				orderBy: desc(promptRuns.createdAt),
-				limit: data.limit,
-				offset,
-			}),
+			db.select().from(promptRuns)
+				.where(and(eq(promptRuns.promptId, data.promptId), timeCondition))
+				.orderBy(desc(promptRuns.createdAt))
+				.limit(data.limit)
+				.offset(offset),
 			db
 				.select({ count: count() })
 				.from(promptRuns)

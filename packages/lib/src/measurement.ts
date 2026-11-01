@@ -25,7 +25,7 @@ export function measurementSurface(model: string, provider: string | null | unde
 		return "google_ai_overview";
 	}
 	if (model === "google-ai-mode") return "google_ai_mode";
-	if (model === "chatgpt" && ["brightdata", "olostep", "cloro", "oxylabs"].includes(provider)) {
+	if (model === "chatgpt" && ["brightdata", "olostep", "cloro", "oxylabs", "dataforseo-scraper"].includes(provider)) {
 		return "chatgpt_web";
 	}
 	if (

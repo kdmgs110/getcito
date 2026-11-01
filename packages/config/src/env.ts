@@ -68,8 +68,10 @@ function buildProviderKeyRequirements(env: EnvMap = process.env): EnvRequirement
 
 	const requirements: EnvRequirement[] = [];
 	for (const provider of providers) {
+		// ChatGPT Web scraping and LLM Responses share account credentials.
+		const credentialProvider = provider === "dataforseo-scraper" ? "dataforseo" : provider;
 		const keys = ENV_REGISTRY.filter(
-			(spec) => spec.requiredBy === "dynamic-scrape-targets" && spec.provider === provider,
+			(spec) => spec.requiredBy === "dynamic-scrape-targets" && spec.provider === credentialProvider,
 		).map((spec) => spec.name);
 		if (keys.length === 0) continue;
 		requirements.push({

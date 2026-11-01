@@ -1,4 +1,4 @@
-import { t } from "@/i18n";
+import { createTranslator, t } from "@/i18n";
 
 import { memo, useMemo, useCallback } from "react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@workspace/ui/components/card";
@@ -6,12 +6,21 @@ import { Separator } from "@workspace/ui/components/separator";
 import { Badge } from "@workspace/ui/components/badge";
 import { Skeleton } from "@workspace/ui/components/skeleton";
 import { BaseChart } from "./base-chart";
+import { HistoryButton } from "./history-button";
 import { ChartActionsFooter } from "./chart-actions-footer";
 import { TextHighlighter } from "./text-highlighter";
 import { useChartExport } from "@/hooks/use-chart-export";
 import { useOptionalChartDataContext } from "@/contexts/chart-data-context";
 import type { LookbackPeriod } from "@/hooks/use-prompt-chart-data";
+import { historicalMeasurementConfig } from "@/lib/measurement-filters";
+import { isComparisonSurface } from "@/lib/prompt-measurements";
 import { getBadgeVariant, getBadgeClassName } from "@/lib/chart-utils";
+
+const responseText = createTranslator({
+	available: { ja: "回答を{count}件取得済み", en: "{count} answers collected" },
+	measurement: { ja: "計測結果を表示", en: "View measurement results" },
+	view: { ja: "回答を表示", en: "View answers" },
+});
 
 const PLACEHOLDER_BARS_NO_DATA = [20, 35, 15, 45, 25, 40, 30, 50, 20, 35, 45, 28].map((h, i) => ({
 	key: String(i),
@@ -67,6 +76,20 @@ export const CachedPromptChart = memo(function CachedPromptChart({
 		if (!chartContext) return null;
 		return chartContext.getChartDataForPrompt(promptId);
 	}, [chartContext, promptId]);
+
+	const [selectedTarget] = historicalMeasurementConfig(selectedModel);
+	const showComparison = Boolean(selectedTarget && isComparisonSurface(selectedTarget.model, selectedTarget.provider));
+	const responseLink = (label: string) => (
+		<HistoryButton
+			brandId={brandId}
+			promptId={promptId}
+			tab="responses"
+			model={selectedModel}
+			view={showComparison ? "compare" : undefined}
+			targetKey={selectedTarget ? selectedModel : undefined}
+			label={label}
+		/>
+	);
 
 	// Setup export functionality
 	const fileName = chartContext?.brand
@@ -171,6 +194,7 @@ export const CachedPromptChart = memo(function CachedPromptChart({
 									</p>
 								</>
 							)}
+							{showComparison && <div className="mt-3">{responseLink(responseText("measurement"))}</div>}
 						</div>
 					</div>
 				</CardContent>
@@ -204,6 +228,8 @@ export const CachedPromptChart = memo(function CachedPromptChart({
 								<p className="text-xs text-muted-foreground/70 mt-1">
 									{t("core.yourBrandAndCompetitorsWerentMentionedInTheEvaluatedResponsesForThisPrompt")}
 								</p>
+								<p className="text-xs text-muted-foreground mt-3 mb-2">{responseText("available", { count: totalRuns })}</p>
+								{responseLink(responseText("view"))}
 							</div>
 						</div>
 					</CardContent>
