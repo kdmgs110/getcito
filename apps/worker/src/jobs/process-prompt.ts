@@ -190,7 +190,7 @@ async function runModelIteration({
 				measurementAttempts.targetKey,
 				measurementAttempts.iteration,
 			],
-			set: { status: "running", startedAt: new Date(), completedAt: null, errorCode: null },
+			set: { status: "running", startedAt: new Date(), completedAt: null, errorCode: null, requestContext },
 			setWhere: or(
 				eq(measurementAttempts.status, "failed"),
 				and(
