@@ -1,5 +1,6 @@
 import type { MeasurementEvidence, QueryEvidence } from "../../measurement";
 import { safeEvidenceUrl } from "../../measurement";
+import { normalizePageEvidence } from "../../page-evidence";
 import type { Citation } from "../../text-extraction";
 
 type JsonRecord = Record<string, unknown>;
@@ -187,6 +188,12 @@ export function normalizeBrightDataEvidence(
 			answerStatus: confirmedNoAio ? "not_shown" : "shown",
 			queryStatus,
 			queryEvidence: webSearch ? evidence : [],
+			pageEvidence: normalizePageEvidence(value, {
+				provider: "brightdata",
+				model,
+				webSearch,
+				queryEvidence: webSearch ? evidence : [],
+			}),
 			...(submittedPrompt ? { submittedPrompt } : {}),
 		},
 		queries: webSearch ? queries : [],

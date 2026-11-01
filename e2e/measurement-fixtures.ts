@@ -6,6 +6,12 @@ import { testDatabaseUrl } from "./test-database";
 
 export const MEASUREMENT_BRAND = "brand-measurements-e2e";
 export const MEASUREMENT_PROMPT = "00000000-0000-4000-8000-550000000001";
+export const PAGE_EVIDENCE_PROMPT = "00000000-0000-4000-8000-550000000003";
+export const PAGE_EVIDENCE_ATTEMPTS = ["00000000-0000-4000-8000-550000000021", "00000000-0000-4000-8000-550000000022", "00000000-0000-4000-8000-550000000023"] as const;
+export const PAGE_EVIDENCE_URL = "https://pages.measurement-test.example.com/a";
+export const PAGE_EVIDENCE_TITLE = "E2E 検索重複と引用の記事A";
+export const PAGE_EVIDENCE_ANSWER = "E2E 出現・引用の根拠となる回答1";
+export const PAGE_EVIDENCE_UNKNOWN_ANSWER = "E2E 参照元未提供の回答3";
 export const MEASUREMENT_STATUS_PROMPT = "00000000-0000-4000-8000-550000000002";
 export const WEB_TARGET = "chatgpt:brightdata:online";
 export const SCRAPER_TARGET = "chatgpt:dataforseo-scraper:online";
@@ -70,7 +76,7 @@ export async function seedMeasurementFixtures() {
     const isScraper = provider === "dataforseo-scraper";
     // Scraper exposes actual queries, but no query-to-source relationships.
     const evidence = {version:1,answerText:answer,answerStatus:"shown",queryStatus:"observed",queryEvidence:isScraper ? [] : [{query,sourceField:"search_queries[0].results",urls:[{url:QUERY_SOURCE,title:"E2E クエリに対応する参照元",role:"search_result"},{url:"javascript:alert(1)",title:"E2E unsafe query URL",role:"unknown"}]}]};
-    const rawOutput = isScraper ? {tasks:[{result:[{markdown:answer,fan_out_queries:[query],sources:[{url:SCRAPER_SOURCE}]}]}]} : {answer};
+    const rawOutput = isScraper ? {status_code:20000,tasks:[{status_code:20000,result:[{markdown:answer,fan_out_queries:[query],search_results:[{url:SCRAPER_SOURCE,title:"E2E 回答全体の参照元"}],sources:[{url:SCRAPER_SOURCE,title:"E2E 回答全体の参照元"}]}]}]} : {answer};
     await client.query(`INSERT INTO prompt_runs(id,prompt_id,brand_id,model,provider,version,web_search_enabled,raw_output,brand_mentioned,web_queries,request_context,created_at)
      VALUES($1,$2,$3,$4,$5,'upstream-returned-version',true,$6::json,$10,$7,$8::jsonb,NOW()-$9*INTERVAL '1 minute')`, [runId,MEASUREMENT_PROMPT,MEASUREMENT_BRAND,model,provider,JSON.stringify(rawOutput),[query],JSON.stringify(context),minutes,!isScraper]);
     await client.query(`INSERT INTO measurement_attempts(id,batch_id,brand_id,prompt_id,target_key,model,provider,status,web_search_enabled,request_context,evidence,prompt_run_id,created_at,completed_at)
@@ -86,6 +92,26 @@ export async function seedMeasurementFixtures() {
     await client.query(`INSERT INTO measurement_attempts(batch_id,brand_id,prompt_id,target_key,model,provider,status,web_search_enabled,request_context,evidence,completed_at)
      VALUES($1,$2,$3,$4,$5,'brightdata',$6,true,$7::jsonb,$8::jsonb,NOW())`,[randomUUID(),MEASUREMENT_BRAND,MEASUREMENT_STATUS_PROMPT,target,model,status,JSON.stringify({...context,prompt:"E2E 取得失敗と非表示の区別"}),evidence?JSON.stringify(evidence):null]);
    }
+   await client.query("INSERT INTO prompts(id,brand_id,value,enabled) VALUES($1,$2,'E2E ページ出現と引用の集計',true)", [PAGE_EVIDENCE_PROMPT,MEASUREMENT_BRAND]);
+   const pageA = {url:PAGE_EVIDENCE_URL,title:PAGE_EVIDENCE_TITLE};
+   const pageB = {url:"https://pages.measurement-test.example.com/b",title:"E2E 記事B"};
+   const fillers = Array.from({length:11},(_,i) => ({url:`https://filler.measurement-test.example.com/${i}`,title:`E2E 未引用ページ ${i}`}));
+   const answers = [PAGE_EVIDENCE_ANSWER,"E2E 出現・引用の根拠となる回答2",PAGE_EVIDENCE_UNKNOWN_ANSWER];
+   for (let i=0;i<3;i++) {
+    const runId=randomUUID();
+    const query=`E2E ページ集計 検索語 ${i+1}`;
+    const raw={status_code:20000,tasks:[{status_code:20000,result:[{markdown:answers[i],fan_out_queries:[query],search_results:i===0?[pageA,pageA,pageB,...fillers]:i===1?[pageA,pageB]:[pageA],sources:i===0?[pageA]:i===1?[pageB]:null}]}]};
+    const evidence={version:1,answerText:answers[i],answerStatus:"shown",queryStatus:"observed",queryEvidence:[]};
+    await client.query(`INSERT INTO prompt_runs(id,prompt_id,brand_id,model,provider,version,web_search_enabled,raw_output,brand_mentioned,web_queries,request_context,created_at)
+     VALUES($1,$2,$3,'chatgpt','dataforseo-scraper','e2e',true,$4::json,false,$5,$6::jsonb,NOW()-$7*INTERVAL '1 minute')`,[runId,PAGE_EVIDENCE_PROMPT,MEASUREMENT_BRAND,JSON.stringify(raw),[query],JSON.stringify(context),15-i]);
+    await client.query(`INSERT INTO measurement_attempts(id,batch_id,brand_id,prompt_id,target_key,model,provider,status,web_search_enabled,request_context,evidence,prompt_run_id,created_at,completed_at)
+     VALUES($1,$2,$3,$4,$5,'chatgpt','dataforseo-scraper','succeeded',true,$6::jsonb,$7::jsonb,$8,NOW()-$9*INTERVAL '1 minute',NOW()-$9*INTERVAL '1 minute')`,[PAGE_EVIDENCE_ATTEMPTS[i],randomUUID(),MEASUREMENT_BRAND,PAGE_EVIDENCE_PROMPT,SCRAPER_TARGET,JSON.stringify(context),JSON.stringify(evidence),runId,15-i]);
+   }
+   // A different provider must never contribute to the selected scraper totals.
+   const otherRun=randomUUID();
+   const otherRaw={web_search_triggered:true,search_results:[{url:"https://other.measurement-test.example.com/",title:"E2E 別プロバイダー専用記事"}],citations:[{url:"https://other.measurement-test.example.com/",title:"E2E 別プロバイダー専用記事"}]};
+   await client.query(`INSERT INTO prompt_runs(id,prompt_id,brand_id,model,provider,version,web_search_enabled,raw_output,brand_mentioned,web_queries,request_context,created_at) VALUES($1,$2,$3,'chatgpt','brightdata','e2e',true,$4::json,false,$5,$6::jsonb,NOW()-INTERVAL '1 minute')`,[otherRun,PAGE_EVIDENCE_PROMPT,MEASUREMENT_BRAND,JSON.stringify([otherRaw]),["E2E 別プロバイダー専用検索語"],JSON.stringify(context)]);
+   await client.query(`INSERT INTO measurement_attempts(batch_id,brand_id,prompt_id,target_key,model,provider,status,web_search_enabled,request_context,evidence,prompt_run_id,completed_at) VALUES($1,$2,$3,$4,'chatgpt','brightdata','succeeded',true,$5::jsonb,$6::jsonb,$7,NOW())`,[randomUUID(),MEASUREMENT_BRAND,PAGE_EVIDENCE_PROMPT,WEB_TARGET,JSON.stringify(context),JSON.stringify({version:1,answerText:"E2E 別プロバイダーの回答",answerStatus:"shown",queryStatus:"observed",queryEvidence:[]}),otherRun]);
    await client.query("COMMIT");
   } catch (error) { await client.query("ROLLBACK"); throw error; }
  });

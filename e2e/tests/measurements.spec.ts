@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { cleanupMeasurementSettingsFixtures, readMeasurementSettingsQueue, seedMeasurementSettingsFixtures, settingsMeasurementTarget, SETTINGS_BRAND, SETTINGS_ENABLED_PROMPTS } from "../measurement-settings-fixtures";
-import { SCRAPER_TARGET, SCRAPER_ATTEMPT, SCRAPER_ANSWER, SCRAPER_QUERY, SCRAPER_SOURCE, AIO_TARGET, AIO_ANSWER, ANSWER_SOURCE, API_ANSWER, cleanupMeasurementFixtures, MEASUREMENT_BRAND, MEASUREMENT_PROMPT, MEASUREMENT_STATUS_PROMPT, OLD_QUERY, OLDER_WEB_ATTEMPT, QUERY_SOURCE, seedMeasurementFixtures, WEB_ANSWER, WEB_ATTEMPT, WEB_QUERY, WEB_TARGET } from "../measurement-fixtures";
+import { PAGE_EVIDENCE_PROMPT, PAGE_EVIDENCE_ATTEMPTS, PAGE_EVIDENCE_URL, PAGE_EVIDENCE_TITLE, PAGE_EVIDENCE_ANSWER, PAGE_EVIDENCE_UNKNOWN_ANSWER, SCRAPER_TARGET, SCRAPER_ATTEMPT, SCRAPER_ANSWER, SCRAPER_QUERY, SCRAPER_SOURCE, AIO_TARGET, AIO_ANSWER, ANSWER_SOURCE, API_ANSWER, cleanupMeasurementFixtures, MEASUREMENT_BRAND, MEASUREMENT_PROMPT, MEASUREMENT_STATUS_PROMPT, OLD_QUERY, OLDER_WEB_ATTEMPT, QUERY_SOURCE, seedMeasurementFixtures, WEB_ANSWER, WEB_ATTEMPT, WEB_QUERY, WEB_TARGET } from "../measurement-fixtures";
 
 test.describe("Existing prompt detail measurement comparison", () => {
  test.describe.configure({mode:"serial"});
@@ -68,10 +68,11 @@ test.describe("Existing prompt detail measurement comparison", () => {
   expect(new URL(page.url()).searchParams.get("targetKey")).toBe(SCRAPER_TARGET);
   await page.getByText(SCRAPER_QUERY,{exact:true}).click();
   const queryDetails=page.locator("details").filter({has:page.locator("summary").filter({hasText:SCRAPER_QUERY})});
-  await expect(queryDetails).toContainText(/対応は、取得元から提供されていません|did not expose pages associated/);
+  await expect(queryDetails).toContainText(/対応は未提供|対応は、取得元から提供されていません|did not expose query-to-URL/);
   // Answer-wide citations are not asserted to be results of the fan-out query.
   await expect(queryDetails.getByRole("link")).toHaveCount(0);
-  await expect(page.getByRole("link",{name:/E2E 回答全体の参照元/})).toHaveAttribute("href",SCRAPER_SOURCE);
+  const answerWideSource=page.getByTestId("page-evidence-table").getByRole("link").filter({hasText:SCRAPER_SOURCE});
+  await expect(answerWideSource).toHaveAttribute("href",SCRAPER_SOURCE);
   await expect(page.getByText(WEB_QUERY,{exact:true})).toHaveCount(0);
   await expect(page.getByText(OLD_QUERY,{exact:true})).toHaveCount(0);
   await expect(page.locator(`a[href="${QUERY_SOURCE}"]`)).toHaveCount(0);
@@ -104,9 +105,89 @@ test.describe("Existing prompt detail measurement comparison", () => {
  test("an exact answer link cannot cross its recorded language scope", async ({page}) => {
   const params=new URLSearchParams({tab:"web-queries",lookback:"1m",language:"en",attemptId:WEB_ATTEMPT,targetKey:WEB_TARGET});
   await page.goto(`/app/${MEASUREMENT_BRAND}/prompts/${MEASUREMENT_PROMPT}?${params}`);
-  await expect(page.getByRole("alert")).toContainText(/この期間・言語では|outside this period or language/);
+  await expect(page.getByText(/選択した回答はこの条件では確認できません|selected answer is outside these filters/)).toBeVisible();
   await expect(page.getByText(WEB_QUERY,{exact:true})).toHaveCount(0);
   await expect(page.getByRole("link",{name:/E2E クエリに対応する参照元/})).toHaveCount(0);
+ });
+
+ test("counts stored search appearances and citations separately, with provider scope and same-answer denominators", async ({page}) => {
+  const params=new URLSearchParams({tab:"web-queries",lookback:"1m",language:"ja",targetKey:SCRAPER_TARGET});
+  await page.goto(`/app/${MEASUREMENT_BRAND}/prompts/${PAGE_EVIDENCE_PROMPT}?${params}`);
+  const table=page.getByTestId("page-evidence-table");
+  await expect(table).toBeVisible();
+  await expect(table).toContainText(/検索結果取得 3\/3回答|Search coverage 3\/3 answers/);
+  await expect(table).toContainText(/参照元取得 2\/3回答|Source coverage 2\/3 answers/);
+  const row=table.getByRole("row").filter({has:page.getByRole("button",{name:PAGE_EVIDENCE_TITLE,exact:true})});
+  await expect(row.getByRole("cell").nth(1)).toContainText(/3 \/ 3(?:回答|answers)/);
+  await expect(row.getByRole("cell").nth(1)).toContainText(/延べ4件|4 occurrences/);
+  await expect(row.getByRole("cell").nth(2)).toContainText(/1 \/ 2(?:回答|answers)/);
+  await expect(row.getByRole("cell").nth(3)).toContainText(/1 \/ 2(?:回答|answers)/);
+  await expect(row.getByRole("cell").nth(3)).toContainText("50.0%");
+  const external=row.getByRole("link");
+  await expect(external).toHaveAttribute("href",PAGE_EVIDENCE_URL);
+  await expect(external).toHaveAttribute("target","_blank");
+  await expect(external).toHaveAttribute("rel",/noopener/);
+  await expect(table).not.toContainText("E2E 別プロバイダー専用記事");
+  await expect(page.getByText("E2E 別プロバイダー専用検索語",{exact:true})).toHaveCount(0);
+
+  // Pagination displays all 13 URLs without changing their stored totals.
+  await expect(table.getByRole("row")).toHaveCount(11);
+  await table.getByRole("button",{name:/^次へ$|^Next$/}).click();
+  await expect(table.getByRole("row")).toHaveCount(4);
+  await table.getByRole("button",{name:/^前へ$|^Previous$/}).click();
+  await table.getByRole("button",{name:/^引用あり$|^Cited$/}).click();
+  await expect(table.getByRole("row")).toHaveCount(3);
+
+  await table.getByRole("button",{name:/^すべて$|^All$/}).click();
+  await table.getByRole("button",{name:/^ドメイン別$|^Domains$/}).click();
+  const domain=table.getByRole("row").filter({has:page.getByRole("button",{name:"pages.measurement-test.example.com",exact:true})});
+  await expect(domain.getByRole("cell").nth(1)).toContainText(/3 \/ 3(?:回答|answers)/);
+  await expect(domain.getByRole("cell").nth(1)).toContainText(/延べ6件|6 occurrences/);
+  await expect(domain.getByRole("cell").nth(2)).toContainText(/2 \/ 2(?:回答|answers)/);
+  await domain.getByRole("button",{name:/^ページ別$|^Pages$/}).click();
+  await expect(table.getByRole("row")).toHaveCount(3);
+
+  // Evidence links resolve one historical answer, not the newest response.
+  await row.getByRole("button",{name:PAGE_EVIDENCE_TITLE,exact:true}).click();
+  const history=table.getByRole("listitem").filter({hasText:/延べ2件|2 occurrences/});
+  await history.getByRole("button",{name:/LLMの回答を見る|View LLM answer/}).click();
+  const answerUrl=new URL(page.url());
+  expect(answerUrl.searchParams.get("attemptId")).toBe(PAGE_EVIDENCE_ATTEMPTS[0]);
+  expect(answerUrl.searchParams.get("targetKey")).toBe(SCRAPER_TARGET);
+  await expect(page.getByText(PAGE_EVIDENCE_ANSWER,{exact:false})).toBeVisible();
+ });
+
+ test("uses BrightData array-wrapped saved evidence when the selected provider changes", async ({page}) => {
+  const params=new URLSearchParams({tab:"web-queries",lookback:"1m",language:"ja",targetKey:SCRAPER_TARGET});
+  await page.goto(`/app/${MEASUREMENT_BRAND}/prompts/${PAGE_EVIDENCE_PROMPT}?${params}`);
+  const table=page.getByTestId("page-evidence-table");
+  await expect(table).toContainText(PAGE_EVIDENCE_TITLE);
+  await page.getByRole("combobox",{name:/^計測対象$|^Measurement target$/}).selectOption(WEB_TARGET);
+  await expect.poll(() => new URL(page.url()).searchParams.get("targetKey")).toBe(WEB_TARGET);
+  await expect(table).toContainText(/検索結果取得 1\/1回答|Search coverage 1\/1 answers/);
+  await expect(table).toContainText(/参照元取得 1\/1回答|Source coverage 1\/1 answers/);
+  await expect(table).not.toContainText(PAGE_EVIDENCE_TITLE);
+  const row=table.getByRole("row").filter({has:page.getByRole("button",{name:"E2E 別プロバイダー専用記事",exact:true})});
+  await expect(row.getByRole("cell").nth(1)).toContainText(/1 \/ 1(?:回答|answers)/);
+  await expect(row.getByRole("cell").nth(2)).toContainText(/1 \/ 1(?:回答|answers)/);
+  await expect(row.getByRole("cell").nth(3)).toContainText("100.0%");
+  await expect(row.getByRole("link")).toHaveAttribute("href","https://other.measurement-test.example.com/");
+  await expect(page.getByText("E2E 別プロバイダー専用検索語",{exact:true})).toBeVisible();
+  await expect(page.getByText("E2E ページ集計 検索語 1",{exact:true})).toHaveCount(0);
+ });
+
+ test("keeps a missing source list unknown and excludes it from search-only classification", async ({page}) => {
+  const params=new URLSearchParams({tab:"web-queries",lookback:"1m",language:"ja",targetKey:SCRAPER_TARGET,attemptId:PAGE_EVIDENCE_ATTEMPTS[2]});
+  await page.goto(`/app/${MEASUREMENT_BRAND}/prompts/${PAGE_EVIDENCE_PROMPT}?${params}`);
+  const table=page.getByTestId("page-evidence-table");
+  await expect(table).toContainText(/参照元取得 0\/1回答|Source coverage 0\/1 answers/);
+  const row=table.getByRole("row").filter({has:page.getByRole("button",{name:PAGE_EVIDENCE_TITLE,exact:true})});
+  await expect(row.getByRole("cell").nth(1)).toContainText(/1 \/ 1(?:回答|answers)/);
+  await expect(row.getByRole("cell").nth(2)).toHaveText(/未提供|Not provided/);
+  await expect(row.getByRole("cell").nth(3)).toHaveText("—");
+  await table.getByRole("button",{name:/^検索結果のみ$|^Search results only$/}).click();
+  await expect(table.getByRole("row")).toHaveCount(1);
+  await expect(table).toContainText(/この条件に一致するページはありません|No pages match/);
  });
 
  test("keeps acquisition failure distinct from a successful Overview-not-shown result", async ({page}) => {

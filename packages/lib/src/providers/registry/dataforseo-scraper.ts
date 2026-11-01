@@ -1,5 +1,6 @@
 import { resolveBrandLocale } from "../../brand-locale";
 import { WEB_QUERIES_UNAVAILABLE } from "../../constants";
+import { normalizePageEvidence } from "../../page-evidence";
 import { extractCitationsFromDataforseoScraper } from "../../text-extraction";
 import type { ModelConfig, Provider, ProviderOptions, ScrapeResult } from "../types";
 
@@ -71,6 +72,7 @@ export function normalizeDataForSeoScraperResponse(payload: unknown, prompt: str
 			// fan_out_queries and answer-level sources do not tell us which
 			// particular query retrieved which URL. Keep them separate.
 			queryEvidence: [],
+			pageEvidence: normalizePageEvidence(payload, { provider: "dataforseo-scraper", model: "chatgpt", webSearch }),
 			submittedPrompt: prompt,
 		},
 	};

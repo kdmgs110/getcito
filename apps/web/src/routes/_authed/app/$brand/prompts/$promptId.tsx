@@ -6,38 +6,29 @@ import { Badge } from "@workspace/ui/components/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Separator } from "@workspace/ui/components/separator";
 import { Skeleton } from "@workspace/ui/components/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@workspace/ui/components/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/components/tooltip";
 /**
  * /app/$brand/prompts/$promptId - Prompt detail page
  *
  * Shows prompt details with tabs: Mentions, Web Queries, Citations, LLM Responses.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { type CitationData, CitationsDisplay } from "@/components/citations-display";
-import {
-	InfoTip,
-	QueryWordsSection,
-	UnknownQueriesNote,
-	type VariationModelCount,
-	VariationsList,
-} from "@/components/fanout-sections";
 import { ListPagination } from "@/components/list-pagination";
 import { LookbackSelector, useLookbackPeriod } from "@/components/lookback-selector";
 import { ProgressBarChart } from "@/components/progress-bar-chart";
 import { PromptLanguageFilter } from "@/components/prompt-language-filter";
-import { PromptMeasurementComparison, PromptMeasurementEvidencePanel } from "@/components/prompt-measurements";
+import { PromptMeasurementComparison } from "@/components/prompt-measurements";
+import { PromptPageEvidence, PromptPageEvidenceAnswer } from "@/components/prompt-page-evidence";
 import { PromptRunContext } from "@/components/prompt-run-context";
 import { WebLogo } from "@/components/web-logo";
 import { useBrand, useCompetitors } from "@/hooks/use-brands";
 import { usePromptRunsOnly } from "@/hooks/use-prompt-runs-only";
 import { usePromptStats } from "@/hooks/use-prompt-stats";
-import { useQueryFanout } from "@/hooks/use-query-fanout";
 import { createTranslator, formatNumber, t } from "@/i18n";
 import { formatDateTime } from "@/lib/app-locale";
 import { getDaysFromLookback, parseCustomLookback } from "@/lib/chart-utils";
-import { promptKeywords } from "@/lib/fanout-analysis";
 import type { PromptMeasurementRecord } from "@/lib/prompt-measurements";
 import { isPromptRunLanguageFilter } from "@/lib/prompt-run-language";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
@@ -91,12 +82,15 @@ export const Route = createFileRoute("/_authed/app/$brand/prompts/$promptId")({
 		attemptId?: string;
 		runId?: string;
 		targetKey?: string;
+		pageScopeKey?: string;
 	} => ({
 		tab: TAB_KEYS.includes(search.tab as TabKey) ? (search.tab as TabKey) : undefined,
 		language: isPromptRunLanguageFilter(search.language) ? search.language : undefined,
 		view: search.view === "compare" ? "compare" : undefined,
 		attemptId: measurementId(search.attemptId),
 		runId: measurementId(search.runId),
+		pageScopeKey:
+			typeof search.pageScopeKey === "string" && search.pageScopeKey.length <= 200 ? search.pageScopeKey : undefined,
 		targetKey: typeof search.targetKey === "string" && search.targetKey.length <= 500 ? search.targetKey : undefined,
 	}),
 	head: ({ matches, match }) => {
@@ -122,10 +116,15 @@ function PromptHistoryPage() {
 
 	const activeTab = Route.useSearch({ select: (s) => s.tab ?? "mentions" });
 	const navigate = Route.useNavigate();
-	const historyModel = Route.useSearch({ select: (search) => search.model === "all" ? undefined : search.model });
+	const historyModel = Route.useSearch({ select: (search) => (search.model === "all" ? undefined : search.model) });
 	const language = Route.useSearch({ select: (search) => search.language ?? "all" });
 	const measurementSelection = Route.useSearch({
-		select: (search) => ({ attemptId: search.attemptId, runId: search.runId, targetKey: search.targetKey }),
+		select: (search) => ({
+			attemptId: search.attemptId,
+			runId: search.runId,
+			targetKey: search.targetKey,
+			scopeKey: search.pageScopeKey,
+		}),
 	});
 	const comparisonView = Route.useSearch({ select: (search) => search.view === "compare" });
 	const measurementScope = { brandId, promptId, lookback, language };
@@ -139,6 +138,7 @@ function PromptHistoryPage() {
 					attemptId: record.attemptId ?? undefined,
 					runId: record.runId ?? undefined,
 					targetKey: record.targetKey,
+					pageScopeKey: undefined,
 				}),
 				replace: true,
 				resetScroll: false,
@@ -401,28 +401,43 @@ function PromptHistoryPage() {
 					/>
 				)}
 
-				{activeTab === "web-queries" &&
-					(measurementSelection.attemptId || measurementSelection.runId ? (
-						<PromptMeasurementEvidencePanel
-							scope={measurementScope}
-							selection={measurementSelection}
-							onClear={() =>
-								navigate({
-									search: (previous) => ({ ...previous, attemptId: undefined, runId: undefined, targetKey: undefined }),
-									replace: true,
-									resetScroll: false,
-								})
-							}
-						/>
-					) : (
-						<WebQueriesTab
-							brandId={brandId}
-							promptId={promptId}
-							promptValue={promptMeta?.value ?? ""}
-							lookback={lookback}
-							language={language}
-						/>
-					))}
+				{activeTab === "web-queries" && (
+					<PromptPageEvidence
+						brandId={brandId}
+						promptId={promptId}
+						lookback={lookback}
+						language={language}
+						selection={{ ...measurementSelection, model: historyModel }}
+						onSelection={(selection) =>
+							navigate({
+								search: (previous) => ({
+									...previous,
+									targetKey: selection.targetKey,
+									pageScopeKey: selection.scopeKey,
+									attemptId: selection.attemptId,
+									runId: selection.runId,
+								}),
+								replace: true,
+								resetScroll: false,
+							})
+						}
+						onAnswer={(answer) => {
+							setVisitedTabs((previous) => new Set([...previous, "responses"]));
+							navigate({
+								search: (previous) => ({
+									...previous,
+									tab: "responses",
+									view: "compare",
+									attemptId: answer.attemptId ?? undefined,
+									runId: answer.runId ?? undefined,
+									targetKey: answer.targetKey,
+								}),
+								replace: true,
+								resetScroll: false,
+							});
+						}}
+					/>
+				)}
 
 				{activeTab === "citations" && (
 					<CitationsTab
@@ -447,7 +462,12 @@ function PromptHistoryPage() {
 									className={`rounded px-3 py-1.5 text-sm ${comparisonView === compare ? "bg-background font-medium shadow-sm" : "text-muted-foreground"}`}
 									onClick={() =>
 										navigate({
-											search: (previous) => ({ ...previous, view: compare ? "compare" : undefined }),
+											search: (previous) => ({
+												...previous,
+												view: compare ? "compare" : undefined,
+												attemptId: undefined,
+												runId: undefined,
+											}),
 											replace: true,
 											resetScroll: false,
 										})
@@ -457,7 +477,33 @@ function PromptHistoryPage() {
 								</button>
 							))}
 						</fieldset>
-						{comparisonView ? (
+						{measurementSelection.attemptId || measurementSelection.runId ? (
+							<PromptPageEvidenceAnswer
+								scope={measurementScope}
+								selection={measurementSelection}
+								onClear={() =>
+									navigate({
+										search: (previous) => ({ ...previous, attemptId: undefined, runId: undefined }),
+										replace: true,
+										resetScroll: false,
+									})
+								}
+								onQueries={(answer) => {
+									setVisitedTabs((previous) => new Set([...previous, "web-queries"]));
+									navigate({
+										search: (previous) => ({
+											...previous,
+											tab: "web-queries",
+											attemptId: answer.attemptId ?? undefined,
+											runId: answer.runId ?? undefined,
+											targetKey: answer.targetKey,
+										}),
+										replace: true,
+										resetScroll: false,
+									});
+								}}
+							/>
+						) : comparisonView ? (
 							<PromptMeasurementComparison
 								key={`${brandId}:${promptId}`}
 								scope={measurementScope}
@@ -592,93 +638,6 @@ function MentionsTab({
 				/>
 			</CardContent>
 		</Card>
-	);
-}
-
-function WebQueriesTab({
-	brandId,
-	promptId,
-	promptValue,
-	lookback,
-	language,
-}: {
-	brandId: string;
-	promptId: string;
-	promptValue: string;
-	lookback: ReturnType<typeof useLookbackPeriod>;
-	language: string;
-}) {
-	// Same pipeline as the Query Fan-Out page, scoped to this prompt — echo and
-	// "unavailable" sentinels filtered, and (unlike the brand-wide page) every
-	// variation returned.
-	const { data, isLoading, isError } = useQueryFanout(brandId, { lookback, promptId, language });
-
-	// query → per-model counts, for the inline "2× ChatGPT" breakdown. byModel
-	// lists are uncapped in single-prompt mode, so every variation resolves.
-	const modelCounts = useMemo(() => {
-		const map = new Map<string, VariationModelCount[]>();
-		for (const m of data?.byModel ?? []) {
-			for (const q of m.topQueries) {
-				const entry = map.get(q.query);
-				if (entry) entry.push({ model: m.model, count: q.count });
-				else map.set(q.query, [{ model: m.model, count: q.count }]);
-			}
-		}
-		for (const counts of map.values()) counts.sort((a, b) => b.count - a.count);
-		return map;
-	}, [data]);
-
-	if (isLoading && !data) return <TabLoadingSkeleton lines={6} />;
-	if (isError && !data) {
-		return (
-			<div className="py-12 text-center text-muted-foreground text-sm">
-				{t("dashboard.couldnTLoadWebQueriesRightNowReload")}
-			</div>
-		);
-	}
-	if (!data || data.totalQueries === 0) {
-		return (
-			<div className="py-12 text-center text-muted-foreground text-sm">
-				{t("dashboard.noWebQueryDataAvailableForThisTime")}
-			</div>
-		);
-	}
-
-	return (
-		<Tabs defaultValue="fanout" className="gap-4">
-			<TabsList>
-				<TabsTrigger value="fanout">{t("dashboard.promptFanOut")}</TabsTrigger>
-				<TabsTrigger value="words">{t("dashboard.queryWords")}</TabsTrigger>
-			</TabsList>
-			<TabsContent value="fanout">
-				<Card>
-					<CardHeader>
-						<CardTitle className="flex items-center gap-1.5 text-base">
-							{t("dashboard.promptFanOut")}
-							<InfoTip>{t("dashboard.everyDistinctSearchEnginesRanWhileAnsweringThis")}</InfoTip>
-						</CardTitle>
-						<CardDescription>
-							{t("dashboard.distinctSearches", { count: formatNumber(data.uniqueQueries) })}
-						</CardDescription>
-					</CardHeader>
-					<Separator />
-					<CardContent>
-						<div className="mb-3 space-y-1 empty:hidden">
-							<UnknownQueriesNote byModel={data.byModel} />
-						</div>
-						<VariationsList
-							variations={data.topQueries}
-							keywords={promptKeywords(promptValue)}
-							totalUnique={data.uniqueQueries}
-							modelCounts={modelCounts}
-						/>
-					</CardContent>
-				</Card>
-			</TabsContent>
-			<TabsContent value="words">
-				<QueryWordsSection terms={data.terms} wordChanges={data.wordChanges} />
-			</TabsContent>
-		</Tabs>
 	);
 }
 

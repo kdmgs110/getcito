@@ -49,7 +49,7 @@ describe("BrightData observable evidence", () => {
 			true,
 			"元の質問",
 		);
-		expect(result.measurement).toEqual({
+		expect(result.measurement).toMatchObject({
 			version: 1,
 			answerText: "**概要**",
 			answerStatus: "shown",

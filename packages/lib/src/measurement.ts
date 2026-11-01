@@ -1,4 +1,5 @@
 import { formatScrapeTarget, type ModelConfig } from "@workspace/config/scrape-targets";
+import type { PageEvidence } from "./page-evidence";
 
 /** Evidence reported by the acquisition provider, never reconstructed queries. */
 export interface QueryEvidence {
@@ -15,6 +16,7 @@ export interface MeasurementEvidence {
 	queryStatus: "observed" | "not_exposed" | "not_used" | "unknown";
 	queryEvidence: QueryEvidence[];
 	submittedPrompt?: string;
+	pageEvidence?: PageEvidence;
 }
 
 export type MeasurementSurface = "chatgpt_web" | "google_ai_overview" | "google_ai_mode" | "llm_api" | "unknown";
