@@ -67,7 +67,7 @@ export async function seedMeasurementFixtures() {
     await client.query(`INSERT INTO measurement_attempts(id,batch_id,brand_id,prompt_id,target_key,model,provider,status,web_search_enabled,request_context,evidence,prompt_run_id,created_at,completed_at)
      VALUES($1,$2,$3,$4,$5,$6,$7,'succeeded',true,$8::jsonb,$9::jsonb,$10,NOW()-$11*INTERVAL '1 minute',NOW()-$11*INTERVAL '1 minute')`, [attemptId,randomUUID(),MEASUREMENT_BRAND,MEASUREMENT_PROMPT,target,model,provider,JSON.stringify(context),JSON.stringify(evidence),runId,minutes]);
     for (const [url,title] of [[ANSWER_SOURCE,"E2E 回答全体の参照元"],["javascript:alert(1)","E2E unsafe citation"]]) {
-     await client.query("INSERT INTO citations(prompt_run_id,prompt_id,brand_id,model,url,domain,title,citation_index) VALUES($1,$2,$3,$4,$5,'measurement-test.example.com',$6,1)", [runId,MEASUREMENT_PROMPT,MEASUREMENT_BRAND,model,url,title]);
+     await client.query("INSERT INTO citations(prompt_run_id,prompt_id,brand_id,model,url,domain,title,citation_index,created_at) VALUES($1,$2,$3,$4,$5,'measurement-test.example.com',$6,1,NOW())", [runId,MEASUREMENT_PROMPT,MEASUREMENT_BRAND,model,url,title]);
     }
    }
    for (const [model,target,status,evidence] of [
