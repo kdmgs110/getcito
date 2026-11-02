@@ -136,10 +136,6 @@ export const environmentMessages = {
 		en: "Olostep API key.",
 		ja: "OlostepのAPIキーです。",
 	},
-	BRIGHTDATA_API_TOKEN: {
-		en: "BrightData API token.",
-		ja: "BrightDataのAPIトークンです。",
-	},
 	OXYLABS_USERNAME: {
 		en: "Oxylabs Web Scraper API username.",
 		ja: "Oxylabs Web Scraper APIのユーザー名です。",

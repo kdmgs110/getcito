@@ -15,12 +15,18 @@ vi.mock("drizzle-orm/node-postgres", () => ({
 
 import {
 	getBatchChartData,
+	getBrandEarliestRunDate,
+	getBrandMentionRateByModel,
 	getDashboardSummary,
 	getFanoutBreakdown,
 	getFanoutModelTotals,
 	getFanoutPromptTotals,
 	getPromptCitationUrlStats,
+	getPromptMentionSummary,
+	getPromptsFirstEvaluatedAt,
 	getPromptsSummary,
+	getPromptTopCompetitorMentions,
+	getPromptWebQueriesForMapping,
 } from "./postgres-read";
 
 const dialect = new PgDialect();
@@ -50,9 +56,10 @@ describe("consistent language scope for prompt citations and search queries", ()
 			expect(query.sql).toContain("pr.request_context IS NOT NULL AND pr.request_context->>'languageCode' IS NULL");
 		}
 	});
-	it("leaves existing callers' all-language citation population intact", async () => {
+	it("keeps all languages while excluding retired acquisitions", async () => {
 		const [citationQuery] = await runQueries();
-		expect(citationQuery.sql).not.toContain("EXISTS");
+		expect(citationQuery.sql).toContain("scoped_run.id = citations.prompt_run_id");
+		expect(citationQuery.sql).toContain("brightdata");
 		expect(citationQuery.sql).not.toContain("request_context");
 	});
 });
@@ -68,5 +75,25 @@ describe("analytics database connection", () => {
 		expect(await getPromptsSummary("brand", null, null, "Asia/Tokyo")).toEqual([]);
 		expect(await getBatchChartData("brand", [promptId], null, null, "Asia/Tokyo")).toEqual([]);
 		expect(execute).toHaveBeenCalledTimes(4);
+	});
+});
+
+describe("current analytics exclude retired acquisitions", () => {
+	beforeEach(() => execute.mockClear());
+	it("scopes summary, history dates, mappings and snapshots without deleting historical rows", async () => {
+		await getDashboardSummary("brand", null, null, "Asia/Tokyo");
+		await getPromptsFirstEvaluatedAt("brand", [promptId]);
+		await getPromptWebQueriesForMapping(promptId, null, null, "Asia/Tokyo");
+		await getPromptMentionSummary(promptId, "2026-10-01", "2026-10-31", "Asia/Tokyo");
+		await getPromptTopCompetitorMentions(promptId, "2026-10-01", "2026-10-31", "Asia/Tokyo", 5);
+		await getBrandMentionRateByModel("brand", "2026-10-01", "2026-10-31", "Asia/Tokyo", [promptId]);
+		await getBrandEarliestRunDate("brand");
+		expect(execute).toHaveBeenCalledTimes(7);
+		for (const [query] of execute.mock.calls) {
+			const { sql: text } = dialect.sqlToQuery(query as SQL);
+			expect(text).toContain("brightdata");
+			expect(text).toContain("'olostep','cloro','oxylabs'");
+			expect(text).not.toMatch(/DELETE|UPDATE/);
+		}
 	});
 });

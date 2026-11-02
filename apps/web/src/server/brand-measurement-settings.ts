@@ -1,5 +1,6 @@
 // Server-only: settings and their immediate measurements commit together.
 import { randomUUID } from "node:crypto";
+import { normalizeActiveTargetKey } from "@workspace/config/scrape-targets";
 import { FIRST_RUN_JOB_PRIORITY, PROCESS_PROMPT_JOB_POLICY } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
 import { measurementTargetKey } from "@workspace/lib/measurement";
@@ -31,7 +32,7 @@ export async function saveBrandMeasurementTargets(
 		if (!brand) throw new Error("Brand not found");
 		// Obsolete explicit targets must not prevent fixing the brand's settings.
 		const previous = new Set(
-			brand.enabled_targets ??
+			brand.enabled_targets?.map(normalizeActiveTargetKey) ??
 				configured
 					.filter((config) => brand.enabled_models === null || brand.enabled_models.includes(config.model))
 					.map(measurementTargetKey),

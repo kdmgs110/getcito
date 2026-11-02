@@ -55,7 +55,7 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe("prompt answer history target scope", () => {
 	it("keeps zero-mention answers and applies the exact same target to rows and pagination", async () => {
-		vi.stubEnv("SCRAPE_TARGETS", "google-ai-mode:dataforseo:online,chatgpt:brightdata:online");
+		vi.stubEnv("SCRAPE_TARGETS", "google-ai-mode:dataforseo:online,chatgpt:dataforseo-scraper:online");
 		const result = await getPromptRunsFn({ data: { promptId: "prompt", model: "google-ai-mode:dataforseo:online" } });
 		expect(result.runs).toMatchObject([{ id: "zero-mention-answer", brandMentioned: false }]);
 		expect(result.total).toBe(1);
@@ -71,6 +71,6 @@ describe("prompt answer history target scope", () => {
 		await getPromptRunsFn({ data: { promptId: "prompt", model } });
 		const query = dialect.sqlToQuery(mocks.findMany.mock.calls[0][0]);
 		expect(query.sql).not.toContain("measurement_attempts");
-		expect(query.sql).not.toContain(".model");
+		expect(query.sql).toContain("brightdata");
 	});
 });

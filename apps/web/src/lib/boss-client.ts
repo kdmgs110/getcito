@@ -41,7 +41,7 @@ export async function getBoss(): Promise<PgBoss> {
 			retryLimit: 3,
 			retryDelay: 60,
 			retryBackoff: true,
-			expireInSeconds: 60 * 60,
+			expireInSeconds: 100 * 60,
 		});
 		await boss.createQueue("analyze-brand", {
 			retryLimit: 1,

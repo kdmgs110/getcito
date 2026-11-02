@@ -56,9 +56,9 @@ beforeEach(() => {
 	mocks.saveTargets
 		.mockReset()
 		.mockResolvedValue({
-			targetKeys: ["chatgpt:brightdata:online"],
+			targetKeys: ["chatgpt:dataforseo-scraper:online"],
 			queuedPrompts: 2,
-			addedTargetKeys: ["chatgpt:brightdata:online"],
+			addedTargetKeys: ["chatgpt:dataforseo-scraper:online"],
 			measurementBatchId: "batch",
 		});
 	mocks.auth.mockReset().mockResolvedValue({ user: { id: "owner" } });
@@ -120,19 +120,19 @@ describe("createBrandWithOrgFn", () => {
 
 describe("updateBrandMeasurementTargetsFn", () => {
 	it("authorizes brand access and saves exact targets without enabling sibling providers", async () => {
-		vi.stubEnv("SCRAPE_TARGETS", "chatgpt:openai-api:gpt-5:online,chatgpt:brightdata:online");
+		vi.stubEnv("SCRAPE_TARGETS", "chatgpt:openai-api:gpt-5:online,chatgpt:dataforseo-scraper:online");
 		try {
 			await expect(
-				updateBrandMeasurementTargetsFn({ data: { brandId: "brand", targetKeys: ["chatgpt:brightdata:online"] } }),
+				updateBrandMeasurementTargetsFn({ data: { brandId: "brand", targetKeys: ["chatgpt:dataforseo-scraper:online"] } }),
 			).resolves.toEqual({
-				targetKeys: ["chatgpt:brightdata:online"],
+				targetKeys: ["chatgpt:dataforseo-scraper:online"],
 				queuedPrompts: 2,
-				addedTargetKeys: ["chatgpt:brightdata:online"],
+				addedTargetKeys: ["chatgpt:dataforseo-scraper:online"],
 				measurementBatchId: "batch",
 			});
 			expect(mocks.org).toHaveBeenCalledWith("owner", "brand");
 			expect(mocks.saveTargets).toHaveBeenCalledWith(
-				{ brandId: "brand", targetKeys: ["chatgpt:brightdata:online"] },
+				{ brandId: "brand", targetKeys: ["chatgpt:dataforseo-scraper:online"] },
 				expect.any(Array),
 			);
 		} finally {
@@ -156,7 +156,7 @@ describe("updateBrandMeasurementTargetsFn", () => {
 		expect(mocks.update).not.toHaveBeenCalled();
 	});
 	it("validates targets against deployment configuration", async () => {
-		vi.stubEnv("SCRAPE_TARGETS", "chatgpt:brightdata:online");
+		vi.stubEnv("SCRAPE_TARGETS", "chatgpt:dataforseo-scraper:online");
 		try {
 			await expect(
 				updateBrandMeasurementTargetsFn({

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { cleanupMeasurementSettingsFixtures, readMeasurementSettingsQueue, seedMeasurementSettingsFixtures, settingsMeasurementTarget, SETTINGS_BRAND, SETTINGS_ENABLED_PROMPTS } from "../measurement-settings-fixtures";
-import { PAGE_EVIDENCE_PROMPT, PAGE_EVIDENCE_ATTEMPTS, PAGE_EVIDENCE_URL, PAGE_EVIDENCE_TITLE, PAGE_EVIDENCE_ANSWER, PAGE_EVIDENCE_UNKNOWN_ANSWER, SCRAPER_TARGET, SCRAPER_ATTEMPT, SCRAPER_ANSWER, SCRAPER_QUERY, SCRAPER_SOURCE, AIO_TARGET, AIO_ANSWER, ANSWER_SOURCE, API_ANSWER, cleanupMeasurementFixtures, MEASUREMENT_BRAND, MEASUREMENT_PROMPT, MEASUREMENT_STATUS_PROMPT, OLD_QUERY, OLDER_WEB_ATTEMPT, QUERY_SOURCE, seedMeasurementFixtures, WEB_ANSWER, WEB_ATTEMPT, WEB_QUERY, WEB_TARGET } from "../measurement-fixtures";
+import { retainedRetiredRuns, PAGE_EVIDENCE_PROMPT, PAGE_EVIDENCE_ATTEMPTS, PAGE_EVIDENCE_URL, PAGE_EVIDENCE_TITLE, PAGE_EVIDENCE_ANSWER, PAGE_EVIDENCE_UNKNOWN_ANSWER, SCRAPER_TARGET, SCRAPER_ATTEMPT, SCRAPER_ANSWER, SCRAPER_QUERY, SCRAPER_SOURCE, AIO_TARGET, AIO_ANSWER, ANSWER_SOURCE, API_ANSWER, cleanupMeasurementFixtures, MEASUREMENT_BRAND, MEASUREMENT_PROMPT, MEASUREMENT_STATUS_PROMPT, OLD_QUERY, OLDER_WEB_ATTEMPT, QUERY_SOURCE, seedMeasurementFixtures, WEB_ANSWER, WEB_ATTEMPT, WEB_QUERY, WEB_TARGET } from "../measurement-fixtures";
 
 test.describe("Existing prompt detail measurement comparison", () => {
  test.describe.configure({mode:"serial"});
@@ -8,74 +8,54 @@ test.describe("Existing prompt detail measurement comparison", () => {
  test.afterAll(cleanupMeasurementFixtures);
  const detail = (promptId=MEASUREMENT_PROMPT) => `/app/${MEASUREMENT_BRAND}/prompts/${promptId}?tab=responses&view=compare&lookback=1m&language=ja`;
 
- test("compares real Web and Overview records without substituting a newer API answer", async ({page}) => {
+ test("compares DataForSEO ChatGPT Web and Overview while hiding retired acquisitions", async ({page}) => {
   await page.goto(detail());
   const comparison=page.getByTestId("measurement-comparison");
-  await expect(comparison).toBeVisible();
   const web=page.getByTestId("measurement-target-chatgpt_web");
-  const overview=page.getByTestId("measurement-target-google_ai_overview");
-  await expect(web).toContainText(WEB_ANSWER);
-  await expect(overview).toContainText(AIO_ANSWER);
+  await expect(web).toContainText(SCRAPER_ANSWER);
+  await expect(page.getByTestId("measurement-target-google_ai_overview")).toContainText(AIO_ANSWER);
   await expect(comparison).not.toContainText(API_ANSWER);
+  await expect(comparison).not.toContainText(WEB_ANSWER);
+  await expect(comparison).not.toContainText(/brightdata/i);
+  await expect(web.getByRole("combobox", {name:/計測対象|Measurement target/})).toHaveCount(0);
   const citation=web.getByRole("link",{name:/E2E 回答全体の参照元/});
-  await expect(citation).toHaveAttribute("href",ANSWER_SOURCE);
-  await expect(citation).toHaveAttribute("target","_blank");
+  await expect(citation).toHaveAttribute("href",SCRAPER_SOURCE);
   await expect(citation).toHaveAttribute("rel",/noopener/);
   await expect(comparison.locator('a[href^="javascript:"]')).toHaveCount(0);
  });
 
- test("query drilldown carries exact answer identity and provider-reported URL evidence", async ({page}) => {
+ test("DataForSEO drilldown keeps queries separate from answer-wide sources", async ({page}) => {
   await page.goto(detail());
   const web=page.getByTestId("measurement-target-chatgpt_web");
-  await expect(web).toContainText(WEB_ANSWER);
-  await web.getByTestId("measurement-queries").click();
-  await expect(page).toHaveURL(new RegExp(`attemptId=${WEB_ATTEMPT}`));
-  const url=new URL(page.url());
-  expect(url.searchParams.get("targetKey")).toBe(WEB_TARGET);
-  expect(url.searchParams.get("lookback")).toBe("1m");
-  expect(url.searchParams.get("language")).toBe("ja");
-  await page.getByText(WEB_QUERY,{exact:true}).click();
-  const relation=page.getByRole("link",{name:/E2E クエリに対応する参照元/});
-  await expect(relation).toHaveAttribute("href",QUERY_SOURCE);
-  await expect(relation).toHaveAttribute("target","_blank");
-  await expect(relation).toHaveAttribute("rel",/noopener/);
-  await expect(page.getByText("search_queries[0].results",{exact:false})).toBeVisible();
-  await expect(page.locator('a[href^="javascript:"]')).toHaveCount(0);
-  await expect(page.getByText(OLD_QUERY,{exact:true})).toHaveCount(0);
- });
-
- test("a historical answer opens its own queries rather than the latest answer's queries", async ({page}) => {
-  await page.goto(detail());
-  const web=page.getByTestId("measurement-target-chatgpt_web");
-  await expect(web).toContainText(WEB_ANSWER);
-  await web.getByRole("combobox",{name:/回答を選択|Select answer/}).selectOption(OLDER_WEB_ATTEMPT);
-  await expect(web).toContainText("E2E ChatGPT Web 過去の回答です。");
-  await web.getByTestId("measurement-queries").click();
-  await expect(page).toHaveURL(new RegExp(`attemptId=${OLDER_WEB_ATTEMPT}`));
-  await expect(page.getByText(OLD_QUERY,{exact:true})).toBeVisible();
-  await expect(page.getByText(WEB_QUERY,{exact:true})).toHaveCount(0);
- });
-
- test("selects scraper answers and preserves their exact query provenance without borrowing BrightData evidence", async ({page}) => {
-  await page.goto(detail());
-  const web=page.getByTestId("measurement-target-chatgpt_web");
-  const source=web.getByRole("combobox",{name:/計測対象|Measurement target/});
-  await source.selectOption(SCRAPER_TARGET);
   await expect(web).toContainText(SCRAPER_ANSWER);
-  await expect(web).not.toContainText(WEB_ANSWER);
   await web.getByTestId("measurement-queries").click();
   await expect(page).toHaveURL(new RegExp(`attemptId=${SCRAPER_ATTEMPT}`));
   expect(new URL(page.url()).searchParams.get("targetKey")).toBe(SCRAPER_TARGET);
   await page.getByText(SCRAPER_QUERY,{exact:true}).click();
   const queryDetails=page.locator("details").filter({has:page.locator("summary").filter({hasText:SCRAPER_QUERY})});
   await expect(queryDetails).toContainText(/対応は未提供|対応は、取得元から提供されていません|did not expose query-to-URL/);
-  // Answer-wide citations are not asserted to be results of the fan-out query.
   await expect(queryDetails.getByRole("link")).toHaveCount(0);
-  const answerWideSource=page.getByTestId("page-evidence-table").getByRole("link").filter({hasText:SCRAPER_SOURCE});
-  await expect(answerWideSource).toHaveAttribute("href",SCRAPER_SOURCE);
+  await expect(page.getByTestId("page-evidence-table")).toContainText(SCRAPER_SOURCE);
   await expect(page.getByText(WEB_QUERY,{exact:true})).toHaveCount(0);
-  await expect(page.getByText(OLD_QUERY,{exact:true})).toHaveCount(0);
-  await expect(page.locator(`a[href="${QUERY_SOURCE}"]`)).toHaveCount(0);
+ });
+
+ test("an older DataForSEO answer opens its own queries", async ({page}) => {
+  await page.goto(detail(PAGE_EVIDENCE_PROMPT));
+  const web=page.getByTestId("measurement-target-chatgpt_web");
+  await web.getByRole("combobox",{name:/回答を選択|Select answer/}).selectOption(PAGE_EVIDENCE_ATTEMPTS[0]);
+  await expect(web).toContainText(PAGE_EVIDENCE_ANSWER);
+  await web.getByTestId("measurement-queries").click();
+  await expect(page).toHaveURL(new RegExp(`attemptId=${PAGE_EVIDENCE_ATTEMPTS[0]}`));
+  await expect(page.getByText("E2E ページ集計 検索語 1",{exact:true})).toBeVisible();
+  await expect(page.getByText("E2E ページ集計 検索語 3",{exact:true})).toHaveCount(0);
+ });
+
+ test("old ChatGPT Web links select DataForSEO without reusing a retired answer ID", async ({page}) => {
+  const params=new URLSearchParams({tab:"web-queries",lookback:"1m",language:"ja",model:WEB_TARGET,targetKey:WEB_TARGET,attemptId:WEB_ATTEMPT});
+  await page.goto(`/app/${MEASUREMENT_BRAND}/prompts/${MEASUREMENT_PROMPT}?${params}`);
+  await expect(page.getByText(SCRAPER_QUERY,{exact:true})).toBeVisible();
+  await expect(page.getByText(WEB_QUERY,{exact:true})).toHaveCount(0);
+  await expect(page.getByTestId("page-evidence-table")).toContainText(SCRAPER_SOURCE);
  });
 
  test("a zero-mention visibility answer opens the same exact source in comparison", async ({page}) => {
@@ -89,7 +69,7 @@ test.describe("Existing prompt detail measurement comparison", () => {
   expect(url.searchParams.get("targetKey")).toBe(SCRAPER_TARGET);
   expect(url.searchParams.get("view")).toBe("compare");
   const web=page.getByTestId("measurement-target-chatgpt_web");
-  await expect(web.getByRole("combobox",{name:/計測対象|Measurement target/})).toHaveValue(SCRAPER_TARGET);
+  await expect(web.getByRole("combobox",{name:/計測対象|Measurement target/})).toHaveCount(0);
   await expect(web).toContainText(SCRAPER_ANSWER);
   await expect(web).not.toContainText(WEB_ANSWER);
  });
@@ -103,7 +83,7 @@ test.describe("Existing prompt detail measurement comparison", () => {
  });
 
  test("an exact answer link cannot cross its recorded language scope", async ({page}) => {
-  const params=new URLSearchParams({tab:"web-queries",lookback:"1m",language:"en",attemptId:WEB_ATTEMPT,targetKey:WEB_TARGET});
+  const params=new URLSearchParams({tab:"web-queries",lookback:"1m",language:"en",attemptId:SCRAPER_ATTEMPT,targetKey:SCRAPER_TARGET});
   await page.goto(`/app/${MEASUREMENT_BRAND}/prompts/${MEASUREMENT_PROMPT}?${params}`);
   await expect(page.getByText(/選択した回答はこの条件では確認できません|selected answer is outside these filters/)).toBeVisible();
   await expect(page.getByText(WEB_QUERY,{exact:true})).toHaveCount(0);
@@ -157,24 +137,16 @@ test.describe("Existing prompt detail measurement comparison", () => {
   await expect(page.getByText(PAGE_EVIDENCE_ANSWER,{exact:false})).toBeVisible();
  });
 
- test("uses BrightData array-wrapped saved evidence when the selected provider changes", async ({page}) => {
+ test("retains Bright Data records in storage while excluding them from page evidence", async ({page}) => {
+  expect(await retainedRetiredRuns()).toBe(3);
   const params=new URLSearchParams({tab:"web-queries",lookback:"1m",language:"ja",targetKey:SCRAPER_TARGET});
   await page.goto(`/app/${MEASUREMENT_BRAND}/prompts/${PAGE_EVIDENCE_PROMPT}?${params}`);
   const table=page.getByTestId("page-evidence-table");
   await expect(table).toContainText(PAGE_EVIDENCE_TITLE);
-  await page.getByRole("combobox",{name:/^計測対象$|^Measurement target$/}).selectOption(WEB_TARGET);
-  await expect.poll(() => new URL(page.url()).searchParams.get("targetKey")).toBe(WEB_TARGET);
-  expect(new URL(page.url()).searchParams.get("model")).toBe(WEB_TARGET);
-  await expect(table).toContainText(/検索結果取得 1\/1回答|Search coverage 1\/1 answers/);
-  await expect(table).toContainText(/参照元取得 1\/1回答|Source coverage 1\/1 answers/);
-  await expect(table).not.toContainText(PAGE_EVIDENCE_TITLE);
-  const row=table.getByRole("row").filter({has:page.getByRole("button",{name:"E2E 別プロバイダー専用記事",exact:true})});
-  await expect(row.getByRole("cell").nth(1)).toContainText(/1 \/ 1(?:回答|answers)/);
-  await expect(row.getByRole("cell").nth(2)).toContainText(/1 \/ 1(?:回答|answers)/);
-  await expect(row.getByRole("cell").nth(3)).toContainText("100.0%");
-  await expect(row.getByRole("link")).toHaveAttribute("href","https://other.measurement-test.example.com/");
-  await expect(page.getByText("E2E 別プロバイダー専用検索語",{exact:true})).toBeVisible();
-  await expect(page.getByText("E2E ページ集計 検索語 1",{exact:true})).toHaveCount(0);
+  await expect(table).not.toContainText("E2E 別プロバイダー専用記事");
+  await expect(page.getByText("E2E 別プロバイダー専用検索語",{exact:true})).toHaveCount(0);
+  await expect(page.getByRole("option", {name:/brightdata/i})).toHaveCount(0);
+  expect(await retainedRetiredRuns()).toBe(3);
  });
 
  test("keeps a missing source list unknown and excludes it from search-only classification", async ({page}) => {

@@ -49,7 +49,7 @@ async function main() {
 			retryLimit: 3,
 			retryDelay: 60,
 			retryBackoff: true,
-			expireInSeconds: 60 * 60, // 1 hour timeout for reports
+			expireInSeconds: 60 * 100, // Includes up to 55 minutes of standard-queue polling
 		},
 		{
 			name: "analyze-brand",
@@ -91,21 +91,11 @@ async function main() {
 	}
 	console.log("Queues created");
 
-	await boss.schedule(
-		"schedule-maintenance",
-		"*/5 * * * *",
-		{ source: "scheduled" },
-		{ tz: "UTC" },
-	);
+	await boss.schedule("schedule-maintenance", "*/5 * * * *", { source: "scheduled" }, { tz: "UTC" });
 	console.log("Scheduled maintenance job (every 5 minutes)");
 
 	if (process.env.DEPLOYMENT_MODE === "whitelabel") {
-		await boss.schedule(
-			"sync-auth0-memberships",
-			"*/15 * * * *",
-			{ source: "scheduled" },
-			{ tz: "UTC" },
-		);
+		await boss.schedule("sync-auth0-memberships", "*/15 * * * *", { source: "scheduled" }, { tz: "UTC" });
 		console.log("Scheduled Auth0 membership sync (every 15 minutes)");
 	}
 

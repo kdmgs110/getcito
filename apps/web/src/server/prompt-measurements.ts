@@ -93,6 +93,7 @@ function recordFromAttempt(
 		provider: attempt.provider,
 		version: run?.version ?? null,
 		status: attempt.status as PromptMeasurementRecord["status"],
+		errorCode: attempt.errorCode,
 		createdAt: attempt.createdAt.toISOString(),
 		completedAt: attempt.completedAt?.toISOString() ?? null,
 		requestContext: attempt.requestContext ?? run?.requestContext ?? null,

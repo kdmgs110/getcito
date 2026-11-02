@@ -1,4 +1,4 @@
-export const BRIGHTDATA_COUNTRIES: Record<string, string> = {
+export const COUNTRY_CODES: Record<string, string> = {
   "Andorra": "ad",
   "United Arab Emirates": "ae",
   "Afghanistan": "af",

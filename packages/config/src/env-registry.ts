@@ -245,13 +245,6 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Olostep API key.",
 	},
 	{
-		name: "BRIGHTDATA_API_TOKEN",
-		scope: "server",
-		requiredBy: "dynamic-scrape-targets",
-		provider: "brightdata",
-		description: "BrightData API token.",
-	},
-	{
 		name: "OXYLABS_USERNAME",
 		scope: "server",
 		requiredBy: "dynamic-scrape-targets",

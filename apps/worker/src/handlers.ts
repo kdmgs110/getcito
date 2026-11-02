@@ -37,7 +37,7 @@ export async function registerHandlers(boss: PgBoss): Promise<void> {
 	// so raising this without raising them just moves the queue from here to there.
 	await boss.work<ProcessPromptData>(
 		"process-prompt",
-		{ localConcurrency: positiveIntegerEnv("WORKER_PROMPT_CONCURRENCY", 10) },
+		{ localConcurrency: positiveIntegerEnv("WORKER_PROMPT_CONCURRENCY", 10), includeMetadata: true },
 		withSentry("process-prompt", processPromptJob),
 	);
 	console.log("Registered handler: process-prompt");

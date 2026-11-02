@@ -44,7 +44,7 @@ import { getPromptMeasurementDetailFn, getPromptMeasurementsFn } from "./prompt-
 const promptId = "00000000-0000-4000-8000-000000000001";
 const runId = "00000000-0000-4000-8000-000000000002";
 const attemptId = "00000000-0000-4000-8000-000000000003";
-const targetKey = "chatgpt:brightdata:online";
+const targetKey = "chatgpt:dataforseo-scraper:online";
 const context = {
 	version: 1 as const,
 	prompt: "Rails 案件を比較して",
@@ -65,7 +65,7 @@ const run = () => ({
 	brandId: "our-brand",
 	promptId,
 	model: "chatgpt",
-	provider: "brightdata",
+	provider: "dataforseo-scraper",
 	version: "web-returned-version",
 	webSearchEnabled: true,
 	createdAt: new Date("2026-10-25T00:00:00Z"),
@@ -80,7 +80,7 @@ const attempt = () => ({
 	promptId,
 	targetKey,
 	model: "chatgpt",
-	provider: "brightdata",
+	provider: "dataforseo-scraper",
 	requestedVersion: null,
 	webSearchEnabled: true,
 	status: "succeeded",
@@ -103,7 +103,7 @@ const sql = (where: unknown) => new PgDialect().sqlToQuery(where as SQL);
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	vi.stubEnv("SCRAPE_TARGETS", "chatgpt:brightdata:online,google-ai-overview:brightdata:online");
+	vi.stubEnv("SCRAPE_TARGETS", "chatgpt:dataforseo-scraper:online,google-ai-overview:olostep:online");
 	mocks.auth.mockResolvedValue({ user: { id: "member" } });
 	mocks.access.mockResolvedValue(undefined);
 	mocks.prompt.mockResolvedValue({ id: promptId, brandId: scope.brandId });
@@ -186,7 +186,7 @@ describe("authenticated measurement read API", () => {
 	});
 	it("includes DataForSEO Web scraper attempts without borrowing BrightData or API answers and queries", async () => {
 		const scraperTarget = "chatgpt:dataforseo-scraper:online";
-		vi.stubEnv("SCRAPE_TARGETS", `chatgpt:brightdata:online,${scraperTarget},chatgpt:dataforseo:online`);
+		vi.stubEnv("SCRAPE_TARGETS", `chatgpt:dataforseo-scraper:online,${scraperTarget},chatgpt:dataforseo:online`);
 		const scraperRun = {
 			...run(),
 			provider: "dataforseo-scraper",
@@ -206,7 +206,7 @@ describe("authenticated measurement read API", () => {
 			];
 		});
 		const result = await getPromptMeasurementsFn({ data: scope });
-		expect(result.targets.map((target) => target.key)).toEqual([targetKey, scraperTarget]);
+		expect(result.targets.map((target) => target.key)).toEqual([scraperTarget]);
 		expect(result.records).toHaveLength(1);
 		expect(result.records[0]).toMatchObject({
 			targetKey: scraperTarget,
@@ -272,6 +272,7 @@ describe("authenticated measurement read API", () => {
 		mocks.attempt.mockResolvedValue({
 			...attempt(),
 			model: "google-ai-overview",
+			provider: "olostep",
 			promptRunId: null,
 			rawOutput,
 			evidence: {

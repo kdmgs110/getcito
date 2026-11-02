@@ -1,10 +1,13 @@
+import { parseScrapeTargets } from "@workspace/config/scrape-targets";
 import { FIRST_RUN_JOB_PRIORITY, getDefaultDelayHours, PROCESS_PROMPT_JOB_POLICY } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
 import { brands, promptRuns, prompts } from "@workspace/lib/db/schema";
 import { EXPEDITE_MIN_INTERVAL_MS, shouldExpediteJob } from "@workspace/lib/expedite";
+import { measurementTargetKey } from "@workspace/lib/measurement";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import type { Job } from "pg-boss";
 import boss from "../boss";
+import { recoverDataForSeoTasks } from "./recover-dataforseo";
 
 export interface ScheduleMaintenanceData {
 	source?: string; // For logging - "scheduled" or "manual"
@@ -32,6 +35,10 @@ export async function scheduleMaintenanceJob(jobs: Job<ScheduleMaintenanceData>[
 }
 
 async function runMaintenanceCheck(): Promise<void> {
+	const recoveringPrompts = await recoverDataForSeoTasks(
+		(data, options) => boss.send("process-prompt", data, options),
+		new Set(parseScrapeTargets(process.env.SCRAPE_TARGETS).map(measurementTargetKey)),
+	);
 	// Get all enabled brands
 	const enabledBrands = await db.query.brands.findMany({
 		where: eq(brands.enabled, true),
@@ -106,6 +113,7 @@ async function runMaintenanceCheck(): Promise<void> {
 	const jobsToExpedite: { jobId: string; neverRun: boolean }[] = [];
 
 	for (const prompt of enabledPrompts) {
+		if (recoveringPrompts.has(prompt.id)) continue;
 		const pendingJob = pendingJobMap.get(prompt.id);
 
 		// Skip if there's an active or retry job (already being worked on)

@@ -194,11 +194,6 @@ async function main(): Promise<void> {
 
 	// ── Step 2: Scrapers + DataForSEO (optional) ──────────────────────────
 
-	// BrightData confirm (default Yes) → No
-	await waitFor("Configure BrightData?");
-	await send(ARROW_LEFT);
-	await send(ENTER);
-
 	// Oxylabs confirm (default No) → No
 	await waitFor("Configure Oxylabs?");
 	await send(ENTER);

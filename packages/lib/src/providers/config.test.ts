@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseScrapeTargets, validateScrapeTargets } from "./config";
-import { brightdata } from "./registry/brightdata";
+import { getAllProviders, getProvider } from "./index";
 import { oxylabs } from "./registry/oxylabs";
 import { dataforseo } from "./registry/dataforseo";
 import { olostep } from "./registry/olostep";
@@ -10,12 +10,12 @@ describe("parseScrapeTargets", () => {
 	describe("basic parsing", () => {
 		it("parses model:provider", () => {
 			const result = parseScrapeTargets("chatgpt:olostep");
-			expect(result).toEqual([{ model: "chatgpt", provider: "olostep", version: undefined, webSearch: false }]);
+			expect(result).toEqual([{ model: "chatgpt", provider: "dataforseo-scraper", version: undefined, webSearch: true }]);
 		});
 
 		it("parses model:provider:online", () => {
 			const result = parseScrapeTargets("chatgpt:olostep:online");
-			expect(result).toEqual([{ model: "chatgpt", provider: "olostep", version: undefined, webSearch: true }]);
+			expect(result).toEqual([{ model: "chatgpt", provider: "dataforseo-scraper", version: undefined, webSearch: true }]);
 		});
 
 		it("parses model:provider:version", () => {
@@ -34,7 +34,7 @@ describe("parseScrapeTargets", () => {
 			"chatgpt:olostep:online,claude:openrouter:anthropic/claude-sonnet-4,google-ai-mode:dataforseo:online",
 		);
 		expect(result).toHaveLength(3);
-		expect(result[0]).toEqual({ model: "chatgpt", provider: "olostep", version: undefined, webSearch: true });
+		expect(result[0]).toEqual({ model: "chatgpt", provider: "dataforseo-scraper", version: undefined, webSearch: true });
 		expect(result[1]).toEqual({
 			model: "claude",
 			provider: "openrouter",
@@ -162,7 +162,7 @@ describe("validateScrapeTargets", () => {
 	it("does not require version for scraping providers", () => {
 		const configs = [
 			{ model: "chatgpt", provider: "olostep", webSearch: true },
-			{ model: "chatgpt", provider: "brightdata", webSearch: true },
+			{ model: "chatgpt", provider: "dataforseo-scraper", webSearch: true },
 			{ model: "chatgpt", provider: "oxylabs", webSearch: true },
 			{ model: "google-ai-mode", provider: "dataforseo", webSearch: true },
 		];
@@ -171,7 +171,7 @@ describe("validateScrapeTargets", () => {
 				configs,
 				makeGetProvider({
 					olostep: configuredProvider,
-					brightdata: configuredProvider,
+					"dataforseo-scraper": configuredProvider,
 					oxylabs: configuredProvider,
 					dataforseo: configuredProvider,
 				}),
@@ -209,32 +209,6 @@ describe("provider validateTarget", () => {
 
 		it("rejects unknown models", () => {
 			expect(olostep.validateTarget!(config("unknown", "olostep", true))).toMatch(/does not support/);
-		});
-	});
-
-	describe("brightdata", () => {
-		it("accepts chatgpt with and without :online", () => {
-			expect(brightdata.validateTarget!(config("chatgpt", "brightdata", true))).toBeNull();
-			expect(brightdata.validateTarget!(config("chatgpt", "brightdata", false))).toBeNull();
-		});
-
-		it("accepts other models with :online", () => {
-			for (const model of ["perplexity", "copilot", "gemini", "grok", "google-ai-mode"]) {
-				expect(brightdata.validateTarget!(config(model, "brightdata", true))).toBeNull();
-			}
-		});
-
-		it("rejects non-chatgpt models without :online", () => {
-			expect(brightdata.validateTarget!(config("grok", "brightdata", false))).toMatch(/requires :online/);
-			expect(brightdata.validateTarget!(config("perplexity", "brightdata", false))).toMatch(/requires :online/);
-		});
-
-		it("rejects unknown models", () => {
-			expect(brightdata.validateTarget!(config("unknown", "brightdata", true))).toMatch(/does not support/);
-		});
-
-		it("accepts unknown models with custom dataset ID", () => {
-			expect(brightdata.validateTarget!(config("unknown", "brightdata", true, "gd_custom123"))).toBeNull();
 		});
 	});
 
@@ -287,5 +261,14 @@ describe("provider validateTarget", () => {
 			expect(oxylabs.validateTarget!(config("gemini", "oxylabs", true))).toMatch(/does not support/);
 			expect(oxylabs.validateTarget!(config("grok", "oxylabs", true))).toMatch(/does not support/);
 		});
+	});
+});
+
+
+describe("retired acquisition registry", () => {
+	it("does not offer Bright Data and explains how to migrate an old provider", () => {
+		expect(getAllProviders().some((provider) => provider.id === "brightdata")).toBe(false);
+		expect(() => getProvider("brightdata")).toThrow("Bright Data acquisition has been retired");
+		expect(() => getProvider("brightdata")).toThrow("chatgpt:dataforseo-scraper:online");
 	});
 });

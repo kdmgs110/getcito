@@ -10,18 +10,18 @@ import {
 
 describe("prompt measurement identity and evidence", () => {
 	it("keeps API answers and AI Mode out of the two Web surfaces", () => {
-		expect(isComparisonSurface("chatgpt", "brightdata")).toBe(true);
+		expect(isComparisonSurface("chatgpt", "dataforseo-scraper")).toBe(true);
 		expect(isComparisonSurface("google-ai-overview", "olostep")).toBe(true);
 		for (const provider of ["dataforseo", "direct", "openrouter", "unknown", null]) {
 			expect(isComparisonSurface("chatgpt", provider)).toBe(false);
 		}
-		expect(isComparisonSurface("google-ai-mode", "brightdata")).toBe(false);
+		expect(isComparisonSurface("google-ai-mode", "dataforseo-scraper")).toBe(false);
 	});
 	it("does not infer an old run's requested target version from its returned version", () => {
-		const target = legacyMeasurementTarget("chatgpt", "brightdata", "gpt-5", true);
+		const target = legacyMeasurementTarget("chatgpt", "dataforseo-scraper", "gpt-5", true);
 		expect(target.requestedVersion).toBeNull();
 		expect(target.legacy).toBe(true);
-		expect(target.key).not.toBe("chatgpt:brightdata:gpt-5:online");
+		expect(target.key).not.toBe("chatgpt:dataforseo-scraper:gpt-5:online");
 	});
 	it("drops empty and sentinel queries without inventing query-to-URL relationships", () => {
 		const queries = observedQueries([" unavailable ", "", null, " Rails 案件 ", "Rails 案件"]);
@@ -58,4 +58,10 @@ describe("prompt measurement identity and evidence", () => {
 		expect(evidence.queryEvidence[0].urls).toEqual([{ url: "https://example.com/jobs", role: "search_result" }]);
 		expect(evidence.queryEvidence[0].sourceField).toBe("search_results");
 	});
+});
+
+it("keeps retired acquisitions out of ordinary comparison without changing historical identity", () => {
+	expect(isComparisonSurface("chatgpt", "brightdata")).toBe(false);
+	expect(isComparisonSurface("google-ai-overview", "brightdata")).toBe(false);
+	expect(legacyMeasurementTarget("chatgpt", "brightdata", "gpt-5", true).provider).toBe("brightdata");
 });

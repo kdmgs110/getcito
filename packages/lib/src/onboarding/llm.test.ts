@@ -7,7 +7,8 @@ const ENV_KEYS = [
 	"OPENAI_API_KEY",
 	"OPENROUTER_API_KEY",
 	"OLOSTEP_API_KEY",
-	"BRIGHTDATA_API_TOKEN",
+	"DATAFORSEO_LOGIN",
+	"DATAFORSEO_PASSWORD",
 	"OXYLABS_USERNAME",
 	"OXYLABS_PASSWORD",
 	"MISTRAL_API_KEY",
@@ -49,11 +50,13 @@ describe("resolveResearchProvider", () => {
 	});
 
 	it("throws when ONBOARDING_LLM_TARGET points at a scraper with no structured research", () => {
-		process.env.BRIGHTDATA_API_TOKEN = "x";
+		process.env.DATAFORSEO_LOGIN = "x";
+		process.env.DATAFORSEO_PASSWORD = "y";
 		expect(() =>
 			resolveResearchProvider({
-				BRIGHTDATA_API_TOKEN: "x",
-				ONBOARDING_LLM_TARGET: "gemini:brightdata:online",
+				DATAFORSEO_LOGIN: "x",
+				DATAFORSEO_PASSWORD: "y",
+				ONBOARDING_LLM_TARGET: "chatgpt:dataforseo-scraper:online",
 			}),
 		).toThrow(/does not support structured research/);
 	});
@@ -103,8 +106,9 @@ describe("resolveResearchProvider", () => {
 
 	it("ignores scraper providers entirely", () => {
 		process.env.OLOSTEP_API_KEY = "x";
-		process.env.BRIGHTDATA_API_TOKEN = "y";
-		expect(() => resolveResearchProvider({ OLOSTEP_API_KEY: "x", BRIGHTDATA_API_TOKEN: "y" })).toThrow(
+		process.env.DATAFORSEO_LOGIN = "y";
+		process.env.DATAFORSEO_PASSWORD = "z";
+		expect(() => resolveResearchProvider({ OLOSTEP_API_KEY: "x", DATAFORSEO_LOGIN: "y", DATAFORSEO_PASSWORD: "z" })).toThrow(
 			/at least one direct LLM API/,
 		);
 	});

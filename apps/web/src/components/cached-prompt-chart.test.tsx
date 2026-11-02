@@ -52,13 +52,13 @@ describe("answers without brand mentions", () => {
 				promptName="Rails案件"
 				brandId="brand"
 				lookback="1w"
-				selectedModel="google-ai-overview:brightdata:online"
+				selectedModel="google-ai-overview:olostep:online"
 				hasEverBeenEvaluated
 			/>,
 		);
 		expect(html).toContain("計測結果を表示");
 		expect(html).toContain("view=compare");
-		expect(html).toContain("targetKey=google-ai-overview%3Abrightdata%3Aonline");
+		expect(html).toContain("targetKey=google-ai-overview%3Aolostep%3Aonline");
 		expect(html).not.toContain("回答を0件取得済み");
 	});
 	it("does not label an empty selected period as collected answers", () => {

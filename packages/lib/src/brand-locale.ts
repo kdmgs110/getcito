@@ -1,4 +1,4 @@
-import { BRIGHTDATA_COUNTRIES } from "./brightdata-locations";
+import { COUNTRY_CODES } from "./country-codes";
 import { DATAFORSEO_LANGUAGES } from "./languages";
 import { TARGET_MARKETS } from "./locations";
 
@@ -37,11 +37,11 @@ export function resolveBrandLocale(input: BrandLocaleInput = {}): BrandLocale {
 	const market = input.targetMarket?.trim();
 	if (market) {
 		const code =
-			BRIGHTDATA_COUNTRIES[market] ??
-			Object.entries(BRIGHTDATA_COUNTRIES).find(([name]) => name.toLowerCase() === market.toLowerCase())?.[1] ??
+			COUNTRY_CODES[market] ??
+			Object.entries(COUNTRY_CODES).find(([name]) => name.toLowerCase() === market.toLowerCase())?.[1] ??
 			(/^[a-z]{2}$/i.test(market) ? market.toUpperCase() : undefined);
 		const canonical = code
-			? TARGET_MARKETS.find((name) => BRIGHTDATA_COUNTRIES[name].toUpperCase() === code.toUpperCase())
+			? TARGET_MARKETS.find((name) => COUNTRY_CODES[name].toUpperCase() === code.toUpperCase())
 			: undefined;
 		if (!code || !canonical) throw new Error("BRAND_MARKET_INVALID");
 		result.countryCode = code.toUpperCase();
