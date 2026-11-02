@@ -327,7 +327,7 @@ export function PromptPageEvidenceAnswer({
 				</p>
 			) : (
 				<PromptMeasurementCard
-					label={`${result.data.model === "chatgpt" ? "ChatGPT Web" : result.data.model} / ${result.data.provider}`}
+					label={result.data.model === "chatgpt" ? "ChatGPT Web" : `${result.data.model} / ${result.data.provider}`}
 					record={result.data}
 					configured
 					onQueries={onQueries}

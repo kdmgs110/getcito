@@ -241,6 +241,17 @@ export const promptRuns = pgTable(
 	}),
 ).enableRLS();
 
+/** Submission receipts prevent retries from creating a second billable scrape. */
+export const dataforseoTasks = pgTable("dataforseo_tasks", {
+	key: text("key").primaryKey(),
+	requestHash: text("request_hash").notNull(),
+	taskId: text("task_id"),
+	status: text("status").$type<"submitting" | "submitted" | "failed">().notNull(),
+	errorCode: text("error_code"),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}).enableRLS();
+
 /** Per-target acquisition state, including non-answers and failed attempts. */
 export const measurementAttempts = pgTable(
 	"measurement_attempts",

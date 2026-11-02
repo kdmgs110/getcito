@@ -34,7 +34,6 @@
     "SCRAPE_TARGETS",
     "ONBOARDING_LLM_TARGET",
     "OLOSTEP_API_KEY",
-    "BRIGHTDATA_API_TOKEN",
     "OXYLABS_USERNAME",
     "OXYLABS_PASSWORD",
     "CLORO_API_KEY",
@@ -84,6 +83,7 @@
       "dependsOn": ["^lint"]
     },
     "test": {
+      "env": ["DATAFORSEO_TEST_DATABASE_URL"],
       "dependsOn": ["^build"]
     },
     "dev": {

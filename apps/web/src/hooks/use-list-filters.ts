@@ -1,4 +1,5 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { normalizeActiveTargetKey } from "@workspace/config/scrape-targets";
 import { useCallback, useMemo } from "react";
 import { useBrand } from "@/hooks/use-brands";
 import { coerceLookbackPeriod, getDefaultLookbackPeriod, type LookbackPeriod } from "@/lib/chart-utils";
@@ -27,8 +28,9 @@ function asString(value: unknown): string | undefined {
 }
 
 export function validateBrandFilterSearch(search: Record<string, unknown>): BrandFilterSearch {
+	const model = asString(search.model);
 	return {
-		model: asString(search.model),
+		model: model ? normalizeActiveTargetKey(model) : undefined,
 		lookback: asString(search.lookback),
 		tags: Array.isArray(search.tags) ? search.tags.map(String).join(",") : asString(search.tags),
 		q: asString(search.q),

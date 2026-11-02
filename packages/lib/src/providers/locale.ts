@@ -41,8 +41,7 @@ export function localeSystemMessages(
  * model searches from. OpenAI's and Anthropic's web-search tools localize
  * results by the caller's IP unless given an approximate user location — which
  * is why a worker hosted in India returns city-level local results no matter
- * what the prompt says. Reuses the country table the BrightData provider
- * already ships (every UI location in locations.ts has an entry).
+ * what the prompt says. Uses the shared country-code table (every UI location in locations.ts has an entry).
  *
  * Returns undefined for an unset market; rejects an unrecognized explicit setting.
  */

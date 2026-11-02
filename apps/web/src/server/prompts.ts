@@ -34,7 +34,7 @@ import {
 } from "@/lib/domain-categories";
 import { classifyUrl } from "@/lib/domain-categories.server";
 import { buildGoogleModule } from "@/lib/google-module";
-import { measurementRunCondition } from "@/lib/measurement-scope";
+import { measurementRunCondition, visibleMeasurementRunCondition } from "@/lib/measurement-scope";
 import { isPromptRunLanguageFilter, promptRunLanguageCondition } from "@/lib/prompt-run-language";
 // Server Functions
 // ============================================================================
@@ -257,6 +257,7 @@ export const getPromptStatsFn = createServerFn({ method: "GET" })
 		const toDateStr = toDate.toISOString().split("T")[0];
 		const timezone = APP_TIMEZONE;
 		const timeCondition = and(
+			visibleMeasurementRunCondition(),
 			gte(promptRuns.createdAt, fromDate),
 			lte(promptRuns.createdAt, toDate),
 			promptRunLanguageCondition(promptRuns.requestContext, data.language),
@@ -484,6 +485,7 @@ export const getPromptRunsFn = createServerFn({ method: "GET" })
 		const fromDate = new Date(toDate);
 		fromDate.setDate(fromDate.getDate() - data.days);
 		const timeCondition = and(
+			visibleMeasurementRunCondition(),
 			gte(promptRuns.createdAt, fromDate),
 			lte(promptRuns.createdAt, toDate),
 			promptRunLanguageCondition(promptRuns.requestContext, data.language),

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { isRetiredAcquisition } from "@workspace/config/scrape-targets";
 import { measurementTargetLabel, safeEvidenceUrl } from "@workspace/lib/measurement";
 import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/ui/components/card";
@@ -54,6 +55,18 @@ const mt = createTranslator({
 		en: "The provider data does not establish whether an answer was shown.",
 	},
 	provider: { ja: "取得元", en: "Provider" },
+	paymentRequired: {
+		ja: "DataForSEOの残高・課金状態を確認してください。",
+		en: "Check the DataForSEO balance and billing status.",
+	},
+	submissionUnconfirmed: {
+		ja: "送信結果を確認できません。重複課金を防ぐため自動再送を停止しました。",
+		en: "Submission could not be confirmed. Automatic resubmission is stopped to prevent duplicate charges.",
+	},
+	resultPending: {
+		ja: "結果の取得待ちです。同じタスクから回収を再開します。",
+		en: "The result is pending. Collection will resume from the same task.",
+	},
 	version: { ja: "バージョン", en: "Version" },
 	time: { ja: "評価日時", en: "Evaluated at" },
 	notProvided: { ja: "取得元から未提供", en: "Not exposed by provider" },
@@ -242,6 +255,21 @@ export function PromptMeasurementCard({
 								<dd>{formatDateTime(record.completedAt ?? record.createdAt, { timeZoneName: "short" })}</dd>
 							</div>
 						</dl>
+						{record.status === "failed" && record.errorCode === "payment_required" && (
+							<p role="alert" className="text-sm text-red-700">
+								{mt("paymentRequired")}
+							</p>
+						)}
+						{record.status === "failed" && record.errorCode === "submission_unconfirmed" && (
+							<p role="alert" className="text-sm text-red-700">
+								{mt("submissionUnconfirmed")}
+							</p>
+						)}
+						{record.status === "failed" && record.errorCode === "result_pending_timeout" && (
+							<p role="status" className="text-sm text-muted-foreground">
+								{mt("resultPending")}
+							</p>
+						)}
 						<PromptRunContext context={record.requestContext} responseText={record.evidence.answerText} />
 						{state === "failed" && (
 							<p role="status" className="text-sm text-red-700">
@@ -332,7 +360,7 @@ function ComparisonColumn({
 	const [targetSelection, setTargetSelection] = useState(preferredTargetKey ?? "");
 	const [recordSelection, setRecordSelection] = useState("");
 	const options = targets
-		.filter((target) => target.surface === surface)
+		.filter((target) => target.surface === surface && !isRetiredAcquisition(target.model, target.provider))
 		.sort((a, b) => Number(b.configured) - Number(a.configured));
 	const target = options.find((item) => item.key === targetSelection) ?? options[0];
 	const targetRecords = target
@@ -355,7 +383,8 @@ function ComparisonColumn({
 					>
 						{options.map((item) => (
 							<option key={item.key} value={item.key}>
-								{item.label} · {item.provider}
+								{item.label}
+								{item.surface === "chatgpt_web" ? "" : ` · ${item.provider}`}
 								{item.requestedVersion ? ` · ${item.requestedVersion}` : ""}
 								{item.legacy ? ` · ${mt("legacy")}` : !item.configured ? ` · ${mt("historical")}` : ""}
 							</option>

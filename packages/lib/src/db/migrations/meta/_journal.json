@@ -134,6 +134,20 @@
       "when": 1793491200000,
       "tag": "0018_web_measurements",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793658000000,
+      "tag": "0019_dataforseo_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793658000001,
+      "tag": "0020_chatgpt_web_cutover",
+      "breakpoints": true
     }
   ]
 }

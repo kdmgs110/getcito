@@ -9,7 +9,7 @@ beforeEach(() => {
 });
 describe("answer history target cache", () => {
 	it("requests the selected exact target and separates sources in the cache", async () => {
-		usePromptRunsOnly("prompt", { model: "chatgpt:brightdata:online" });
+		usePromptRunsOnly("prompt", { model: "chatgpt:openai-api:gpt-5:online" });
 		usePromptRunsOnly("prompt", { model: "chatgpt:dataforseo-scraper:online" });
 		const [first, second] = mocks.query.mock.calls.map(([query]) => query);
 		expect(first.queryKey).not.toEqual(second.queryKey);

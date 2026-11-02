@@ -19,6 +19,14 @@ export interface ScrapeResult {
 }
 
 export interface ProviderOptions {
+	/** Stable logical acquisition key, reused across worker retries. */
+	acquisitionKey?: string;
+	/** Recovery workers must only GET an already-paid task. */
+	resumeOnly?: boolean;
+	/** Signals a confirmed billable POST; free result polling does not call this. */
+	onBillableCall?: () => void | Promise<void>;
+	/** Persist/display asynchronous provider progress without blocking a browser request. */
+	onAcquisitionState?: (status: "queued" | "running") => Promise<void>;
 	webSearch?: boolean;
 	version?: string;
 	targetMarket?: string;

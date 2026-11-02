@@ -14,9 +14,9 @@ const record = (overrides: Partial<PromptMeasurementRecord> = {}): PromptMeasure
 	id: "attempt",
 	attemptId: "attempt",
 	runId: "run",
-	targetKey: "chatgpt:brightdata:online",
+	targetKey: "chatgpt:dataforseo-scraper:online",
 	model: "chatgpt",
-	provider: "brightdata",
+	provider: "dataforseo-scraper",
 	version: "web",
 	status: "succeeded",
 	createdAt: "2026-11-01T01:00:00Z",
@@ -71,7 +71,7 @@ describe("measurement response cards", () => {
 				}
 			/>,
 		);
-		expect(html).toContain("brightdata");
+		expect(html).toContain("dataforseo-scraper");
 		expect(html).toContain("日本語");
 		expect(html).toContain("案件を比較して");
 		expect(html).toContain("参照ページ名");
@@ -173,4 +173,15 @@ describe("exact-answer query evidence", () => {
 			expect.arrayContaining(["rails", "案件", "日本語"]),
 		);
 	});
+});
+
+it.each([
+	["payment_required", "残高・課金状態"],
+	["submission_unconfirmed", "重複課金を防ぐため自動再送を停止"],
+	["result_pending_timeout", "同じタスクから回収を再開"],
+])("shows a specific acquisition state for %s", (errorCode, message) => {
+	const html = renderToStaticMarkup(
+		<PromptMeasurementCard label="ChatGPT Web" configured record={record({ status: "failed", errorCode })} />,
+	);
+	expect(html).toContain(message);
 });

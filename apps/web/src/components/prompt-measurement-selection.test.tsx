@@ -1,12 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { PromptMeasurementsResponse } from "@/lib/prompt-measurements";
+
 const mocks = vi.hoisted(() => ({ data: undefined as PromptMeasurementsResponse | undefined }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => ({ data: mocks.data, isLoading: false, isError: false }) }));
 vi.mock("@/server/prompt-measurements", () => ({
 	getPromptMeasurementDetailFn: vi.fn(),
 	getPromptMeasurementsFn: vi.fn(),
 }));
+
 import { PromptMeasurementComparison } from "./prompt-measurements";
 
 describe("measurement comparison deep-link target", () => {
@@ -54,5 +56,6 @@ describe("measurement comparison deep-link target", () => {
 		);
 		expect(html).toContain("Answer from dataforseo-scraper");
 		expect(html).not.toContain("Answer from brightdata");
+		expect(html).not.toContain("brightdata");
 	});
 });

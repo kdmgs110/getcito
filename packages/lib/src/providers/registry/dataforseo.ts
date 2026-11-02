@@ -257,7 +257,7 @@ export const dataforseo: Provider = {
 		}
 		// Google AI Mode is search-only. The LLM Responses engines model the
 		// chatbot UX where web search is always on, so :online is required there
-		// too (matches the BrightData provider for these engines).
+		// too, as required by these engines.
 		if (!config.webSearch) {
 			return `${config.model}:dataforseo requires :online — this engine always uses web search`;
 		}

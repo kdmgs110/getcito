@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { normalizeActiveTargetKey } from "@workspace/config/scrape-targets";
 import { getDefaultDelayHours, PROCESS_PROMPT_JOB_POLICY, RUNS_PER_PROMPT } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
 import {
@@ -12,7 +13,7 @@ import {
 	prompts,
 } from "@workspace/lib/db/schema";
 import { type MeasurementEvidence, measurementTargetKey } from "@workspace/lib/measurement";
-import { buildPromptRunRequestContext } from "@workspace/lib/prompt-run-context";
+import { buildPromptRunRequestContext, type PromptRunRequestContext } from "@workspace/lib/prompt-run-context";
 import {
 	getProvider,
 	type ModelConfig,
@@ -26,6 +27,7 @@ import { and, eq, lt, or } from "drizzle-orm";
 import type { Job } from "pg-boss";
 import boss from "../boss";
 import { trackWorkerEvent } from "../telemetry";
+import { hasPendingDataForSeoTask } from "./recover-dataforseo";
 
 export interface ProcessPromptData {
 	promptId: string;
@@ -39,6 +41,8 @@ export interface ProcessPromptData {
 	cadenceHours?: number; // Hours until next run (for self-rescheduling)
 	/** Cycles in a row where every run failed, carried forward to size the backoff. */
 	consecutiveFailures?: number;
+	/** Internal recovery of one known paid task; never submits a new scrape. */
+	resumeDataForSeoAttemptId?: string;
 }
 
 interface PromptContext {
@@ -155,6 +159,9 @@ async function runModelIteration({
 	providerImpl,
 	runIndex,
 	batchId,
+	resumePending = false,
+	resumeOnly = false,
+	requestContextOverride,
 }: {
 	promptId: string;
 	promptValue: string;
@@ -164,9 +171,12 @@ async function runModelIteration({
 	providerImpl: Provider;
 	runIndex: number;
 	batchId: string;
+	resumePending?: boolean;
+	resumeOnly?: boolean;
+	requestContextOverride?: PromptRunRequestContext;
 }): Promise<void> {
 	const logPrefix = `[${config.model}_${runIndex}]`;
-	const requestContext = buildPromptRunRequestContext(promptValue, brand);
+	const requestContext = requestContextOverride ?? buildPromptRunRequestContext(promptValue, brand);
 	const targetKey = measurementTargetKey(config);
 	// The unique batch/target/iteration key prevents a retry of a partially
 	// successful pair from submitting the successful target for a second time.
@@ -196,8 +206,8 @@ async function runModelIteration({
 			setWhere: or(
 				eq(measurementAttempts.status, "failed"),
 				and(
-					eq(measurementAttempts.status, "running"),
-					lt(measurementAttempts.startedAt, new Date(Date.now() - 20 * 60_000)),
+					or(eq(measurementAttempts.status, "running"), eq(measurementAttempts.status, "queued")),
+					resumePending ? undefined : lt(measurementAttempts.startedAt, new Date(Date.now() - 20 * 60_000)),
 				),
 			),
 		})
@@ -217,13 +227,23 @@ async function runModelIteration({
 
 		const result = await withProviderCallTracking(
 			{ provider: providerImpl.id, model: config.model, kind: "run", brandId: brand.id, promptId },
-			() =>
+			(onBillableCall) =>
 				providerImpl.run(config.model, requestContext.prompt, {
+					onBillableCall,
+					resumeOnly,
+					acquisitionKey: `measurement:${attempt.id}`,
+					onAcquisitionState: async (status) => {
+						await db
+							.update(measurementAttempts)
+							.set({ status, startedAt: new Date() })
+							.where(eq(measurementAttempts.id, attempt.id));
+					},
 					webSearch: config.webSearch,
 					version: config.version,
 					targetMarket: requestContext.targetMarket ?? undefined,
 					targetLanguage: requestContext.targetLanguage ?? undefined,
 				}),
+			{ billableOnCallback: providerImpl.id === "dataforseo-scraper" },
 		);
 
 		// `webQueries` is stored exactly as the provider reported it — engines do
@@ -306,7 +326,14 @@ async function runModelIteration({
 	} catch (error) {
 		await db
 			.update(measurementAttempts)
-			.set({ status: "failed", errorCode: "acquisition_failed", completedAt: new Date() })
+			.set({
+				status: "failed",
+				errorCode:
+					error instanceof Error && "code" in error && /^[a-z][a-z0-9_]{0,79}$/.test(String(error.code))
+						? String(error.code)
+						: "acquisition_failed",
+				completedAt: new Date(),
+			})
 			.where(eq(measurementAttempts.id, attempt.id));
 		throw error;
 	}
@@ -355,15 +382,56 @@ export async function processPromptJob(jobs: Job<ProcessPromptData>[]): Promise<
 		}
 
 		let selectedConfigs = selectTargetsForBrand(scrapeConfigs, brand.enabledModels, brand.enabledTargets);
+		if (job.data.resumeDataForSeoAttemptId) {
+			const stored = await db.query.measurementAttempts.findFirst({
+				where: eq(measurementAttempts.id, job.data.resumeDataForSeoAttemptId),
+			});
+			if (
+				!stored ||
+				stored.promptId !== promptId ||
+				stored.provider !== "dataforseo-scraper" ||
+				stored.model !== "chatgpt" ||
+				stored.status === "succeeded"
+			)
+				continue;
+			if (!selectedConfigs.some((config) => measurementTargetKey(config) === stored.targetKey)) continue;
+			await runModelIteration({
+				promptId,
+				promptValue: stored.requestContext.prompt,
+				brand,
+				competitorsList,
+				config: {
+					model: "chatgpt",
+					provider: "dataforseo-scraper",
+					webSearch: stored.webSearchEnabled,
+					version: stored.requestedVersion ?? undefined,
+				},
+				providerImpl: getProvider("dataforseo-scraper"),
+				runIndex: stored.iteration,
+				batchId: stored.batchId,
+				resumeOnly: true,
+				requestContextOverride: stored.requestContext,
+			});
+			continue;
+		}
+
+		if (
+			!singleRun &&
+			selectedConfigs.some((config) => config.provider === "dataforseo-scraper") &&
+			(await hasPendingDataForSeoTask(promptId, batchId))
+		) {
+			selectedConfigs = selectedConfigs.filter((config) => config.provider !== "dataforseo-scraper");
+		}
 		if (singleRun && job.data.targetKeys) {
-			const requested = new Set(job.data.targetKeys);
+			const targetKeys = job.data.targetKeys.map(normalizeActiveTargetKey);
+			const requested = new Set(targetKeys);
 			if (job.data.settingsChange) {
 				// A queued setting change can become stale before execution. Never
 				// re-enable a target that has since been deselected or removed.
 				selectedConfigs = selectedConfigs.filter((config) => requested.has(measurementTargetKey(config)));
 			} else {
 				const available = new Set(scrapeConfigs.map(measurementTargetKey));
-				if (job.data.targetKeys.some((key) => !available.has(key))) throw new Error("UNKNOWN_MEASUREMENT_TARGET");
+				if (targetKeys.some((key) => !available.has(key))) throw new Error("UNKNOWN_MEASUREMENT_TARGET");
 				selectedConfigs = scrapeConfigs.filter((config) => requested.has(measurementTargetKey(config)));
 			}
 		}
@@ -393,6 +461,8 @@ export async function processPromptJob(jobs: Job<ProcessPromptData>[]): Promise<
 						providerImpl,
 						runIndex: i + 1,
 						batchId,
+						resumePending:
+							config.provider === "dataforseo-scraper" && "retryCount" in job && Number(job.retryCount) > 0,
 					}),
 				);
 			}

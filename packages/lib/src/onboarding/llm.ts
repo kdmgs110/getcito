@@ -73,7 +73,7 @@ export function resolveResearchProvider(env: Record<string, string | undefined> 
 } {
 	const explicit = env.ONBOARDING_LLM_TARGET?.trim();
 	if (explicit) {
-		const [parsed] = parseScrapeTargets(explicit);
+		const [parsed] = parseScrapeTargets(explicit, { normalizeWebTargets: false });
 		if (!parsed) throw new Error(`Invalid ONBOARDING_LLM_TARGET: "${explicit}"`);
 		const provider = getProvider(parsed.provider);
 		if (!provider.isConfigured()) {

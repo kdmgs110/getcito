@@ -19,7 +19,7 @@ export const SCRAPER_ATTEMPT = "00000000-0000-4000-8000-550000000013";
 export const SCRAPER_ANSWER = "E2E DataForSEO ChatGPT Web 言及なしの回答です。";
 export const SCRAPER_QUERY = "E2E DataForSEO 実行専用 ファンアウト検索語";
 export const SCRAPER_SOURCE = "https://measurement-test.example.com/scraper-answer-source";
-export const AIO_TARGET = "google-ai-overview:brightdata:online";
+export const AIO_TARGET = "google-ai-overview:olostep:online";
 export const WEB_ATTEMPT = "00000000-0000-4000-8000-550000000011";
 export const OLDER_WEB_ATTEMPT = "00000000-0000-4000-8000-550000000012";
 export const WEB_ANSWER = "E2E ChatGPT Web 日本語の最新回答です。";
@@ -68,7 +68,7 @@ export async function seedMeasurementFixtures() {
    for (const [attemptId,model,provider,target,answer,query,minutes] of [
     [OLDER_WEB_ATTEMPT,"chatgpt","brightdata",WEB_TARGET,"E2E ChatGPT Web 過去の回答です。",OLD_QUERY,30],
     [WEB_ATTEMPT,"chatgpt","brightdata",WEB_TARGET,WEB_ANSWER,WEB_QUERY,10],
-    [randomUUID(),"google-ai-overview","brightdata",AIO_TARGET,AIO_ANSWER,AIO_QUERY,9],
+    [randomUUID(),"google-ai-overview","olostep",AIO_TARGET,AIO_ANSWER,AIO_QUERY,9],
     [SCRAPER_ATTEMPT,"chatgpt","dataforseo-scraper",SCRAPER_TARGET,SCRAPER_ANSWER,SCRAPER_QUERY,8],
     [randomUUID(),"chatgpt","openai-api","chatgpt:openai-api:gpt-5:online",API_ANSWER,"E2E API QUERY MUST NOT LEAK",1],
    ] as const) {
@@ -86,11 +86,11 @@ export async function seedMeasurementFixtures() {
     }
    }
    for (const [model,target,status,evidence] of [
-    ["chatgpt",WEB_TARGET,"failed",null],
+    ["chatgpt",SCRAPER_TARGET,"failed",null],
     ["google-ai-overview",AIO_TARGET,"succeeded",{version:1,answerText:"",answerStatus:"not_shown",queryStatus:"not_exposed",queryEvidence:[]}],
    ] as const) {
     await client.query(`INSERT INTO measurement_attempts(batch_id,brand_id,prompt_id,target_key,model,provider,status,web_search_enabled,request_context,evidence,completed_at)
-     VALUES($1,$2,$3,$4,$5,'brightdata',$6,true,$7::jsonb,$8::jsonb,NOW())`,[randomUUID(),MEASUREMENT_BRAND,MEASUREMENT_STATUS_PROMPT,target,model,status,JSON.stringify({...context,prompt:"E2E 取得失敗と非表示の区別"}),evidence?JSON.stringify(evidence):null]);
+     VALUES($1,$2,$3,$4,$5,CASE WHEN $5='chatgpt' THEN 'dataforseo-scraper' ELSE 'olostep' END,$6,true,$7::jsonb,$8::jsonb,NOW())`,[randomUUID(),MEASUREMENT_BRAND,MEASUREMENT_STATUS_PROMPT,target,model,status,JSON.stringify({...context,prompt:"E2E 取得失敗と非表示の区別"}),evidence?JSON.stringify(evidence):null]);
    }
    await client.query("INSERT INTO prompts(id,brand_id,value,enabled) VALUES($1,$2,'E2E ページ出現と引用の集計',true)", [PAGE_EVIDENCE_PROMPT,MEASUREMENT_BRAND]);
    const pageA = {url:PAGE_EVIDENCE_URL,title:PAGE_EVIDENCE_TITLE};
@@ -114,5 +114,12 @@ export async function seedMeasurementFixtures() {
    await client.query(`INSERT INTO measurement_attempts(batch_id,brand_id,prompt_id,target_key,model,provider,status,web_search_enabled,request_context,evidence,prompt_run_id,completed_at) VALUES($1,$2,$3,$4,'chatgpt','brightdata','succeeded',true,$5::jsonb,$6::jsonb,$7,NOW())`,[randomUUID(),MEASUREMENT_BRAND,PAGE_EVIDENCE_PROMPT,WEB_TARGET,JSON.stringify(context),JSON.stringify({version:1,answerText:"E2E 別プロバイダーの回答",answerStatus:"shown",queryStatus:"observed",queryEvidence:[]}),otherRun]);
    await client.query("COMMIT");
   } catch (error) { await client.query("ROLLBACK"); throw error; }
+ });
+}
+
+export async function retainedRetiredRuns() {
+ return withClient(async (client) => {
+  const result = await client.query("SELECT count(*)::int AS count FROM prompt_runs WHERE brand_id=$1 AND provider='brightdata'", [MEASUREMENT_BRAND]);
+  return result.rows[0].count as number;
  });
 }

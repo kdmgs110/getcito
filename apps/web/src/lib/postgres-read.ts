@@ -180,6 +180,7 @@ export async function getDashboardSummary(
 		WHERE brand_id = ${brandId}
 			${dateFilter(fromDate, toDate, timezone)}
 			${promptIdFilter(enabledPromptIds)}
+			${modelFilter(undefined, "prompt_runs")}
 	`);
 	return rows;
 }
@@ -444,6 +445,7 @@ export async function getPromptsFirstEvaluatedAt(
 		FROM prompt_runs
 		WHERE brand_id = ${brandId}
 			AND prompt_id IN (${uuidList(promptIds)})
+			${modelFilter(undefined, "prompt_runs")}
 		GROUP BY prompt_id
 	`);
 	return rows;
@@ -553,6 +555,7 @@ export async function getPromptWebQueriesForMapping(
 		WHERE prompt_id = ${promptId}
 			AND array_length(web_queries, 1) > 0
 			${dateFilter(fromDate, toDate, timezone)}
+			${modelFilter(undefined, "prompt_runs")}
 		ORDER BY created_at ASC
 	`);
 	return rows;
@@ -687,6 +690,7 @@ export async function getPromptCitationUrlStats(
 				AND ${promptRunLanguageCondition(sql`pr.request_context`, language)}
 			)`
 			}
+			${modelFilter(undefined, "citations")}
 		GROUP BY url, domain
 		ORDER BY count DESC
 	`);
@@ -712,6 +716,7 @@ export async function getPromptMentionSummary(
 		WHERE prompt_id = ${promptId}
 			AND created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
+			${modelFilter(undefined, "prompt_runs")}
 	`);
 	return rows[0] || { total_runs: 0, brand_mentioned_count: 0, competitor_mentioned_count: 0 };
 }
@@ -731,6 +736,7 @@ export async function getPromptTopCompetitorMentions(
 		WHERE pr.prompt_id = ${promptId}
 			AND pr.created_at >= (${fromDate}::date AT TIME ZONE ${timezone})
 			AND pr.created_at < ((${toDate}::date + interval '1 day') AT TIME ZONE ${timezone})
+			${modelFilter(undefined, "pr")}
 		GROUP BY competitor_name
 		ORDER BY mention_count DESC
 		LIMIT ${limit}
@@ -1065,6 +1071,7 @@ export async function getBrandMentionRateByModel(
 		WHERE brand_id = ${brandId}
 			${dateFilter(fromDate, toDate, timezone)}
 			${promptIdFilter(enabledPromptIds)}
+			${modelFilter(undefined, "prompt_runs")}
 		GROUP BY model
 		ORDER BY runs DESC
 	`);
@@ -1080,6 +1087,7 @@ export async function getBrandEarliestRunDate(brandId: string): Promise<string |
 		SELECT min(created_at) AS earliest_date
 		FROM prompt_runs
 		WHERE brand_id = ${brandId}
+			${modelFilter(undefined, "prompt_runs")}
 	`);
 	return rows[0]?.earliest_date || null;
 }

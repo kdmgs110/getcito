@@ -79,7 +79,7 @@ It is a free alternative to hosted tools like Profound, Peec, and Otterly.
 - 🔎 **Citation & mention analysis** — extract which brands, domains, and sources each AI response cites.
 - 🏷️ **Brand & competitor benchmarking** — track your brand alongside competitors on the same prompts.
 - 🤖 **Multiple AI surfaces** — ChatGPT, Google AI Mode, Google AI Overview, Perplexity, Gemini, Copilot, Grok.
-- 🔌 **Pluggable scrapers & LLM providers** — BrightData, Oxylabs, Olostep, Cloro, and DataForSEO for scraping; OpenRouter, Anthropic, OpenAI, Mistral, and Azure AI Foundry for direct LLM calls.
+- 🔌 **Pluggable scrapers & LLM providers** — DataForSEO, Oxylabs, Olostep, and Cloro for scraping; OpenRouter, Anthropic, OpenAI, Mistral, and Azure AI Foundry for direct LLM calls.
 - 📄 **Reports** — background report generation over collected data.
 - ⚙️ **Background job engine** — durable scheduling and retries via `pg-boss` on PostgreSQL.
 - 🚦 **Admin operations** — inspect and reprioritize the prompt queue, review provider usage and latency, and safely delete brands.
@@ -116,7 +116,7 @@ flowchart LR
     Web -->|read/write| DB[(PostgreSQL<br/>Drizzle schema)]
     Web -->|enqueue jobs| DB
     Worker[apps/worker<br/>pg-boss jobs] -->|poll queues| DB
-    Worker -->|scrape AI answers| Scrapers[BrightData / Oxylabs<br/>Olostep / DataForSEO]
+    Worker -->|scrape AI answers| Scrapers[DataForSEO / Oxylabs<br/>Olostep / Cloro]
     Worker -->|direct LLM calls| LLM[OpenRouter / Anthropic<br/>OpenAI / Mistral]
 ```
 
@@ -245,7 +245,7 @@ Required-column legend: **local** = required in local mode · **wl** = required 
 | `DATABASE_URL` | server | local, demo, wl | PostgreSQL connection string. |
 | `DEPLOYMENT_MODE` | server | local, demo, wl | `local`, `demo`, `whitelabel`, or `cloud`. |
 | `BETTER_AUTH_SECRET` | server | local, demo, wl | Session cookie encryption secret (random hex). |
-| `SCRAPE_TARGETS` | server | local, demo, wl | Comma-separated `model:provider[:version][:online]` entries, e.g. `chatgpt:brightdata:online,google-ai-mode:brightdata:online`. |
+| `SCRAPE_TARGETS` | server | local, demo, wl | Comma-separated `model:provider[:version][:online]` entries, e.g. `chatgpt:dataforseo-scraper:online,google-ai-mode:dataforseo:online`. |
 | `APP_URL` | server | optional | Public base URL of the web app. |
 | `VITE_APP_URL` | client | wl | Client-visible app URL. |
 | `VITE_DEPLOYMENT_MODE` | client | optional | Client-visible copy of `DEPLOYMENT_MODE`. |
@@ -259,17 +259,37 @@ Required-column legend: **local** = required in local mode · **wl** = required 
 
 For the optional Google Analytics integration, see [GA4 traffic analysis setup](GA4_SETUP.md). It adds read-only property access, AI-session charts, page-level trends, conversion-goal settings with AI-attributed outcomes, and shared saved analysis views. Configure `GOOGLE_ANALYTICS_CLIENT_ID`, `GOOGLE_ANALYTICS_CLIENT_SECRET`, `GOOGLE_ANALYTICS_REDIRECT_URI`, and `ANALYTICS_TOKEN_ENCRYPTION_KEY` on the server; no Google credentials are required to run the rest of GetCito.
 
+### ChatGPT Web
+
+ChatGPT Web uses DataForSEO LLM Scraper exclusively. Set
+`SCRAPE_TARGETS=chatgpt:dataforseo-scraper:online` and provide `DATAFORSEO_LOGIN`
+and `DATAFORSEO_PASSWORD`. Model API targets remain separate.
+
+Acquisition uses the standard queue: one paid task submission followed by free
+result retrieval. A durable receipt retains the task ID across worker restarts;
+an unconfirmed submission is never automatically sent again. Results include
+answer text, observed fan-out queries, search results, and answer-wide sources.
+The scraper does not establish individual query-to-URL relationships.
+
+When upgrading, stop the old workers, remove Bright Data entries from deployment
+configuration (replace other engines with supported providers), run database
+migrations, and start the updated web app and worker. Old ChatGPT Web settings
+are consolidated into the DataForSEO target. Existing runs, citations, and raw
+payloads remain stored with their original acquisition identity; retired sources
+are excluded from current UI selections and charts. Remove `BRIGHTDATA_API_TOKEN`
+from the deployment after the cutover. Standard queue completion can take up to
+45 minutes; the UI reports pending acquisition while the worker collects results.
+
 ### Scraper providers (required when referenced by `SCRAPE_TARGETS`)
 
 | Variable | Provider | Description |
 |----------|----------|-------------|
-| `BRIGHTDATA_API_TOKEN` | brightdata | BrightData API token. |
 | `OXYLABS_USERNAME` / `OXYLABS_PASSWORD` | oxylabs | Oxylabs Web Scraper API credentials. |
 | `OLOSTEP_API_KEY` | olostep | Olostep API key. |
 | `DATAFORSEO_LOGIN` / `DATAFORSEO_PASSWORD` | dataforseo, dataforseo-scraper | DataForSEO account credentials. |
 | `CLORO_API_KEY` | cloro | Cloro API key. Cloro targets must use `:online`. |
 
-`chatgpt:dataforseo-scraper:online` uses the [ChatGPT LLM Scraper](https://docs.dataforseo.com/v3/ai_optimization/chat_gpt/llm_scraper/live/advanced/) to collect ChatGPT Web answers and reported `fan_out_queries`. It shares the existing DataForSEO credentials, supports the brand's market/language settings, and does not select a model version. Search queries are not guaranteed on every run. This is a separate acquisition from both `chatgpt:brightdata:online` and DataForSEO LLM Responses (`chatgpt:dataforseo:…`): queries from one run must not be attached to another run's answer. Answer-level sources do not establish individual query-to-URL relationships.
+`chatgpt:dataforseo-scraper:online` uses the [ChatGPT LLM Scraper](https://docs.dataforseo.com/v3/ai_optimization/chat_gpt/llm_scraper/task_post/) to collect ChatGPT Web answers and reported `fan_out_queries` through the standard task queue. It shares the existing DataForSEO credentials, supports the brand's market/language settings, and does not select a model version. Search queries are not guaranteed on every run. ChatGPT Web uses DataForSEO exclusively. It remains a separate acquisition from DataForSEO LLM Responses (`chatgpt:dataforseo:…`): queries from one run must not be attached to another run's answer. Answer-level sources do not establish individual query-to-URL relationships.
 
 ### Direct LLM providers (required when referenced by `SCRAPE_TARGETS`)
 
@@ -646,7 +666,7 @@ Contributions are covered by the [Contributor License Agreement](CLA.md).
 
 ## Acknowledgements
 
-Based on [Elmo](https://github.com/elmohq/elmo) and built with TanStack Start, Drizzle ORM, Better Auth, pg-boss, Fumadocs, Biome, and Turborepo, and integrates BrightData, Oxylabs, Olostep, Cloro, DataForSEO, Azure AI Foundry, OpenRouter, Anthropic, OpenAI, and Mistral.
+Based on [Elmo](https://github.com/elmohq/elmo) and built with TanStack Start, Drizzle ORM, Better Auth, pg-boss, Fumadocs, Biome, and Turborepo, and integrates DataForSEO, Oxylabs, Olostep, Cloro, Azure AI Foundry, OpenRouter, Anthropic, OpenAI, and Mistral.
 
 ## Contact
 

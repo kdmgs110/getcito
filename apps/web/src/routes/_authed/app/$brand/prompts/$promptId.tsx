@@ -29,6 +29,7 @@ import { usePromptStats } from "@/hooks/use-prompt-stats";
 import { createTranslator, formatNumber, t } from "@/i18n";
 import { formatDateTime } from "@/lib/app-locale";
 import { getDaysFromLookback, parseCustomLookback } from "@/lib/chart-utils";
+import { normalizeMeasurementSelection } from "@/lib/measurement-filters";
 import type { PromptMeasurementRecord } from "@/lib/prompt-measurements";
 import { isPromptRunLanguageFilter } from "@/lib/prompt-run-language";
 import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
@@ -87,11 +88,18 @@ export const Route = createFileRoute("/_authed/app/$brand/prompts/$promptId")({
 		tab: TAB_KEYS.includes(search.tab as TabKey) ? (search.tab as TabKey) : undefined,
 		language: isPromptRunLanguageFilter(search.language) ? search.language : undefined,
 		view: search.view === "compare" ? "compare" : undefined,
-		attemptId: measurementId(search.attemptId),
-		runId: measurementId(search.runId),
+		attemptId: normalizeMeasurementSelection(search).migrated ? undefined : measurementId(search.attemptId),
+		runId: normalizeMeasurementSelection(search).migrated ? undefined : measurementId(search.runId),
 		pageScopeKey:
-			typeof search.pageScopeKey === "string" && search.pageScopeKey.length <= 200 ? search.pageScopeKey : undefined,
-		targetKey: typeof search.targetKey === "string" && search.targetKey.length <= 500 ? search.targetKey : undefined,
+			!normalizeMeasurementSelection(search).migrated &&
+			typeof search.pageScopeKey === "string" &&
+			search.pageScopeKey.length <= 200
+				? search.pageScopeKey
+				: undefined,
+		targetKey:
+			typeof search.targetKey === "string" && search.targetKey.length <= 500
+				? normalizeMeasurementSelection(search).targetKey
+				: undefined,
 	}),
 	head: ({ matches, match }) => {
 		const appName = getAppName(match);

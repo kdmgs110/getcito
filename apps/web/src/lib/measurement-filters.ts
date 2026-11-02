@@ -1,9 +1,20 @@
-import { type ModelConfig, parseScrapeTargets } from "@workspace/config/scrape-targets";
+import {
+	isRetiredAcquisition,
+	type ModelConfig,
+	normalizeActiveTargetKey,
+	parseScrapeTargets,
+} from "@workspace/config/scrape-targets";
 import { measurementTargetKey, measurementTargetLabel } from "@workspace/lib/measurement";
 
 /** Prefer a brand's active targets without hiding its historical deployment targets. */
 export function orderedMeasurementConfigs(effective: ModelConfig[] = [], available: ModelConfig[] = []): ModelConfig[] {
-	return [...new Map([...effective, ...available].map((config) => [measurementTargetKey(config), config])).values()];
+	return [
+		...new Map(
+			[...effective, ...available]
+				.filter((config) => !isRetiredAcquisition(config.model, config.provider))
+				.map((config) => [measurementTargetKey(config), config]),
+		).values(),
+	];
 }
 
 export function historicalMeasurementConfig(value?: string): ModelConfig[] {
@@ -22,15 +33,16 @@ export function historicalMeasurementConfig(value?: string): ModelConfig[] {
 }
 
 export function measurementFilterOptions(configs: ModelConfig[]) {
-	return [...new Map(configs.map((config) => [measurementTargetKey(config), config])).values()].map((config) => ({
+	return orderedMeasurementConfigs(configs).map((config) => ({
 		value: measurementTargetKey(config),
-		label: `${measurementTargetLabel(config.model, config.provider)} · ${config.provider}${config.version ? ` · ${config.version}` : ""}${!config.webSearch ? " · offline" : ""}`,
+		label: `${measurementTargetLabel(config.model, config.provider)}${config.model === "chatgpt" && config.provider === "dataforseo-scraper" ? "" : ` · ${config.provider}`}${config.version ? ` · ${config.version}` : ""}${!config.webSearch ? " · offline" : ""}`,
 		model: config.model,
 	}));
 }
 
 /** Legacy all/model URLs resolve to one visible target rather than merge Web/API. */
 export function resolveMeasurementFilter(model: string | undefined, configs: ModelConfig[]): string | undefined {
+	model = model ? normalizeActiveTargetKey(model) : model;
 	const options = measurementFilterOptions(configs);
 	if (options.length === 0) return model;
 	if (model && options.some((option) => option.value === model)) return model;
@@ -41,4 +53,16 @@ export function resolveMeasurementFilter(model: string | undefined, configs: Mod
 		if (historicalMeasurementConfig(model).length === 1) return model;
 	}
 	return options[0].value;
+}
+
+/** Old provider links select the new surface; their old answer IDs cannot be reused. */
+export function normalizeMeasurementSelection(search: Record<string, unknown>) {
+	const target =
+		typeof search.targetKey === "string"
+			? search.targetKey
+			: typeof search.model === "string" && search.model.includes(":")
+				? search.model
+				: undefined;
+	const normalized = target ? normalizeActiveTargetKey(target) : undefined;
+	return { targetKey: normalized, migrated: target !== normalized };
 }

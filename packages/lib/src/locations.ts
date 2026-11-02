@@ -1,8 +1,8 @@
-import { BRIGHTDATA_COUNTRIES } from "./brightdata-locations";
+import { COUNTRY_CODES } from "./country-codes";
 
 /** Country codes for localized display labels; provider-facing market values are unchanged. */
 export function marketCountryCode(market: string): string | undefined {
-	return BRIGHTDATA_COUNTRIES[market]?.toUpperCase();
+	return COUNTRY_CODES[market]?.toUpperCase();
 }
 
 /**
@@ -74,11 +74,11 @@ export const DATAFORSEO_LOCATIONS = [
 const DATAFORSEO_LOCATION_SET = new Set(DATAFORSEO_LOCATIONS);
 
 /**
- * Markets offered in the brand pickers: every country BrightData can proxy,
- * which is also every name `localeCountryCode` can resolve to an ISO-2 code for
+ * Markets offered in the brand pickers: supported country names that
+ * `localeCountryCode` can resolve to an ISO-2 code for
  * the LLM providers' web-search tools (OpenAI, Anthropic, Grok).
  *
- * A handful of countries appear twice in BRIGHTDATA_COUNTRIES under a long and
+ * A handful of countries appear twice in COUNTRY_CODES under a long and
  * a short form ("Moldova, Republic of" / "Moldova"). Keep one name per country
  * code, preferring the DataForSEO spelling so Google targets keep their
  * location, then the shorter form.
@@ -87,7 +87,7 @@ export const TARGET_MARKETS: string[] = (() => {
 	const rank = (name: string) => (DATAFORSEO_LOCATION_SET.has(name) ? 0 : 1);
 	const byCode = new Map<string, string>();
 
-	for (const [name, code] of Object.entries(BRIGHTDATA_COUNTRIES)) {
+	for (const [name, code] of Object.entries(COUNTRY_CODES)) {
 		const current = byCode.get(code);
 		if (!current || rank(name) < rank(current) || (rank(name) === rank(current) && name.length < current.length)) {
 			byCode.set(code, name);

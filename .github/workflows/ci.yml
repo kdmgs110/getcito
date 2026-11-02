@@ -33,6 +33,7 @@ jobs:
       VITE_DEPLOYMENT_MODE: local
       APP_URL: http://localhost:3000
       VITE_APP_URL: http://localhost:3000
+      DATAFORSEO_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/getcito_test
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/getcito_test
       BETTER_AUTH_SECRET: ci-only-not-a-production-secret-000000000000
       SCRAPE_TARGETS: chatgpt:openai-api:gpt-4o-mini:online

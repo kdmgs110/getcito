@@ -1,4 +1,4 @@
-import { parseScrapeTargets } from "@workspace/config/scrape-targets";
+import { CHATGPT_WEB_TARGET, normalizeActiveTargetKey, parseScrapeTargets } from "@workspace/config/scrape-targets";
 import { measurementTargetKey } from "@workspace/lib/measurement";
 import { type SQL, sql } from "drizzle-orm";
 
@@ -7,6 +7,7 @@ export function measurementRunCondition(
 	value: string,
 	alias: "prompt_runs" | "pr" | "scoped_run" = "prompt_runs",
 ): SQL {
+	value = value === "chatgpt" ? CHATGPT_WEB_TARGET : normalizeActiveTargetKey(value);
 	const table = sql.identifier(alias);
 	if (!value.includes(":")) return sql`${table}.model = ${value}`;
 	const configs = parseScrapeTargets(value);
@@ -34,17 +35,22 @@ export function measurementRunCondition(
 	)`;
 }
 
+/** Historical receipts remain stored, but retired acquisitions never enter current charts. */
+export function visibleMeasurementRunCondition(alias: "prompt_runs" | "pr" | "scoped_run" = "prompt_runs"): SQL {
+	const table = sql.identifier(alias);
+	return sql`COALESCE(${table}.provider, '') <> 'brightdata' AND NOT
+   (${table}.model = 'chatgpt' AND COALESCE(${table}.provider, '') IN ('olostep','cloro','oxylabs'))`;
+}
+
 export function measurementModelFilter(
 	value?: string,
 	source: "prompt_runs" | "citations" | "pr" = "prompt_runs",
 ): SQL {
-	if (!value) return sql``;
-	if (!value.includes(":")) {
-		return source === "pr" ? sql`AND pr.model = ${value}` : sql`AND model = ${value}`;
-	}
+	const requested = value && value !== "all" ? value : undefined;
 	if (source === "citations") {
 		return sql`AND EXISTS (SELECT 1 FROM prompt_runs scoped_run
-			WHERE scoped_run.id = citations.prompt_run_id AND ${measurementRunCondition(value, "scoped_run")})`;
+     WHERE scoped_run.id = citations.prompt_run_id AND ${visibleMeasurementRunCondition("scoped_run")}
+     ${requested ? sql`AND ${measurementRunCondition(requested, "scoped_run")}` : sql``})`;
 	}
-	return sql`AND ${measurementRunCondition(value, source)}`;
+	return sql`AND ${visibleMeasurementRunCondition(source)} ${requested ? sql`AND ${measurementRunCondition(requested, source)}` : sql``}`;
 }

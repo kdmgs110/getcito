@@ -1,3 +1,4 @@
+import { isRetiredAcquisition } from "@workspace/config/scrape-targets";
 import { WEB_QUERIES_UNAVAILABLE } from "@workspace/lib/constants";
 import {
 	type MeasurementEvidence,
@@ -29,6 +30,7 @@ export interface PromptMeasurementRecord {
 	provider: string;
 	version: string | null;
 	status: "queued" | "running" | "succeeded" | "failed";
+	errorCode?: string | null;
 	createdAt: string;
 	completedAt: string | null;
 	requestContext: PromptRunRequestContext | null;
@@ -46,7 +48,10 @@ export interface PromptMeasurementsResponse {
 export const COMPARISON_SURFACES = ["chatgpt_web", "google_ai_overview"] as const;
 
 export function isComparisonSurface(model: string, provider: string | null | undefined): boolean {
-	return COMPARISON_SURFACES.some((surface) => surface === measurementSurface(model, provider));
+	return (
+		!isRetiredAcquisition(model, provider) &&
+		COMPARISON_SURFACES.some((surface) => surface === measurementSurface(model, provider))
+	);
 }
 
 export function legacyMeasurementTarget(model: string, provider: string, version: string, online: boolean) {

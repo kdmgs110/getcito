@@ -43,8 +43,8 @@ const descriptions = createTranslator({
 		ja: "ChatGPTのWeb画面で表示される回答を計測します。",
 	},
 	"chatgpt_web.purpose": {
-		en: "See how your brand is described and which sites the answer cites. Some answers do not use web search.",
-		ja: "自社がどう紹介され、どのサイトが引用されるかを確認できます。Web検索を使わずに回答する場合もあります。",
+		en: "See how your brand is described, the search queries, search results, and cited sites.",
+		ja: "自社の紹介内容、検索クエリの展開、検索結果、回答の引用元を確認できます。",
 	},
 	"google_ai_overview.summary": {
 		en: "Tracks AI Overviews shown within regular Google search results.",
@@ -172,9 +172,11 @@ export function LlmSettingsView({
 							</CardHeader>
 							<CardContent className="space-y-4 pt-4">
 								<div className="space-y-3 text-sm">
-									<p className="text-xs text-muted-foreground">
-										{t("settings.provider")}: {config.provider}
-									</p>
+									{measurementSurface(config.model, config.provider) !== "chatgpt_web" && (
+										<p className="text-xs text-muted-foreground">
+											{t("settings.provider")}: {config.provider}
+										</p>
+									)}
 									<p>{descriptions(`${measurementSurface(config.model, config.provider)}.summary`)}</p>
 									<div className="space-y-1.5 rounded-md bg-muted/40 p-3">
 										<p className="text-xs font-medium">{llmSettingsLabels("measures")}</p>

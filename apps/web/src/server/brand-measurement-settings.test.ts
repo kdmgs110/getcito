@@ -6,7 +6,7 @@ vi.mock("@workspace/lib/db/db", () => ({ db: { $client: { connect: mocks.connect
 vi.mock("@/lib/boss-client", () => ({ getBoss: mocks.boss }));
 import { saveBrandMeasurementTargets } from "./brand-measurement-settings";
 
-const web = "chatgpt:brightdata:online";
+const web = "chatgpt:dataforseo-scraper:online";
 const api = "chatgpt:openai-api:gpt-5:online";
 const configs = parseScrapeTargets(`${api},${web}`);
 let brand: { enabled: boolean; enabled_models: string[] | null; enabled_targets: string[] | null } | undefined;

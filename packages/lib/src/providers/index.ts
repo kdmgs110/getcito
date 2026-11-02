@@ -1,6 +1,5 @@
 import { anthropicApi } from "./registry/anthropic-api";
 import { azureFoundryApi } from "./registry/azure-foundry-api";
-import { brightdata } from "./registry/brightdata";
 import { cloro } from "./registry/cloro";
 import { dataforseo } from "./registry/dataforseo";
 import { dataforseoScraper } from "./registry/dataforseo-scraper";
@@ -29,7 +28,6 @@ export { recordProviderCall, withProviderCallTracking } from "./usage";
 
 const providerMap: Record<string, Provider> = {
 	olostep,
-	brightdata,
 	oxylabs,
 	cloro,
 	"openai-api": openaiApi,
@@ -42,6 +40,9 @@ const providerMap: Record<string, Provider> = {
 };
 
 export function getProvider(id: string): Provider {
+	if (id === "brightdata") {
+		throw new Error('Bright Data acquisition has been retired. Use chatgpt:dataforseo-scraper:online for ChatGPT Web, or configure a supported provider for other models.');
+	}
 	const p = providerMap[id];
 	if (!p) throw new Error(`Unknown provider: "${id}"`);
 	return p;

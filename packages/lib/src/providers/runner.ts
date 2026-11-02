@@ -1,3 +1,4 @@
+import { normalizeActiveTarget, normalizeActiveTargetKey } from "@workspace/config/scrape-targets";
 import { measurementTargetKey } from "../measurement";
 import type { ModelConfig } from "./types";
 
@@ -19,6 +20,10 @@ export function selectTargetsForBrand(
 	enabledModels: string[] | null | undefined,
 	enabledTargets?: string[] | null,
 ): ModelConfig[] {
+	configs = [
+		...new Map(configs.map(normalizeActiveTarget).map((config) => [measurementTargetKey(config), config])).values(),
+	];
+	enabledTargets = enabledTargets?.map(normalizeActiveTargetKey) ?? enabledTargets;
 	// An explicit target override takes precedence over the legacy model list.
 	// It never enables the other providers sharing the same model name.
 	if (enabledTargets !== null && enabledTargets !== undefined) {

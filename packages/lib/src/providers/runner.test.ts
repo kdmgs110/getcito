@@ -3,7 +3,7 @@ import { selectTargetsForBrand } from "./runner";
 import type { ModelConfig } from "./types";
 
 const configs: ModelConfig[] = [
-	{ model: "chatgpt", provider: "brightdata", version: undefined, webSearch: true },
+	{ model: "chatgpt", provider: "dataforseo-scraper", version: undefined, webSearch: true },
 	{ model: "claude", provider: "anthropic-api", version: "claude-sonnet-4", webSearch: false },
 	{ model: "google-ai-mode", provider: "dataforseo", version: undefined, webSearch: true },
 ];
@@ -11,7 +11,7 @@ const configs: ModelConfig[] = [
 describe("selectTargetsForBrand", () => {
 	it("selects a Web target without also enabling the API with the same model", () => {
 		const alternatives = [...configs, { model: "chatgpt", provider: "openai-api", version: "gpt-4o", webSearch: true }];
-		expect(selectTargetsForBrand(alternatives, null, ["chatgpt:brightdata:online"])).toEqual([configs[0]]);
+		expect(selectTargetsForBrand(alternatives, null, ["chatgpt:dataforseo-scraper:online"])).toEqual([configs[0]]);
 	});
 	it("keeps an explicit empty target selection disabled even with legacy enabled models", () => {
 		expect(selectTargetsForBrand(configs, ["chatgpt"], [])).toEqual([]);
@@ -50,11 +50,20 @@ describe("selectTargetsForBrand", () => {
 		expect(() => selectTargetsForBrand(configs, ["chatgpt", "does-not-exist"])).toThrow(/does-not-exist/);
 	});
 
-	it("keeps duplicates in configs when the model is allowed (multi-sample case)", () => {
+	it("deduplicates former Web targets after provider cutover", () => {
 		const duplicated: ModelConfig[] = [
-			{ model: "chatgpt", provider: "brightdata", version: undefined, webSearch: true },
+			{ model: "chatgpt", provider: "dataforseo-scraper", version: undefined, webSearch: true },
 			{ model: "chatgpt", provider: "olostep", version: undefined, webSearch: true },
 		];
-		expect(selectTargetsForBrand(duplicated, ["chatgpt"])).toEqual(duplicated);
+		expect(selectTargetsForBrand(duplicated, ["chatgpt"])).toEqual([
+			{ model: "chatgpt", provider: "dataforseo-scraper", version: undefined, webSearch: true },
+		]);
 	});
+});
+
+it("migrates old exact brand keys without enabling the API target", () => {
+	const alternatives = [...configs, { model: "chatgpt", provider: "openai-api", version: "gpt-5", webSearch: true }];
+	expect(selectTargetsForBrand(alternatives, null, ["chatgpt:brightdata:online", "chatgpt:olostep:online"])).toEqual([
+		configs[0],
+	]);
 });

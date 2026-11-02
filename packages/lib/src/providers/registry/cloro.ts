@@ -215,7 +215,7 @@ export const cloro: Provider = {
 		// Appending a language instruction would change the actual search query.
 		if (locale.languageName && model.startsWith("google-ai-")) {
 			throw new Error(
-				"Cloro Google engines do not support explicit language targeting; choose DataForSEO, BrightData or Olostep",
+				"Cloro Google engines do not support explicit language targeting; choose DataForSEO or Olostep",
 			);
 		}
 		const localizedPrompt = locale.languageName
