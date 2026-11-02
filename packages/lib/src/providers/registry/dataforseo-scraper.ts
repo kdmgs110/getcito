@@ -184,7 +184,9 @@ export function createDataForSeoScraper(
 						});
 						result = object(await response.json());
 					} catch {
-						// GET is free and idempotent; transient transport errors may be retried.
+						// Keep the worker lease alive during transport outages too;
+						// recovery must not mistake an active poller for a crashed worker.
+						await options?.onAcquisitionState?.("queued");
 						await runtime.wait(POLL_INTERVAL_MS);
 						continue;
 					}

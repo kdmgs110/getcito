@@ -235,7 +235,11 @@ describe("DataForSEO ChatGPT Web standard queue", () => {
 			.mockResolvedValueOnce(new Response("not json", { status: 503 }))
 			.mockResolvedValueOnce(Response.json(payload()));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(provider.run("chatgpt", "original")).resolves.toMatchObject({ textContent: "日本語の回答" });
+		const progress = vi.fn();
+		await expect(provider.run("chatgpt", "original", { onAcquisitionState: progress })).resolves.toMatchObject({
+			textContent: "日本語の回答",
+		});
+		expect(progress.mock.calls.map(([state]) => state)).toEqual(["queued", "queued", "queued", "running"]);
 		expect(fetchMock.mock.calls.filter(([, request]) => request.method === "POST")).toHaveLength(1);
 	});
 	it("treats a terminal result error as failed, rather than an empty successful answer", async () => {
