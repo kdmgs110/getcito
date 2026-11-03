@@ -20,6 +20,11 @@ export const mt = createTranslator({
 	viewAll: { ja: "すべて見る（{count}件）", en: "View all ({count})" },
 	evidence: { ja: "根拠を見る", en: "View evidence" },
 	evidenceTitle: { ja: "回答内の記載", en: "Mention in the answer" },
+	sourceUrl: { ja: "出典URL", en: "Source URL" },
+	domainFromAnswer: {
+		ja: "回答内のURLから入力しています。必要に応じて変更してください。",
+		en: "Prefilled from a URL in the answer. Edit it if needed.",
+	},
 	rankHelp: {
 		ja: "番号付きの紹介は回答内順位、それ以外は検出できたブランドの登場順です。おすすめ順位を推測するものではありません。",
 		en: "Numbered introductions use the answer's list positions; other mentions use appearance order among detected brands. Recommendation rankings are not inferred.",

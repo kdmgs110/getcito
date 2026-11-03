@@ -3,8 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 import {
 	MENTION_AI_RUN, MENTION_AI_TARGET, MENTION_BRAND, MENTION_CANDIDATE, MENTION_CHAT_RUN,
 	MENTION_COMPETITOR, MENTION_NO_ANSWER_ATTEMPT, MENTION_OLD_ALIAS, MENTION_OLD_RUN, MENTION_OWN, MENTION_PROMPT, MENTION_TARGET,
+	MENTION_JOB_BRAND, MENTION_JOB_DOMAIN, MENTION_JOB_TITLE, MENTION_JOB_URL, MENTION_LINKED_RUN,
 	brandMentionSnapshot, cleanupBrandMentionFixtures, closeBrandMentionFixturePool,
-	completeBrandMentionRecount, failBrandMentionRecount, seedBrandMentionFixtures,
+	completeBrandMentionRecount, failBrandMentionRecount, seedBrandMentionFixtures, seedLinkedJobMentionFixture,
 } from "../brand-mentions-fixtures";
 
 const spreadsheetPath = `/app/${MENTION_BRAND}/visibility?${new URLSearchParams({ model: MENTION_TARGET, lookback: "1m", view: "spreadsheet" })}`;
@@ -116,5 +117,46 @@ test.describe("Brand positions and historical recount", () => {
 		await expect(page.getByTestId("mention-recount-status")).toContainText("再集計が完了しました", { timeout: 20_000 });
 		const snapshot = await brandMentionSnapshot();
 		expect(snapshot.competitors.filter((competitor) => competitor.name === "E2E Manual Brand")).toHaveLength(1);
+	});
+
+	test("shows a grounded job source and preserves its answer alias when registering an edited brand name", async ({ page }) => {
+		await seedLinkedJobMentionFixture();
+		const before = await brandMentionSnapshot();
+		const sourceRequests: string[] = [];
+		page.on("request", (request) => {
+			if (request.url().startsWith(`https://${MENTION_JOB_DOMAIN}`)) sourceRequests.push(request.url());
+		});
+		await page.goto(spreadsheetPath);
+		const brands = page.getByTestId(`brand-mentions-${MENTION_LINKED_RUN}`);
+		const sourceLink = brands.getByRole("link", { name: `出典URL: ${MENTION_JOB_URL}`, exact: true });
+		await expect(sourceLink).toHaveAttribute("href", MENTION_JOB_URL);
+		await expect(sourceLink).toHaveAttribute("target", "_blank");
+		await brands.getByRole("button", { name: MENTION_JOB_TITLE, exact: true }).click();
+		await expect(page.getByRole("dialog").getByRole("link", { name: `出典URL: ${MENTION_JOB_URL}`, exact: true })).toHaveAttribute("href", MENTION_JOB_URL);
+		await page.keyboard.press("Escape");
+		await brands.getByRole("button", { name: `${MENTION_JOB_TITLE}を登録`, exact: true }).click();
+		const dialog = page.getByRole("dialog", { name: "ブランドを登録", exact: true });
+		await expect(dialog.getByRole("link", { name: `出典URL: ${MENTION_JOB_URL}`, exact: true })).toHaveAttribute("href", MENTION_JOB_URL);
+		await expect(dialog.getByLabel("ブランド名 *", { exact: true })).toHaveValue(MENTION_JOB_TITLE);
+		await expect(dialog.getByLabel("公式ドメイン（任意）", { exact: true })).toHaveValue(MENTION_JOB_DOMAIN);
+		await expect(dialog).toContainText("回答内のURLから入力しています。必要に応じて変更してください。");
+		const aliases = dialog.getByLabel("別名・表記ゆれ（任意）", { exact: true });
+		await expect(aliases).toHaveValue(MENTION_JOB_TITLE);
+		await dialog.getByLabel("ブランド名 *", { exact: true }).fill(MENTION_JOB_BRAND);
+		await expect(aliases).toHaveValue(MENTION_JOB_TITLE);
+		await aliases.fill(`${MENTION_JOB_TITLE}, ${MENTION_JOB_BRAND}, ${MENTION_JOB_TITLE}`);
+		await dialog.getByRole("button", { name: "登録して過去回答を再集計", exact: true }).click();
+		await expect(dialog).toHaveCount(0);
+		await completeBrandMentionRecount();
+		await expect(page.getByTestId("mention-recount-status")).toContainText("再集計が完了しました", { timeout: 20_000 });
+		await expect(brands.getByRole("listitem").first()).toContainText(MENTION_JOB_BRAND);
+		await expect(brands.getByRole("listitem").first()).toContainText("競合");
+		await expect(sourceLink).toHaveAttribute("href", MENTION_JOB_URL);
+		const after = await brandMentionSnapshot();
+		expect(after.competitors.find((competitor) => competitor.name === MENTION_JOB_BRAND)).toMatchObject({ domains: [MENTION_JOB_DOMAIN], aliases: [MENTION_JOB_TITLE] });
+		expect(after.runs.map((run) => [run.id, run.raw_output])).toEqual(before.runs.map((run) => [run.id, run.raw_output]));
+		expect(after.attemptCount).toBe(before.attemptCount);
+		expect(sourceRequests).toEqual([]);
+		expect(await csvText(page)).toContain(`1位 | ${MENTION_JOB_BRAND} | 競合 | 回答内順位`);
 	});
 });

@@ -18,6 +18,12 @@ export const MENTION_OLD_RUN = "00000000-0000-4000-8000-590000000003";
 export const MENTION_AI_RUN = "00000000-0000-4000-8000-590000000004";
 export const MENTION_COMPETITOR_ID = "00000000-0000-4000-8000-590000000005";
 export const MENTION_NO_ANSWER_ATTEMPT = "00000000-0000-4000-8000-590000000006";
+export const MENTION_LINKED_PROMPT = "00000000-0000-4000-8000-590000000007";
+export const MENTION_LINKED_RUN = "00000000-0000-4000-8000-590000000008";
+export const MENTION_JOB_TITLE = "Railsフルリモート開発案件";
+export const MENTION_JOB_URL = "https://jobs.brand-mentions.example.com/projects/rails-remote";
+export const MENTION_JOB_DOMAIN = "jobs.brand-mentions.example.com";
+export const MENTION_JOB_BRAND = "E2E Linked Job Service";
 export const MENTION_ANSWER = `おすすめのサービス\n1. ${MENTION_COMPETITOR}\n2. ${MENTION_OWN}\n3. ${MENTION_CANDIDATE}`;
 export const MENTION_OLD_ANSWER = `以前の回答\n1. ${MENTION_OLD_ALIAS}\n2. ${MENTION_CANDIDATE}`;
 export const MENTION_AI_ANSWER = `Google AIモードの回答\n1. ${MENTION_OWN}\n2. ${MENTION_COMPETITOR}`;
@@ -76,6 +82,19 @@ export async function seedBrandMentionFixtures() {
 	});
 }
 
+/** A grounded job title and its URL come from the same stored answer item. */
+export async function seedLinkedJobMentionFixture() {
+	await withClient(async (client) => {
+		const answer = `おすすめのRails案件\n1. [${MENTION_JOB_TITLE}](${MENTION_JOB_URL})\n2. ${MENTION_OWN}`;
+		const context = { version: 1, prompt: "E2E Rails案件のブランド登録", targetLanguage: "Japanese", targetMarket: "Japan", languageCode: "ja", countryCode: "jp" };
+		await client.query("INSERT INTO prompts(id,brand_id,value,enabled,tags,system_tags) VALUES($1,$2,$3,true,$4,$5)", [MENTION_LINKED_PROMPT, MENTION_BRAND, context.prompt, ["ブランド順位"], ["unbranded"]]);
+		await client.query(`INSERT INTO prompt_runs(id,prompt_id,brand_id,model,provider,version,web_search_enabled,raw_output,web_queries,brand_mentioned,competitors_mentioned,request_context,created_at)
+			VALUES($1,$2,$3,'chatgpt','dataforseo-scraper','e2e',true,$4::json,$5,true,$6,$7::jsonb,NOW()-INTERVAL '2 minutes')`, [MENTION_LINKED_RUN, MENTION_LINKED_PROMPT, MENTION_BRAND, JSON.stringify({ status_code: 20000, tasks: [{ status_code: 20000, result: [{ markdown: answer, fan_out_queries: [], search_results: [], sources: [] }] }] }), [], [], JSON.stringify(context)]);
+		await client.query(`INSERT INTO measurement_attempts(id,batch_id,brand_id,prompt_id,target_key,model,provider,status,web_search_enabled,request_context,evidence,prompt_run_id,created_at,completed_at)
+			VALUES($1,$2,$3,$4,$5,'chatgpt','dataforseo-scraper','succeeded',true,$6::jsonb,$7::jsonb,$8,NOW()-INTERVAL '2 minutes',NOW()-INTERVAL '2 minutes')`, [randomUUID(), randomUUID(), MENTION_BRAND, MENTION_LINKED_PROMPT, MENTION_TARGET, JSON.stringify(context), JSON.stringify({ version: 1, answerText: answer, answerStatus: "shown", queryStatus: "observed", queryEvidence: [], pageEvidence: { version: 1, search: { status: "known", items: [] }, citations: { status: "known", items: [] } } }), MENTION_LINKED_RUN]);
+	});
+}
+
 /** Invoke the exact production recount handler, without starting an acquisition worker. */
 export async function completeBrandMentionRecount() {
 	const id = await withClient(async (client) => {
@@ -96,7 +115,7 @@ export async function brandMentionSnapshot() {
 	return withClient(async (client) => {
 		const runs = await client.query<{ id: string; raw_output: unknown; brand_mentioned: boolean; competitors_mentioned: string[]; mention_analysis: unknown }>("SELECT id,raw_output,brand_mentioned,competitors_mentioned,mention_analysis FROM prompt_runs WHERE brand_id=$1 ORDER BY id", [MENTION_BRAND]);
 		const attempts = await client.query("SELECT id FROM measurement_attempts WHERE brand_id=$1", [MENTION_BRAND]);
-		const competitors = await client.query<{ name: string }>("SELECT name FROM competitors WHERE brand_id=$1 ORDER BY name", [MENTION_BRAND]);
+		const competitors = await client.query<{ name: string; domains: string[]; aliases: string[] }>("SELECT name,domains,aliases FROM competitors WHERE brand_id=$1 ORDER BY name", [MENTION_BRAND]);
 		return { runs: runs.rows, attemptCount: attempts.rowCount, competitors: competitors.rows };
 	});
 }

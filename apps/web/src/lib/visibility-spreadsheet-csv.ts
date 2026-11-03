@@ -54,7 +54,8 @@ export function spreadsheetBrands(answer: SpreadsheetAnswer | null): string {
 							? "appearanceBasis"
 							: "unknownRank",
 				);
-				return `${rank} | ${mention.name} | ${kind} | ${basis}`;
+				const source = mention.url && /^https?:\/\//i.test(mention.url) ? ` | ${mention.url}` : "";
+				return `${rank} | ${mention.name} | ${kind} | ${basis}${source}`;
 			})
 			.join("\n") || st("noBrands")
 	);

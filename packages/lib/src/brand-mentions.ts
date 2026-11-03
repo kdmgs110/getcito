@@ -23,6 +23,9 @@ export interface BrandMention {
 	evidence: string;
 	matchedText: string;
 	domain?: string;
+	/** Exact destination observed in the saved answer; never inferred from a hostname. */
+	url?: string;
+	suggestedAliases?: string[];
 }
 
 export interface BrandMentionAnalysis {
@@ -124,20 +127,20 @@ function answerLines(text: string): AnswerLine[] {
 	let offset = 0;
 	let list = 0;
 	let previousNumber: number | null = null;
-	let linesSinceNumber = 0;
 	return text.split("\n").map((line) => {
 		const source = normalizedSource(line);
 		// NFKC turns circled digits into bare digits, so capture their prefix before normalization.
 		const circled = /^\s*(?:#{1,6}\s*)?(?:\*\*)?([①-⑳])\s*/u.exec(line);
-		const parsed = /^\s*(?:#{1,6}\s*)?(?:\*\*)?(?:(\d{1,3})[.)、]\s+|第\s*(\d{1,3})\s*位\s*[:：.、]?\s*)/u.exec(
+		const parsed = /^\s*(?:#{1,6}\s*)?(?:\*\*)?(?:(\d{1,3})\\?[.)、]\s+|第\s*(\d{1,3})\s*位\s*[:：.、]?\s*)/u.exec(
 			source.value,
 		);
 		const number = circled ? circled[1].charCodeAt(0) - 0x2460 + 1 : parsed ? Number(parsed[1] ?? parsed[2]) : null;
 		if (number !== null) {
-			if (previousNumber === null || number <= previousNumber || linesSinceNumber > 3) list++;
+			if (previousNumber === null || number <= previousNumber) list++;
 			previousNumber = number;
-			linesSinceNumber = 0;
-		} else if (line.trim()) linesSinceNumber++;
+		} else if (/^\s*#{1,6}\s+/.test(line) && !/(?:\d[\d,.〜～~\s]*万?円|\d.*[/／]月)/u.test(line)) {
+			previousNumber = null;
+		}
 		const result = {
 			text: line,
 			start: offset,
@@ -159,12 +162,18 @@ function candidateName(value: string): string | null {
 		.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
 		.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
 		.replace(/[*_`]/g, "")
+		.replace(
+			/(?:の|で|・)(?:(?:[a-zA-Z0-9 .+#-]{0,25})?(?:案件|求人)(?:詳細|一覧|紹介)?|応募(?:・募集)?一覧|募集一覧).*$/u,
+			"",
+		)
 		.replace(/^\s*(?:[-•●]\s*|#{1,6}\s*)/, "")
-		.replace(/^\s*(?:第?\s*\d+\s*位?\s*[.:：、．)）-]?\s*)/, "")
+		.replace(/^\s*(?:第?\s*\d+\s*位?\s*\\?[.:：、．)）-]?\s*)/, "")
 		.split(/\s+[—–−-]\s+|[：:]|[（(]|\s*[|｜]\s*/)[0]
 		.trim()
 		.replace(/[。．、,;；]+$/, "")
-		.trim();
+		.trim()
+		.replace(/^(.+?)\s+\1$/u, "$1")
+		.replace(/\s+[^ \n]*(?:支店|拠点|支社)$/u, "");
 	if (name.length < 2 || name.length > 60 || !/[\p{L}\p{N}]/u.test(name)) return null;
 	if (genericName.test(name) || /^[\d\s.,%％¥￥$]+$/.test(name)) return null;
 	// A combined label is not evidence of a single brand; manual entry can disambiguate it.
@@ -177,6 +186,76 @@ function candidateName(value: string): string | null {
 		return null;
 	if (/^(?:おすすめ|比較|まとめ|注意|手順|条件|ポイント|選び方|まず|次に|ステップ|step\s*\d)/i.test(name)) return null;
 	return name;
+}
+
+/** Formatting alone does not make an ordinary heading, job title, or price a brand. */
+function plausibleUnregisteredBrand(name: string, grounded = false): boolean {
+	const value = normalized(name);
+	if (/\\|^[^\p{L}\p{N}]|[。！？!?]/u.test(value)) return false;
+	// Bare publisher/domain citation labels are not recommendations of that publisher as a brand.
+	if (/^(?:[\p{L}\p{N}-]+\.)+[\p{L}]{2,}(?:\s*\+\s*\d+)?$/u.test(value)) return false;
+	if (
+		/(?:[~〜～¥￥$€£]\s*\d|\d[\d,.]*\s*(?:万|千|億)?\s*(?:円|ドル)|\d\s*[%％]|[/／]\s*(?:月|年|時|日|hour|month|year))/iu.test(
+			value,
+		)
+	)
+		return false;
+	if (
+		/^(?:評価|評判|口コミ|総評|概要|基本情報|対象者|対象|用途|補足|備考|参考情報|関連情報|スキル|必要スキル|技術スタック|リモート|勤務条件|契約条件|報酬|月額|月単価|開発内容|仕事内容|業務内容|採用条件|おすすめポイント|ランキング|メリット|デメリット|pros|cons|overview|summary|rating|ratings|reviews?|pricing|price|cost|features?|benefits?|salary|requirements?|recommendations?|remote|skills?|conclusion|next steps)$/iu.test(
+			value,
+		)
+	)
+		return false;
+	// Corporate legal forms are stronger evidence than a generic ending in a real company name.
+	if (/(?:株式会社|合同会社|有限会社|合資会社|合名会社)/u.test(value)) return true;
+	if (
+		/(?:希望|必須|必要|環境|要件|働き方|探す|探せる|探し|使える|使いたい|べき|伝え方|アピール|成功させる|おすすめ|時点|見つかった|確認したい|教えて|質問)/u.test(
+			value,
+		)
+	)
+		return false;
+	if (
+		/(?:事情|状況|条件|形態|市場|特徴|傾向|方法|ポイント|コツ|ステップ|年数|情報|詳細|一覧|採用|なし|可能|コミュニケーション|インフラ|フロントエンド|バックエンド|ポジション|コメント)$/u.test(
+			value,
+		)
+	)
+		return false;
+	// A descriptive job title can be an actionable candidate when its own item supplies its source URL.
+	if (
+		grounded &&
+		/(?:開発|受託|運用|保守|構築|設計|エンジニア|デザイナー|メンバー|テックリード|テスト|システム|サービス|プロダクト|案件$|求人$)/u.test(
+			value,
+		)
+	)
+		return true;
+	// Job/contract/skill labels and descriptive prose are not entity introductions, even when bold or numbered.
+	if (
+		/(?:案件|求人|募集|開発|経験|実務|スキル|技術|契約|稼働|勤務|業務|報酬|単価|希望|必須|必要|専門|受託|自社|併用|環境|要件|働き方|探す|探せる|探し|使える|使いたい|べき|伝え方|アピール|成功させる)/u.test(
+			value,
+		)
+	)
+		return false;
+	if (
+		/(?:事情|状況|条件|形態|市場|特徴|傾向|方法|ポイント|コツ|ステップ|年数|情報|詳細|一覧|採用|支援|なし|可能|メイン|サービス|システム|プロダクト|コミュニケーション|インフラ|フロントエンド|バックエンド|ポジション|コメント)$/u.test(
+			value,
+		)
+	)
+		return false;
+	if (/[・／]|\s[×x+]\s/u.test(value)) return false;
+	if (
+		/(?:受託|システム|バックエンド|フロントエンド|アプリ|sns).*(?:開発|構築|運用)|(?:メンバー|エンジニア|デザイナー|ディレクター|テックリード|テスト|developer|engineer)$/iu.test(
+			value,
+		)
+	)
+		return false;
+	if (
+		/(?:案件|求人|募集|候補|参画|受託|開発|運用|保守|構築|設計|料金|価格|単価|相場|比較|評価|評判|口コミ|実務経験|について|向け|はこちら)$/u.test(
+			value,
+		)
+	)
+		return false;
+	// Unknown all-kanji/hiragana headings are especially ambiguous; users can add a missed brand manually.
+	return /[a-z]|[\p{Script=Katakana}ー]{2}/iu.test(value);
 }
 
 export function analyzeBrandMentions(text: string, catalog: MentionCatalog): BrandMentionAnalysis {
@@ -225,30 +304,70 @@ export function analyzeBrandMentions(text: string, catalog: MentionCatalog): Bra
 	}
 
 	const originalLines = answerLines(visible);
-	const candidates: { name: string; start: number; domain?: string }[] = [];
-	for (const originalLine of originalLines) {
+	const links = [...text.matchAll(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)(?:\s+"[^"\n]*")?\)/g)].flatMap((match) => {
+		const start = (match.index ?? 0) + 1;
+		const domain = domainOf(match[2]);
+		if (!domain || !visible.slice(start, start + match[1].length).trim()) return [];
+		return [{ start, label: match[1], name: candidateName(match[1]), domain, url: match[2] }];
+	});
+	type Candidate = { name: string; start: number; domain?: string; url?: string; suggestedAliases?: string[] };
+	const candidates: Candidate[] = [];
+	for (const [lineIndex, originalLine] of originalLines.entries()) {
 		const line = originalLine.text;
 		const contentStart = originalLine.itemStart;
 		const itemText = line.slice(contentStart - originalLine.start);
 		const bold = /^(?:\s*(?:[-*•●]\s*|#{1,6}\s*)?)\*\*([^*\n]+)\*\*/.exec(itemText);
 		const heading = /^\s*#{1,6}\s+(.+)$/.exec(line);
-		const isNumbered = originalLine.number !== null;
-		// Plain bullets are too often ordinary nouns; bold/list headings are stronger evidence.
-		const proposed = bold?.[1] ?? heading?.[1] ?? (isNumbered ? itemText : null);
+		const proposed = bold?.[1] ?? heading?.[1] ?? (originalLine.number !== null ? itemText : null);
 		if (!proposed) continue;
 		const name = candidateName(proposed);
 		if (!name) continue;
 		const exactIndex = line.indexOf(name);
-		candidates.push({ name, start: exactIndex === -1 ? contentStart : originalLine.start + exactIndex });
+		const start = exactIndex === -1 ? contentStart : originalLine.start + exactIndex;
+		// A following introduction/section ends this item's ownership of links. Price subheadings do not.
+		let end = text.length;
+		for (const next of originalLines.slice(lineIndex + 1)) {
+			const nextHeading = /^\s*#{1,6}\s+(.+)$/.exec(next.text);
+			const nextBold = /^\s*(?:[-*•●]\s*)?\*\*([^*\n]+)\*\*/.exec(next.text);
+			const nextName = nextBold ? candidateName(nextBold[1]) : null;
+			const nextBullet = /^\s*[-*•●]\s+(.+)$/.exec(next.text);
+			const bulletName = nextBullet ? candidateName(nextBullet[1]) : null;
+			const priceHeading = nextHeading && /(?:\d[\d,.〜～~\s]*万?円|\d.*[/／]月)/u.test(nextHeading[1]);
+			if (
+				next.number !== null ||
+				/^\s*(?:---+|___+|\*\*\*+)\s*$/.test(next.text) ||
+				(nextHeading && !priceHeading) ||
+				(nextName && plausibleUnregisteredBrand(nextName, true)) ||
+				(bulletName && plausibleUnregisteredBrand(bulletName))
+			) {
+				end = next.start;
+				break;
+			}
+		}
+		const itemLinks = links.filter((link) => link.start >= originalLine.start && link.start < end);
+		const urls = new Set(itemLinks.map((link) => link.url));
+		const source = urls.size === 1 ? itemLinks[0] : undefined;
+		candidates.push({
+			name,
+			start,
+			...(source
+				? {
+						domain: source.domain,
+						url: source.url,
+						suggestedAliases: [
+							...new Set([
+								name,
+								...itemLinks.flatMap((link) => (link.name && plausibleUnregisteredBrand(link.name) ? [link.name] : [])),
+							]),
+						],
+					}
+				: {}),
+		});
 	}
-	// Named in-answer links may identify a service, but citation markers and source sections have already been masked.
-	for (const match of text.matchAll(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)(?:\s+"[^"\n]*")?\)/g)) {
-		const start = (match.index ?? 0) + 1;
-		if (!visible.slice(start, start + match[1].length).trim()) continue;
-		const name = candidateName(match[1]);
-		const domain = domainOf(match[2]);
-		if (!name || !domain || /^(?:\d+|\^\d+)$/.test(name)) continue;
-		// Article titles are not brand names; keep this path conservative.
+	// Named links carry their observed destination, including when the label is a grounded job title.
+	for (const link of links) {
+		const { start, name, domain, url } = link;
+		if (!name || /^(?:\d+|\^\d+)$/.test(name)) continue;
 		if (
 			name.length > 40 ||
 			/[。！？!?]|(?:の記事|ニュース|の解説|について|ガイド|解説記事|はこちら|はこちらから)/.test(name)
@@ -259,7 +378,7 @@ export function analyzeBrandMentions(text: string, catalog: MentionCatalog): Bra
 			const { entity, kind } = registered;
 			occurrences.push({
 				start,
-				end: start + match[1].length,
+				end: start + link.label.length,
 				mention: {
 					key: `${kind}:${entity.id}`,
 					entityId: entity.id,
@@ -269,18 +388,28 @@ export function analyzeBrandMentions(text: string, catalog: MentionCatalog): Bra
 					rankBasis: "unknown",
 					firstOffset: start,
 					evidence: evidenceAt(text, start),
-					matchedText: match[1],
+					matchedText: link.label,
 					domain,
+					url,
+					suggestedAliases: [name],
 				},
 			});
-		} else {
-			candidates.push({ name, start, domain });
-		}
+		} else candidates.push({ name, start, domain, url, suggestedAliases: [name] });
 	}
 	for (const candidate of candidates) {
 		const candidateEnd = candidate.start + candidate.name.length;
 		// A named entity inside a heading/link takes precedence over an unregistered duplicate.
-		if (occurrences.some((item) => item.start < candidateEnd && item.end > candidate.start)) continue;
+		const registeredMatches = occurrences.filter((item) => item.start < candidateEnd && item.end > candidate.start);
+		if (registeredMatches.length) {
+			for (const { mention } of registeredMatches)
+				if (candidate.url && !mention.url) {
+					mention.url = candidate.url;
+					mention.domain = candidate.domain;
+					mention.suggestedAliases = candidate.suggestedAliases;
+				}
+			continue;
+		}
+		if (!plausibleUnregisteredBrand(candidate.name, !!candidate.url)) continue;
 		const canonical = normalized(candidate.name);
 		if (!canonical) continue;
 		occurrences.push({
@@ -297,6 +426,7 @@ export function analyzeBrandMentions(text: string, catalog: MentionCatalog): Bra
 				evidence: evidenceAt(text, candidate.start),
 				matchedText: text.slice(candidate.start, candidateEnd),
 				...(candidate.domain ? { domain: candidate.domain } : {}),
+				...(candidate.url ? { url: candidate.url, suggestedAliases: candidate.suggestedAliases } : {}),
 			},
 		});
 	}
@@ -319,7 +449,13 @@ export function analyzeBrandMentions(text: string, catalog: MentionCatalog): Bra
 	for (const occurrence of kept) {
 		const existing = firstByKey.get(occurrence.mention.key);
 		if (!existing) firstByKey.set(occurrence.mention.key, occurrence.mention);
-		else if (!existing.domain && occurrence.mention.domain) existing.domain = occurrence.mention.domain;
+		else {
+			if (!existing.domain && occurrence.mention.domain) existing.domain = occurrence.mention.domain;
+			if (!existing.url && occurrence.mention.url) {
+				existing.url = occurrence.mention.url;
+				existing.suggestedAliases = occurrence.mention.suggestedAliases;
+			}
+		}
 	}
 	const mentions = [...firstByKey.values()];
 	const numbered = new Map<number, { number: number; key: string; offset: number }[]>();

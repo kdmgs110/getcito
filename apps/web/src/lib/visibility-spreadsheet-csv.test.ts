@@ -89,6 +89,16 @@ describe("spreadsheet CSV", () => {
 				mentionAnalysis: {
 					version: 1,
 					coverage: "detected",
+					mentions: [{ ...mention, url: "https://example.com/jobs/123" }],
+				},
+			}),
+		).toBe("1位 | 競合 | 競合 | 回答内順位 | https://example.com/jobs/123");
+		expect(
+			spreadsheetBrands({
+				...ranked,
+				mentionAnalysis: {
+					version: 1,
+					coverage: "detected",
 					mentions: [
 						{ ...mention, rank: 1, rankBasis: "appearance" },
 						{ ...mention, key: "second", rank: null, rankBasis: "unknown" },
