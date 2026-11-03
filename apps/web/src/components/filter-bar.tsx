@@ -455,6 +455,7 @@ export function FilterBar({
 	resultCount,
 	resultTotal,
 	extraControls,
+	trailingControls,
 }: {
 	availableTags: readonly string[];
 	availableModels: string[];
@@ -467,6 +468,7 @@ export function FilterBar({
 	/** Page-specific controls rendered inline with the dropdown group
 	 *  (e.g. the prompts list's sort dropdown). */
 	extraControls?: ReactNode;
+	trailingControls?: ReactNode;
 }) {
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-2">
@@ -477,7 +479,10 @@ export function FilterBar({
 				{extraControls}
 				<ResultCount count={resultCount} total={resultTotal} />
 			</div>
-			{showSearch && <SearchInput />}
+			<div className="flex flex-wrap items-center gap-2">
+				{showSearch && <SearchInput />}
+				{trailingControls}
+			</div>
 		</div>
 	);
 }

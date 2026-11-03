@@ -1,10 +1,10 @@
-import { t } from "@/i18n";
-import type { ReactNode } from "react";
-import { Inbox } from "lucide-react";
 import { Button } from "@workspace/ui/components/button";
+import { Inbox } from "lucide-react";
+import type { ReactNode } from "react";
 import { FilterBar } from "@/components/filter-bar";
 import { FilterSection } from "@/components/page-header";
 import type { ListFilterState } from "@/hooks/use-list-filters";
+import { t } from "@/i18n";
 
 interface FilteredListShellProps {
 	/** The page's `useListFilters()` result. */
@@ -18,6 +18,7 @@ interface FilteredListShellProps {
 	/** Page-specific controls rendered inline with the filter-bar dropdown
 	 *  group (e.g. the prompts list's sort dropdown). */
 	filterBarExtras?: ReactNode;
+	filterBarTrailingControls?: ReactNode;
 	/** Extra content inside the sticky filter section, below the bar
 	 *  (e.g. the visibility bar on the prompts page). */
 	filterSectionExtras?: ReactNode;
@@ -53,6 +54,7 @@ export function FilteredListShell({
 	showModelSelector = true,
 	showResultCount = false,
 	filterBarExtras,
+	filterBarTrailingControls,
 	filterSectionExtras,
 	isLoading = false,
 	loadingState,
@@ -102,6 +104,7 @@ export function FilteredListShell({
 					resultCount={showResultCount && !isLoading ? effectiveFilteredCount : undefined}
 					resultTotal={showResultCount && !isLoading ? totalCount : undefined}
 					extraControls={filterBarExtras}
+					trailingControls={filterBarTrailingControls}
 				/>
 				{filterSectionExtras}
 			</FilterSection>

@@ -27,6 +27,8 @@ export function HistoryButton({ brandId, promptId, tab, model, label, view, targ
 				params={{ brand: brandId, promptId }}
 				search={(previous) => ({
 					...previous,
+					// Visibility's table/chart preference is not a prompt-detail view.
+					view: previous.view === "compare" ? previous.view : undefined,
 					tab,
 					...(model ? { model: model === "all" ? undefined : model } : {}),
 					...(tab === "responses" ? { view, targetKey, attemptId: undefined, runId: undefined } : {}),

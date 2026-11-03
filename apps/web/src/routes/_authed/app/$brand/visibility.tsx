@@ -1,4 +1,3 @@
-import { t } from "@/i18n";
 /**
  * /app/$brand/visibility - Visibility charts page
  *
@@ -8,16 +7,19 @@ import { t } from "@/i18n";
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PromptsDisplay } from "@/components/prompts-display";
-import { getAppName, getBrandName, buildTitle } from "@/lib/route-head";
+import { t } from "@/i18n";
 import { coercePromptOrder, DEFAULT_PROMPT_ORDER, type PromptOrder } from "@/lib/prompt-order";
+import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
+import { coerceVisibilityView, type VisibilityView } from "@/lib/visibility-view";
 
 export const Route = createFileRoute("/_authed/app/$brand/visibility")({
 	// The prompts list's sort order (#60) is this route's own search key, on top
 	// of the brand-wide filter keys validated by the `$brand` layout route. The
 	// default order is omitted so default state keeps a clean URL.
-	validateSearch: (search: Record<string, unknown>): { order?: PromptOrder } => {
+	validateSearch: (search: Record<string, unknown>): { order?: PromptOrder; view?: VisibilityView } => {
 		const order = coercePromptOrder(search.order);
-		return order === DEFAULT_PROMPT_ORDER ? {} : { order };
+		const view = coerceVisibilityView(search.view);
+		return { order: order === DEFAULT_PROMPT_ORDER ? undefined : order, view: view === "graph" ? undefined : view };
 	},
 	head: ({ matches, match }) => {
 		const appName = getAppName(match);
