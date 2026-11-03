@@ -1,4 +1,5 @@
 import { databaseConnection, positiveIntegerEnv } from "@workspace/config/runtime";
+import { MENTION_RECOUNT_POLICY, MENTION_RECOUNT_QUEUE } from "@workspace/lib/brand-mention-recount";
 import { PROCESS_PROMPT_JOB_POLICY } from "@workspace/lib/constants";
 import { PgBoss } from "pg-boss";
 
@@ -49,6 +50,7 @@ export async function getBoss(): Promise<PgBoss> {
 			retryBackoff: false,
 			expireInSeconds: 60 * 15,
 		});
+		await boss.createQueue(MENTION_RECOUNT_QUEUE, MENTION_RECOUNT_POLICY);
 
 		bossInstance = boss;
 		return boss;

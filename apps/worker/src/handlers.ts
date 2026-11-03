@@ -5,6 +5,7 @@ import type { Job, PgBoss } from "pg-boss";
 import { type AnalyzeBrandData, analyzeBrandJob } from "./jobs/analyze-brand";
 import { type GenerateReportData, generateReportJob } from "./jobs/generate-report";
 import { type ProcessPromptData, processPromptJob } from "./jobs/process-prompt";
+import { type RecountBrandMentionsData, recountBrandMentionsJob } from "./jobs/recount-brand-mentions";
 import { type ScheduleMaintenanceData, scheduleMaintenanceJob } from "./jobs/schedule-maintenance";
 import { type SyncAuth0MembershipsData, syncAuth0MembershipsJob } from "./jobs/sync-auth0-memberships";
 
@@ -30,6 +31,11 @@ function withSentry<T, R>(queueName: string, handler: (jobs: Job<T>[]) => Promis
  * Register all job handlers with pg-boss.
  */
 export async function registerHandlers(boss: PgBoss): Promise<void> {
+	await boss.work<RecountBrandMentionsData>(
+		"recount-brand-mentions",
+		{ localConcurrency: 1 },
+		withSentry("recount-brand-mentions", recountBrandMentionsJob),
+	);
 	// This is what caps prompts in flight, and it is the queue's real throughput
 	// dial: a job spends nearly all of its time waiting on a provider, not on CPU
 	// or on the database. The provider gates below it are sized to cover the

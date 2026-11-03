@@ -1,6 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
+import { analyzeBrandMentions, type BrandMentionAnalysis, type MentionCatalog } from "@workspace/lib/brand-mentions";
 import { db } from "@workspace/lib/db/db";
-import { brands, citations, measurementAttempts, promptRuns, prompts } from "@workspace/lib/db/schema";
+import {
+	brandMentionRecounts,
+	brands,
+	citations,
+	competitors,
+	measurementAttempts,
+	promptRuns,
+	prompts,
+} from "@workspace/lib/db/schema";
 import type { MeasurementEvidence } from "@workspace/lib/measurement";
 import { normalizeEvidencePage, normalizePageEvidence } from "@workspace/lib/page-evidence";
 import { extractTextContent } from "@workspace/lib/text-extraction";
@@ -41,6 +50,7 @@ export interface SpreadsheetRun {
 	webSearchEnabled: boolean;
 	brandMentioned: boolean;
 	competitorsMentioned: string[];
+	mentionAnalysis?: BrandMentionAnalysis | null;
 	webQueries: string[];
 	evidence: MeasurementEvidence | null;
 	/** Only selected when historical normalized page evidence is unavailable. */
@@ -58,6 +68,7 @@ export function buildSpreadsheetAnswer(
 	run: SpreadsheetRun,
 	storedCitations: SpreadsheetCitation[],
 	brandName: string,
+	catalog?: MentionCatalog,
 ): SpreadsheetAnswer {
 	const webQueries = observedQueries([
 		...run.webQueries,
@@ -139,6 +150,9 @@ export function buildSpreadsheetAnswer(
 		answerText: evidence.answerStatus === "shown" ? evidence.answerText : "",
 		answerStatus: evidence.answerStatus,
 		mentionedBrands: [...new Set([...(run.brandMentioned ? [brandName] : []), ...run.competitorsMentioned])],
+		mentionAnalysis:
+			run.mentionAnalysis ??
+			(catalog && evidence.answerStatus === "shown" ? analyzeBrandMentions(evidence.answerText, catalog) : null),
 		webQueries,
 		queryStatus: webQueries.length ? "observed" : evidence.queryStatus,
 		searchResultsStatus: searchKnown ? "known" : "unknown",
@@ -156,113 +170,151 @@ export const getVisibilitySpreadsheetRowsFn = createServerFn({ method: "GET" })
 	.handler(async ({ data }): Promise<VisibilitySpreadsheetResponse> => {
 		const session = await requireAuthSession();
 		await requireOrgAccess(session.user.id, data.brandId);
-		const asOf = data.asOf ?? new Date().toISOString();
-		const promptIds = [...new Set(data.promptIds)];
-		if (!promptIds.length) return { rows: [], asOf };
-		const [promptRows, brand] = await Promise.all([
-			db
-				.select({ id: prompts.id, value: prompts.value, tags: prompts.tags })
-				.from(prompts)
-				.where(and(eq(prompts.brandId, data.brandId), eq(prompts.enabled, true), inArray(prompts.id, promptIds))),
-			db.query.brands.findFirst({ columns: { name: true }, where: eq(brands.id, data.brandId) }),
-		]);
-		const scopedIds = promptRows.map((item) => item.id);
-		if (!scopedIds.length) return { rows: [], asOf };
-		const { fromDateStr, toDateStr } = getTimezoneLookbackRange(coerceLookbackPeriod(data.lookback), APP_TIMEZONE, {
-			now: new Date(asOf),
-		});
-		// DISTINCT ON bounds large answer payloads to at most two runs per prompt.
-		// raw_output is deliberately omitted for modern normalized measurements.
-		const runs: SpreadsheetRun[] = await db
-			.selectDistinctOn([promptRuns.promptId, promptRuns.model], {
-				id: promptRuns.id,
-				promptId: promptRuns.promptId,
-				model: promptRuns.model,
-				provider: promptRuns.provider,
-				createdAt: promptRuns.createdAt,
-				webSearchEnabled: promptRuns.webSearchEnabled,
-				brandMentioned: promptRuns.brandMentioned,
-				competitorsMentioned: promptRuns.competitorsMentioned,
-				webQueries: promptRuns.webQueries,
-				evidence: measurementAttempts.evidence,
-				rawOutput: sql`CASE WHEN ${measurementAttempts.evidence}->'pageEvidence' IS NULL THEN ${promptRuns.rawOutput} ELSE NULL END`,
-			})
-			.from(promptRuns)
-			.leftJoin(
-				measurementAttempts,
-				and(
-					eq(measurementAttempts.promptRunId, promptRuns.id),
-					eq(measurementAttempts.brandId, data.brandId),
-					eq(measurementAttempts.promptId, promptRuns.promptId),
-					eq(measurementAttempts.model, promptRuns.model),
-					eq(measurementAttempts.status, "succeeded"),
-				),
-			)
-			.where(
-				and(
-					eq(promptRuns.brandId, data.brandId),
-					inArray(promptRuns.promptId, scopedIds),
-					visibleMeasurementRunCondition(),
-					// Linked failed/pending acquisitions cannot masquerade as successful
-					// answers; old runs without any receipt remain readable.
-					sql`(${measurementAttempts.id} IS NOT NULL OR NOT EXISTS (
+		return db.transaction(
+			async (db) => {
+				const asOf = data.asOf ?? new Date().toISOString();
+				const promptIds = [...new Set(data.promptIds)];
+				if (!promptIds.length) return { rows: [], asOf };
+				const [promptRows, brand, competitorRows, recount] = await Promise.all([
+					db
+						.select({ id: prompts.id, value: prompts.value, tags: prompts.tags })
+						.from(prompts)
+						.where(and(eq(prompts.brandId, data.brandId), eq(prompts.enabled, true), inArray(prompts.id, promptIds))),
+					db.query.brands.findFirst({
+						columns: { name: true, aliases: true, website: true, additionalDomains: true },
+						where: eq(brands.id, data.brandId),
+					}),
+					db.query.competitors.findMany({ where: eq(competitors.brandId, data.brandId) }),
+					db.query.brandMentionRecounts.findFirst({
+						columns: { id: true, completedAt: true },
+						where: eq(brandMentionRecounts.brandId, data.brandId),
+					}),
+				]);
+				const catalog: MentionCatalog | undefined = brand
+					? {
+							own: {
+								id: data.brandId,
+								name: brand.name,
+								aliases: brand.aliases ?? [],
+								domains: [brand.website, ...(brand.additionalDomains ?? [])].filter(Boolean),
+							},
+							competitors: competitorRows,
+						}
+					: undefined;
+				const mentionRevision = JSON.stringify({
+					catalog: catalog
+						? {
+								own: catalog.own,
+								competitors: catalog.competitors
+									.map(({ id, name, aliases, domains }) => ({ id, name, aliases, domains }))
+									.sort((a, b) => a.id.localeCompare(b.id)),
+							}
+						: null,
+					publication: [recount?.id ?? null, recount?.completedAt?.toISOString() ?? null],
+				});
+				const scopedIds = promptRows.map((item) => item.id);
+				if (!scopedIds.length) return { rows: [], asOf };
+				const { fromDateStr, toDateStr } = getTimezoneLookbackRange(coerceLookbackPeriod(data.lookback), APP_TIMEZONE, {
+					now: new Date(asOf),
+				});
+				// DISTINCT ON bounds large answer payloads to at most two runs per prompt.
+				// raw_output is deliberately omitted for modern normalized measurements.
+				const runs: SpreadsheetRun[] = await db
+					.selectDistinctOn([promptRuns.promptId, promptRuns.model], {
+						id: promptRuns.id,
+						promptId: promptRuns.promptId,
+						model: promptRuns.model,
+						provider: promptRuns.provider,
+						createdAt: promptRuns.createdAt,
+						webSearchEnabled: promptRuns.webSearchEnabled,
+						brandMentioned: promptRuns.brandMentioned,
+						competitorsMentioned: promptRuns.competitorsMentioned,
+						mentionAnalysis: promptRuns.mentionAnalysis,
+						webQueries: promptRuns.webQueries,
+						evidence: measurementAttempts.evidence,
+						rawOutput: sql`CASE WHEN ${measurementAttempts.evidence}->'pageEvidence' IS NULL THEN ${promptRuns.rawOutput} ELSE NULL END`,
+					})
+					.from(promptRuns)
+					.leftJoin(
+						measurementAttempts,
+						and(
+							eq(measurementAttempts.promptRunId, promptRuns.id),
+							eq(measurementAttempts.brandId, data.brandId),
+							eq(measurementAttempts.promptId, promptRuns.promptId),
+							eq(measurementAttempts.model, promptRuns.model),
+							eq(measurementAttempts.status, "succeeded"),
+						),
+					)
+					.where(
+						and(
+							eq(promptRuns.brandId, data.brandId),
+							inArray(promptRuns.promptId, scopedIds),
+							visibleMeasurementRunCondition(),
+							// Linked failed/pending acquisitions cannot masquerade as successful
+							// answers; old runs without any receipt remain readable.
+							sql`(${measurementAttempts.id} IS NOT NULL OR NOT EXISTS (
 						SELECT 1 FROM measurement_attempts linked WHERE linked.prompt_run_id = ${promptRuns.id}
 					))`,
-					or(
-						and(
-							eq(promptRuns.model, "chatgpt"),
-							eq(promptRuns.provider, "dataforseo-scraper"),
-							eq(promptRuns.webSearchEnabled, true),
+							or(
+								and(
+									eq(promptRuns.model, "chatgpt"),
+									eq(promptRuns.provider, "dataforseo-scraper"),
+									eq(promptRuns.webSearchEnabled, true),
+								),
+								eq(promptRuns.model, "google-ai-mode"),
+							),
+							lte(promptRuns.createdAt, new Date(asOf)),
+							fromDateStr
+								? sql`${promptRuns.createdAt} >= (${fromDateStr}::date::timestamp AT TIME ZONE ${APP_TIMEZONE})`
+								: undefined,
+							toDateStr
+								? sql`${promptRuns.createdAt} < ((${toDateStr}::date + interval '1 day') AT TIME ZONE ${APP_TIMEZONE})`
+								: undefined,
 						),
-						eq(promptRuns.model, "google-ai-mode"),
-					),
-					lte(promptRuns.createdAt, new Date(asOf)),
-					fromDateStr
-						? sql`${promptRuns.createdAt} >= (${fromDateStr}::date::timestamp AT TIME ZONE ${APP_TIMEZONE})`
-						: undefined,
-					toDateStr
-						? sql`${promptRuns.createdAt} < ((${toDateStr}::date + interval '1 day') AT TIME ZONE ${APP_TIMEZONE})`
-						: undefined,
-				),
-			)
-			.orderBy(
-				promptRuns.promptId,
-				promptRuns.model,
-				desc(promptRuns.createdAt),
-				desc(promptRuns.id),
-				desc(measurementAttempts.createdAt),
-			);
-		const runIds = runs.map((run) => run.id);
-		const citationRows = runIds.length
-			? await db
-					.select({
-						promptRunId: citations.promptRunId,
-						url: citations.url,
-						title: citations.title,
-					})
-					.from(citations)
-					.where(and(eq(citations.brandId, data.brandId), inArray(citations.promptRunId, runIds)))
-			: [];
-		const answers = new Map(
-			runs.map((run) => [
-				`${run.promptId}:${run.model}`,
-				buildSpreadsheetAnswer(
-					run,
-					citationRows.filter((item) => item.promptRunId === run.id),
-					brand?.name ?? "",
-				),
-			]),
+					)
+					.orderBy(
+						promptRuns.promptId,
+						promptRuns.model,
+						desc(promptRuns.createdAt),
+						desc(promptRuns.id),
+						desc(measurementAttempts.createdAt),
+					);
+				const runIds = runs.map((run) => run.id);
+				const citationRows = runIds.length
+					? await db
+							.select({
+								promptRunId: citations.promptRunId,
+								url: citations.url,
+								title: citations.title,
+							})
+							.from(citations)
+							.where(and(eq(citations.brandId, data.brandId), inArray(citations.promptRunId, runIds)))
+					: [];
+				const answers = new Map(
+					runs.map((run) => [
+						`${run.promptId}:${run.model}`,
+						buildSpreadsheetAnswer(
+							run,
+							citationRows.filter((item) => item.promptRunId === run.id),
+							brand?.name ?? "",
+							catalog,
+						),
+					]),
+				);
+				const promptMap = new Map(promptRows.map((item) => [item.id, item]));
+				return {
+					asOf,
+					mentionRevision,
+					rows: promptIds.flatMap((id) => {
+						const prompt = promptMap.get(id);
+						if (!prompt) return [];
+						const chatgpt = answers.get(`${id}:chatgpt`) ?? null;
+						const aiMode = answers.get(`${id}:google-ai-mode`) ?? null;
+						const dates = [chatgpt?.createdAt, aiMode?.createdAt].filter((value): value is string => !!value).sort();
+						return [{ ...prompt, lastRunAt: dates.at(-1) ?? null, chatgpt, aiMode }];
+					}),
+				};
+			},
+			{ isolationLevel: "repeatable read", accessMode: "read only" },
 		);
-		const promptMap = new Map(promptRows.map((item) => [item.id, item]));
-		return {
-			asOf,
-			rows: promptIds.flatMap((id) => {
-				const prompt = promptMap.get(id);
-				if (!prompt) return [];
-				const chatgpt = answers.get(`${id}:chatgpt`) ?? null;
-				const aiMode = answers.get(`${id}:google-ai-mode`) ?? null;
-				const dates = [chatgpt?.createdAt, aiMode?.createdAt].filter((value): value is string => !!value).sort();
-				return [{ ...prompt, lastRunAt: dates.at(-1) ?? null, chatgpt, aiMode }];
-			}),
-		};
 	});

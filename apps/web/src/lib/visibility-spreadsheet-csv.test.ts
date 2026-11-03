@@ -3,6 +3,7 @@ import type { SpreadsheetAnswer, VisibilitySpreadsheetRow } from "./visibility-s
 import {
 	collectSpreadsheetCsv,
 	quoteCsv,
+	spreadsheetBrands,
 	spreadsheetCsvRow,
 	spreadsheetEvidence,
 	spreadsheetQueries,
@@ -32,6 +33,93 @@ const row = (id: string): VisibilitySpreadsheetRow => ({
 });
 
 describe("spreadsheet CSV", () => {
+	it("exports globally ordered rank, category and basis for both stored AI answers", () => {
+		const ranked: SpreadsheetAnswer = {
+			...answer,
+			mentionAnalysis: {
+				version: 1,
+				coverage: "detected",
+				mentions: [
+					{
+						key: "competitor:other",
+						entityId: "other",
+						name: "競合",
+						kind: "competitor",
+						rank: 1,
+						rankBasis: "explicit",
+						firstOffset: 0,
+						evidence: "1. 競合",
+						matchedText: "競合",
+					},
+					{
+						key: "own:ours",
+						entityId: "ours",
+						name: "自社名",
+						kind: "own",
+						rank: 2,
+						rankBasis: "explicit",
+						firstOffset: 6,
+						evidence: "2. 自社名",
+						matchedText: "自社名",
+					},
+					{
+						key: "unregistered:new",
+						entityId: null,
+						name: "未登録名",
+						kind: "unregistered",
+						rank: 3,
+						rankBasis: "explicit",
+						firstOffset: 13,
+						evidence: "3. 未登録名",
+						matchedText: "未登録名",
+					},
+				],
+			},
+		};
+		expect(spreadsheetBrands(ranked)).toBe(
+			"1位 | 競合 | 競合 | 回答内順位\n2位 | 自社名 | 自社 | 回答内順位\n3位 | 未登録名 | 未登録 | 回答内順位",
+		);
+		const csv = spreadsheetCsvRow({ ...row("1"), chatgpt: ranked, aiMode: ranked }, "domain");
+		expect(csv.match(/3位 \| 未登録名 \| 未登録/g)).toHaveLength(2);
+		const mention = ranked.mentionAnalysis?.mentions[0];
+		if (!mention) throw new Error("Missing test mention");
+		expect(
+			spreadsheetBrands({
+				...ranked,
+				mentionAnalysis: {
+					version: 1,
+					coverage: "detected",
+					mentions: [
+						{ ...mention, rank: 1, rankBasis: "appearance" },
+						{ ...mention, key: "second", rank: null, rankBasis: "unknown" },
+					],
+				},
+			}),
+		).toContain("登場順（検出ブランド内）\n判定不可");
+	});
+	it("rejects an export if a recount publishes between batches", async () => {
+		const ids = Array.from({ length: 21 }, (_, i) => String(i));
+		let call = 0;
+		await expect(
+			collectSpreadsheetCsv({
+				promptIds: ids,
+				mode: "domain",
+				fetchBatch: async (batch) => ({
+					rows: batch.map(row),
+					asOf: answer.createdAt,
+					mentionRevision: ++call === 1 ? "before" : "after",
+				}),
+			}),
+		).rejects.toThrow("Mention results changed");
+		await expect(
+			collectSpreadsheetCsv({
+				promptIds: ["1"],
+				mode: "domain",
+				mentionRevision: "table-before",
+				fetchBatch: async (batch) => ({ rows: batch.map(row), asOf: answer.createdAt, mentionRevision: "after" }),
+			}),
+		).rejects.toThrow("Mention results changed");
+	});
 	it("quotes commas, multiline text and double quotes without losing full answers", () => {
 		expect(quoteCsv('全文, "引用"\n2行目')).toBe('"全文, ""引用""\n2行目"');
 		const csv = spreadsheetCsvRow(row("1"), "domain");

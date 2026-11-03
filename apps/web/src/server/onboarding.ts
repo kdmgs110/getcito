@@ -20,7 +20,8 @@ import {
 	enqueueAnalyzeBrand,
 	getAnalyzeBrandStatus,
 } from "@/lib/analyze-brand-job";
-import { requireAuthSession, requireOrgAccess } from "@/lib/auth/helpers";
+import { requireAuthSession, requireOrgAccess, requireOrgManageAccess } from "@/lib/auth/helpers";
+import { getDeployment } from "@/lib/config/server";
 import { saveWizardOnboarding, wizardOnboardingInputSchema } from "@/server/onboarding-core";
 import { onboardingLocaleSchemaFields } from "@/server/onboarding-locale-schema";
 import { resolveOnboardingLocale } from "./onboarding-locale";
@@ -97,7 +98,8 @@ export const updateOnboardedBrandFn = createServerFn({ method: "POST" })
 	.validator(wizardOnboardingInputSchema)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireOrgAccess(session.user.id, data.brandId);
+		await requireOrgManageAccess(session.user.id, data.brandId);
+		if (getDeployment().features.readOnly) throw new Error("Read-only deployment");
 		return saveWizardOnboarding(data);
 	});
 

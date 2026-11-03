@@ -9,7 +9,9 @@ import { Download, Table2 } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { SiGoogle, SiOpenai } from "react-icons/si";
 import ReactMarkdown from "react-markdown";
+import { BrandMentions, MentionRecountProgress } from "@/components/brand-mentions";
 import { useVisibilitySpreadsheet } from "@/hooks/use-visibility-spreadsheet";
+import { mt } from "@/i18n/brand-mentions-labels";
 import { st } from "@/i18n/visibility-spreadsheet-labels";
 import { formatDateTime } from "@/lib/app-locale";
 import type { LookbackPeriod } from "@/lib/chart-utils";
@@ -25,8 +27,8 @@ import { getVisibilitySpreadsheetRowsFn } from "@/server/visibility-spreadsheet"
 
 // Fixed-height, clipped previews keep the DOM bounded; complete values are available in the dialog and CSV.
 const ROW_HEIGHT = 156;
-const GRID = "44px 260px 160px 156px 360px 220px 340px 380px 360px";
-const TABLE_WIDTH = 2280;
+const GRID = "44px 260px 160px 156px 360px 440px 340px 380px 360px";
+const TABLE_WIDTH = 2500;
 const CELL = "h-full min-w-0 overflow-hidden border-r border-b p-3 text-xs leading-relaxed";
 const promptSticky = "md:sticky md:left-11 md:z-10 bg-background";
 const tagsSticky = "md:sticky md:left-[304px] md:z-10 bg-muted shadow-sm";
@@ -65,6 +67,7 @@ function SpreadsheetSession({
 	const scrollRef = useRef<HTMLElement>(null);
 	const [mode, setMode] = useState<EvidenceMode>("domain");
 	const [selected, setSelected] = useState<VisibilitySpreadsheetRow | null>(null);
+	const selectedRow = selected ? (data.rows.find((row) => row.id === selected.id) ?? selected) : null;
 	const [exportProgress, setExportProgress] = useState<number | null>(null);
 	const [exportError, setExportError] = useState(false);
 	const exportController = useRef<AbortController | null>(null);
@@ -106,6 +109,7 @@ function SpreadsheetSession({
 				mode,
 				signal: controller.signal,
 				asOf: data.asOf,
+				mentionRevision: data.mentionRevision,
 				onProgress: setExportProgress,
 				fetchBatch: (ids, asOf) =>
 					getVisibilitySpreadsheetRowsFn({ data: { brandId, promptIds: ids, lookback, asOf } }),
@@ -130,6 +134,7 @@ function SpreadsheetSession({
 	return (
 		<section aria-label={st("spreadsheet")} className="min-w-0 space-y-2">
 			<p className="text-pretty text-xs text-muted-foreground">{st("comparison")}</p>
+			<MentionRecountProgress brandId={brandId} />
 			<div className="overflow-hidden rounded-lg border bg-background">
 				<div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
 					<div className="flex items-center gap-2">
@@ -222,7 +227,7 @@ function SpreadsheetSession({
 								</th>
 								<th scope="col" className={CELL}>
 									{st("brands")}
-									<span className="block font-normal text-muted-foreground">{st("registeredBrands")}</span>
+									<span className="block font-normal text-muted-foreground">{mt("columns")}</span>
 								</th>
 								<th scope="col" className={CELL}>
 									{st("queries")}
@@ -249,6 +254,7 @@ function SpreadsheetSession({
 							{items.map((item) => (
 								<SpreadsheetRow
 									key={item.key}
+									brandId={brandId}
 									row={data.rows[item.index]}
 									index={item.index}
 									top={item.start - 96}
@@ -303,18 +309,18 @@ function SpreadsheetSession({
 			>
 				<DialogContent className="max-h-[85dvh] overflow-auto sm:max-w-5xl">
 					<DialogHeader>
-						<DialogTitle className="text-balance leading-relaxed">{selected?.value}</DialogTitle>
+						<DialogTitle className="text-balance leading-relaxed">{selectedRow?.value}</DialogTitle>
 						<DialogDescription>{st("detailDescription")}</DialogDescription>
 					</DialogHeader>
-					{selected && (
+					{selectedRow && (
 						<>
 							<div className="flex flex-wrap gap-1">
-								{selected.tags.map((tag) => (
+								{selectedRow.tags.map((tag) => (
 									<Chip key={tag}>{tag}</Chip>
 								))}
 							</div>
-							<AnswerDetail label="ChatGPT Web" answer={selected.chatgpt} />
-							<AnswerDetail label="Google AIモード" answer={selected.aiMode} />
+							<AnswerDetail brandId={brandId} label="ChatGPT Web" answer={selectedRow.chatgpt} />
+							<AnswerDetail brandId={brandId} label="Google AIモード" answer={selectedRow.aiMode} />
 						</>
 					)}
 				</DialogContent>
@@ -324,12 +330,14 @@ function SpreadsheetSession({
 }
 
 const SpreadsheetRow = memo(function SpreadsheetRow({
+	brandId,
 	row,
 	index,
 	top,
 	mode,
 	onSelect,
 }: {
+	brandId: string;
 	row: VisibilitySpreadsheetRow;
 	index: number;
 	top: number;
@@ -366,18 +374,17 @@ const SpreadsheetRow = memo(function SpreadsheetRow({
 				<AnswerPreview answer={row.chatgpt} onClick={() => onSelect(row)} />
 			</td>
 			<td className={CELL}>
-				<div className="flex max-h-32 flex-wrap content-start gap-1 overflow-hidden">
-					{row.chatgpt ? (
-						row.chatgpt.mentionedBrands.length ? (
-							row.chatgpt.mentionedBrands.map((name) => <Chip key={name}>{name}</Chip>)
-						) : (
-							<Muted>{st("noBrands")}</Muted>
-						)
-					) : (
-						<Muted>{st("missing")}</Muted>
-					)}
-				</div>
-				{(row.chatgpt?.mentionedBrands.length ?? 0) > 4 && <DetailButton onClick={() => onSelect(row)} />}
+				{row.chatgpt ? (
+					<BrandMentions
+						brandId={brandId}
+						runId={row.chatgpt.runId}
+						analysis={row.chatgpt.mentionAnalysis}
+						fallbackNames={row.chatgpt.mentionedBrands}
+						compact
+					/>
+				) : (
+					<Muted>{st("missing")}</Muted>
+				)}
 			</td>
 			<td className={CELL}>
 				<p className="line-clamp-5 whitespace-pre-line break-words">{spreadsheetQueries(row.chatgpt)}</p>
@@ -495,7 +502,15 @@ function EvidencePreview({ answer, mode }: { answer: SpreadsheetAnswer | null; m
 	);
 }
 
-function AnswerDetail({ label, answer }: { label: string; answer: SpreadsheetAnswer | null }) {
+function AnswerDetail({
+	brandId,
+	label,
+	answer,
+}: {
+	brandId: string;
+	label: string;
+	answer: SpreadsheetAnswer | null;
+}) {
 	return (
 		<section className="min-w-0 space-y-3 border-t pt-4">
 			<div className="flex flex-wrap items-center justify-between gap-3">
@@ -507,16 +522,13 @@ function AnswerDetail({ label, answer }: { label: string; answer: SpreadsheetAns
 			</div>
 			{answer && (
 				<>
-					<h4 className="text-sm font-medium">
-						{st("brands")} <Muted>{st("registeredBrands")}</Muted>
-					</h4>
-					<div className="flex flex-wrap gap-1">
-						{answer.mentionedBrands.length ? (
-							answer.mentionedBrands.map((name) => <Chip key={name}>{name}</Chip>)
-						) : (
-							<Muted>{st("noBrands")}</Muted>
-						)}
-					</div>
+					<h4 className="text-sm font-medium">{st("brands")}</h4>
+					<BrandMentions
+						brandId={brandId}
+						runId={answer.runId}
+						analysis={answer.mentionAnalysis}
+						fallbackNames={answer.mentionedBrands}
+					/>
 					<h4 className="text-sm font-medium">{st("queries")}</h4>
 					<p className="whitespace-pre-line break-words text-sm">{spreadsheetQueries(answer)}</p>
 					<h4 className="text-sm font-medium">{st("evidence")}</h4>

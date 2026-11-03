@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@workspace/ui/component
  */
 import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { PromptBrandMentions } from "@/components/brand-mentions";
 import { type CitationData, CitationsDisplay } from "@/components/citations-display";
 import { ListPagination } from "@/components/list-pagination";
 import { LookbackSelector, useLookbackPeriod } from "@/components/lookback-selector";
@@ -400,6 +401,18 @@ function PromptHistoryPage() {
 
 			{/* TAB CONTENT */}
 			<div className="pt-6 space-y-6">
+				{(activeTab === "mentions" || activeTab === "responses") && (
+					<PromptBrandMentions
+						brandId={brandId}
+						promptId={promptId}
+						lookback={lookback}
+						model={historyModel}
+						targetKey={measurementSelection.targetKey}
+						runId={measurementSelection.runId}
+						attemptId={measurementSelection.attemptId}
+						language={language}
+					/>
+				)}
 				{activeTab === "mentions" && (
 					<MentionsTab
 						isLoading={isStatsLoading}

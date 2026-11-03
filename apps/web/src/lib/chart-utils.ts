@@ -354,7 +354,7 @@ import type { Brand, Competitor, PromptRun } from "@workspace/lib/db/schema";
  * Calculate visibility percentages for brand vs competitors from prompt runs
  */
 export function calculateVisibilityPercentages(
-	promptRuns: PromptRun[],
+	promptRuns: Pick<PromptRun, "createdAt" | "brandMentioned" | "competitorsMentioned">[],
 	brand: Brand,
 	competitors: Competitor[],
 	lookback: LookbackPeriod,
@@ -418,7 +418,7 @@ export function calculateVisibilityPercentages(
 			acc[dateKey].push(run);
 			return acc;
 		},
-		{} as Record<string, PromptRun[]>,
+		{} as Record<string, typeof promptRuns>,
 	);
 
 	// Calculate visibility percentages for each date in the UTC range

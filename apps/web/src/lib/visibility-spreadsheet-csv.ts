@@ -31,6 +31,35 @@ export function spreadsheetQueries(answer: SpreadsheetAnswer | null): string {
 			: st("unknown");
 }
 
+/** Rank is scoped to one saved answer, never inferred from registration order. */
+export function spreadsheetBrands(answer: SpreadsheetAnswer | null): string {
+	if (!answer) return st("missing");
+	if (!answer.mentionAnalysis) return answer.mentionedBrands.join("\n") || st("noBrands");
+	return (
+		answer.mentionAnalysis.mentions
+			.map((mention) => {
+				const rank =
+					mention.rank === null
+						? st("unknownRank")
+						: mention.rankBasis === "explicit"
+							? st("explicitRank", { rank: mention.rank })
+							: st("appearanceRank", { rank: mention.rank });
+				const kind = st(
+					mention.kind === "own" ? "ownBrand" : mention.kind === "competitor" ? "competitorBrand" : "unregisteredBrand",
+				);
+				const basis = st(
+					mention.rankBasis === "explicit"
+						? "explicitBasis"
+						: mention.rankBasis === "appearance"
+							? "appearanceBasis"
+							: "unknownRank",
+				);
+				return `${rank} | ${mention.name} | ${kind} | ${basis}`;
+			})
+			.join("\n") || st("noBrands")
+	);
+}
+
 export function spreadsheetEvidence(answer: SpreadsheetAnswer | null, mode: EvidenceMode): string {
 	if (!answer) return st("missing");
 	const items =
@@ -61,6 +90,7 @@ export function spreadsheetCsvHeader(): string {
 		"aiMode",
 		"chatgptDate",
 		"aiModeDate",
+		"aiModeBrands",
 	]
 		.map((key) => quoteCsv(st(key as Parameters<typeof st>[0])))
 		.join(",")}\r\n`;
@@ -72,12 +102,13 @@ export function spreadsheetCsvRow(row: VisibilitySpreadsheetRow, mode: EvidenceM
 		row.tags.join("\n"),
 		row.lastRunAt ? formatDateTime(row.lastRunAt) : st("missing"),
 		spreadsheetAnswerText(row.chatgpt),
-		row.chatgpt ? row.chatgpt.mentionedBrands.join("\n") || st("noBrands") : st("missing"),
+		spreadsheetBrands(row.chatgpt),
 		spreadsheetQueries(row.chatgpt),
 		spreadsheetEvidence(row.chatgpt, mode),
 		spreadsheetAnswerText(row.aiMode),
 		row.chatgpt ? formatDateTime(row.chatgpt.createdAt) : "",
 		row.aiMode ? formatDateTime(row.aiMode.createdAt) : "",
+		spreadsheetBrands(row.aiMode),
 	]
 		.map(quoteCsv)
 		.join(",")}\r\n`;
@@ -91,6 +122,7 @@ export async function collectSpreadsheetCsv({
 	onProgress,
 	signal,
 	asOf: initialAsOf,
+	mentionRevision: initialMentionRevision,
 }: {
 	promptIds: readonly string[];
 	mode: EvidenceMode;
@@ -98,13 +130,18 @@ export async function collectSpreadsheetCsv({
 	onProgress?: (count: number) => void;
 	signal?: AbortSignal;
 	asOf?: string;
+	mentionRevision?: string;
 }): Promise<Blob> {
 	const parts = ["\uFEFF", spreadsheetCsvHeader()];
 	let asOf = initialAsOf;
+	let mentionRevision = initialMentionRevision;
 	for (let start = 0; start < promptIds.length; start += SPREADSHEET_BATCH_SIZE) {
 		signal?.throwIfAborted();
 		const ids = promptIds.slice(start, start + SPREADSHEET_BATCH_SIZE);
 		const batch = await fetchBatch(ids, asOf);
+		if (mentionRevision !== undefined && batch.mentionRevision !== mentionRevision)
+			throw new Error("Mention results changed during export; retry with the updated table");
+		mentionRevision ??= batch.mentionRevision;
 		signal?.throwIfAborted();
 		asOf ??= batch.asOf;
 		const rows = new Map(batch.rows.map((row) => [row.id, row]));

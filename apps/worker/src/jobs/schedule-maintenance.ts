@@ -1,4 +1,9 @@
 import { parseScrapeTargets } from "@workspace/config/scrape-targets";
+import {
+	MENTION_RECOUNT_POLICY,
+	MENTION_RECOUNT_QUEUE,
+	recoverMentionRecounts,
+} from "@workspace/lib/brand-mention-recount";
 import { FIRST_RUN_JOB_PRIORITY, getDefaultDelayHours, PROCESS_PROMPT_JOB_POLICY } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
 import { brands, promptRuns, prompts } from "@workspace/lib/db/schema";
@@ -35,6 +40,12 @@ export async function scheduleMaintenanceJob(jobs: Job<ScheduleMaintenanceData>[
 }
 
 async function runMaintenanceCheck(): Promise<void> {
+	await recoverMentionRecounts(async (data, client) => {
+		await boss.send(MENTION_RECOUNT_QUEUE, data, {
+			...MENTION_RECOUNT_POLICY,
+			db: { executeSql: (text, values) => client.query(text, values) },
+		});
+	});
 	const recoveringPrompts = await recoverDataForSeoTasks(
 		(data, options) => boss.send("process-prompt", data, options),
 		new Set(parseScrapeTargets(process.env.SCRAPE_TARGETS).map(measurementTargetKey)),

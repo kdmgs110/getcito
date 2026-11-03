@@ -9,14 +9,18 @@
  */
 
 import { normalizeBrandLocale } from "@workspace/lib/brand-locale";
+import { startMentionRecount, withMentionTransaction } from "@workspace/lib/brand-mention-recount";
 import { MAX_COMPETITORS } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
+import * as schema from "@workspace/lib/db/schema";
 import { brands, competitors, prompts } from "@workspace/lib/db/schema";
 import { computeSystemTags, sanitizeUserTags } from "@workspace/lib/tag-utils";
 import { count, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { z } from "zod";
 import { dedupeAliases, dedupeDomains } from "@/lib/domain-categories";
 import { createMultiplePromptJobSchedulers } from "@/lib/job-scheduler";
+import { enqueueMentionRecount } from "@/lib/mention-recount-client";
 import { onboardingLocaleSchemaFields } from "@/server/onboarding-locale-schema";
 
 // ============================================================================
@@ -235,23 +239,30 @@ export function apiUpdateInputToInternal(
 	return result;
 }
 
-async function insertCompetitors(args: {
-	brandId: string;
-	websiteHost: string;
-	source: { name: string; domains: string[]; aliases: string[] }[];
-}): Promise<number> {
+async function insertCompetitors(
+	args: {
+		brandId: string;
+		websiteHost: string;
+		source: { name: string; domains: string[]; aliases: string[] }[];
+	},
+	connection: Pick<typeof db, "query" | "select" | "insert"> = db,
+): Promise<number> {
 	if (args.source.length === 0) return 0;
 
-	const existing = await db.query.competitors.findMany({
+	const existing = await connection.query.competitors.findMany({
 		where: eq(competitors.brandId, args.brandId),
 	});
 	const existingDomains = new Set(existing.flatMap((c) => c.domains));
+	const nameKey = (name: string) => name.normalize("NFKC").trim().toLowerCase();
+	const existingNames = new Set(existing.flatMap((c) => [c.name, ...c.aliases]).map(nameKey));
 
 	const toInsert: Array<{ brandId: string; name: string; domains: string[]; aliases: string[] }> = [];
 	for (const c of args.source) {
 		const cleaned = dedupeDomains(c.domains).filter((d) => d !== args.websiteHost);
-		if (cleaned.length === 0) continue;
+		if (!c.name.trim() || existingNames.has(nameKey(c.name))) continue;
 		if (cleaned.some((d) => existingDomains.has(d))) continue;
+		existingNames.add(nameKey(c.name));
+		for (const domain of cleaned) existingDomains.add(domain);
 		toInsert.push({
 			brandId: args.brandId,
 			name: c.name.trim(),
@@ -261,7 +272,7 @@ async function insertCompetitors(args: {
 	}
 	if (toInsert.length === 0) return 0;
 
-	const [{ count: currentCount }] = await db
+	const [{ count: currentCount }] = await connection
 		.select({ count: count() })
 		.from(competitors)
 		.where(eq(competitors.brandId, args.brandId));
@@ -271,7 +282,7 @@ async function insertCompetitors(args: {
 		);
 	}
 
-	await db.insert(competitors).values(toInsert);
+	await connection.insert(competitors).values(toInsert);
 	return toInsert.length;
 }
 
@@ -377,8 +388,11 @@ export async function createBrand(input: CreateBrandInput): Promise<BrandResult>
 // updateBrand — pure brand-level update
 // ============================================================================
 
-export async function updateBrand(input: UpdateBrandInput): Promise<BrandResult> {
-	const existing = await db.query.brands.findFirst({ where: eq(brands.id, input.brandId) });
+export async function updateBrand(
+	input: UpdateBrandInput,
+	connection: Pick<typeof db, "query" | "update"> = db,
+): Promise<BrandResult> {
+	const existing = await connection.query.brands.findFirst({ where: eq(brands.id, input.brandId) });
 	if (!existing) throw new BrandNotFoundError(input.brandId);
 
 	const formattedWebsite = input.website ? validateAndFormatWebsite(input.website) : null;
@@ -403,8 +417,8 @@ export async function updateBrand(input: UpdateBrandInput): Promise<BrandResult>
 	if (input.productsAndServices !== undefined) patch.productsAndServices = input.productsAndServices;
 	if (input.keywords !== undefined) patch.keywords = input.keywords;
 
-	await db.update(brands).set(patch).where(eq(brands.id, input.brandId));
-	const refreshed = await db.query.brands.findFirst({ where: eq(brands.id, input.brandId) });
+	await connection.update(brands).set(patch).where(eq(brands.id, input.brandId));
+	const refreshed = await connection.query.brands.findFirst({ where: eq(brands.id, input.brandId) });
 	return buildBrandResult(refreshed!);
 }
 
@@ -413,33 +427,44 @@ export async function updateBrand(input: UpdateBrandInput): Promise<BrandResult>
 // ============================================================================
 
 export async function saveWizardOnboarding(input: WizardOnboardingInput): Promise<BrandResult> {
-	await updateBrand({
-		brandId: input.brandId,
-		targetLanguage: input.targetLanguage,
-		targetMarket: input.targetMarket,
-		brandName: input.brandName,
-		website: input.website,
-		additionalDomains: input.additionalDomains,
-		aliases: input.aliases,
-		shortDescription: input.shortDescription,
-		productsAndServices: input.productsAndServices,
-		keywords: input.keywords,
-	});
+	const existing = await withMentionTransaction(input.brandId, async (client) => {
+		const connection = drizzle(client, { schema });
+		await updateBrand(
+			{
+				brandId: input.brandId,
+				targetLanguage: input.targetLanguage,
+				targetMarket: input.targetMarket,
+				brandName: input.brandName,
+				website: input.website,
+				additionalDomains: input.additionalDomains,
+				aliases: input.aliases,
+				shortDescription: input.shortDescription,
+				productsAndServices: input.productsAndServices,
+				keywords: input.keywords,
+			},
+			connection,
+		);
 
-	await db.update(brands).set({ onboarded: true, updatedAt: new Date() }).where(eq(brands.id, input.brandId));
+		await connection.update(brands).set({ onboarded: true, updatedAt: new Date() }).where(eq(brands.id, input.brandId));
 
-	const existing = await db.query.brands.findFirst({ where: eq(brands.id, input.brandId) });
-	if (!existing) throw new BrandNotFoundError(input.brandId);
-	const websiteHost = new URL(existing.website).hostname.replace(/^www\./, "");
+		const savedBrand = await connection.query.brands.findFirst({ where: eq(brands.id, input.brandId) });
+		if (!savedBrand) throw new BrandNotFoundError(input.brandId);
+		const websiteHost = new URL(savedBrand.website).hostname.replace(/^www\./, "");
 
-	await insertCompetitors({
-		brandId: input.brandId,
-		websiteHost,
-		source: (input.competitors ?? []).map((c) => ({
-			name: c.name,
-			domains: c.domains ?? [],
-			aliases: c.aliases ?? [],
-		})),
+		await insertCompetitors(
+			{
+				brandId: input.brandId,
+				websiteHost,
+				source: (input.competitors ?? []).map((c) => ({
+					name: c.name,
+					domains: c.domains ?? [],
+					aliases: c.aliases ?? [],
+				})),
+			},
+			connection,
+		);
+		await startMentionRecount(client, input.brandId, enqueueMentionRecount);
+		return savedBrand;
 	});
 
 	await insertPrompts({

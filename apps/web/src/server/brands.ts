@@ -4,14 +4,20 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { normalizeBrandLocale } from "@workspace/lib/brand-locale";
-import { MAX_COMPETITORS } from "@workspace/lib/constants";
+import {
+	registerMentionBrand,
+	saveMentionCompetitors,
+	startMentionRecount,
+	withMentionTransaction,
+} from "@workspace/lib/brand-mention-recount";
 import { db } from "@workspace/lib/db/db";
 import { BrandCreationConflictError, provisionAdditionalLocalBrand } from "@workspace/lib/db/provisioning";
 import { type Brand, type BrandWithPrompts, brands, competitors, prompts } from "@workspace/lib/db/schema";
 import { measurementTargetKey } from "@workspace/lib/measurement";
 import type { ModelConfig } from "@workspace/lib/providers";
 import { parseScrapeTargets, selectTargetsForBrand } from "@workspace/lib/providers";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { z } from "zod";
 import {
 	listUserOrganizations,
@@ -25,6 +31,7 @@ import { normalizeBrandUpdate } from "@/lib/brand-settings";
 import { validateWebsiteUrl } from "@/lib/brand-website";
 import { getDeployment } from "@/lib/config/server";
 import { cleanAndValidateDomain } from "@/lib/domain-categories";
+import { enqueueMentionRecount } from "@/lib/mention-recount-client";
 import { deleteBrandCascade } from "@/server/brand-cascade";
 import { saveBrandMeasurementTargets } from "@/server/brand-measurement-settings";
 
@@ -269,7 +276,8 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireOrgAccess(session.user.id, data.brandId);
+		await requireOrgManageAccess(session.user.id, data.brandId);
+		if (getDeployment().features.readOnly) throw new Error("Read-only deployment");
 
 		const normalized = normalizeBrandUpdate({
 			targetLanguage: data.targetLanguage,
@@ -287,11 +295,24 @@ export const updateBrandFn = createServerFn({ method: "POST" })
 			...(data.shortDescription !== undefined && { shortDescription: data.shortDescription }),
 		};
 
-		const result = await db
-			.update(brands)
-			.set({ ...updateData, updatedAt: new Date() })
-			.where(eq(brands.id, data.brandId))
-			.returning();
+		const affectsMentions =
+			data.name !== undefined ||
+			data.website !== undefined ||
+			data.aliases !== undefined ||
+			data.additionalDomains !== undefined;
+		const save = (connection: Pick<typeof db, "update">) =>
+			connection
+				.update(brands)
+				.set({ ...updateData, updatedAt: new Date() })
+				.where(eq(brands.id, data.brandId))
+				.returning();
+		const result = affectsMentions
+			? await withMentionTransaction(data.brandId, async (client) => {
+					const rows = await save(drizzle(client));
+					await startMentionRecount(client, data.brandId, enqueueMentionRecount);
+					return rows;
+				})
+			: await save(db);
 
 		if (!result[0]) {
 			throw new Error("Failed to update brand");
@@ -336,8 +357,9 @@ export const updateCompetitors = createServerFn({ method: "POST" })
 			brandId: z.string(),
 			competitors: z.array(
 				z.object({
-					name: z.string(),
-					domains: z.array(z.string()).min(1),
+					id: z.string().uuid().optional(),
+					name: z.string().trim().min(1).max(200),
+					domains: z.array(z.string()),
 					aliases: z.array(z.string()).optional().default([]),
 				}),
 			),
@@ -345,40 +367,11 @@ export const updateCompetitors = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireOrgAccess(session.user.id, data.brandId);
+		await requireOrgManageAccess(session.user.id, data.brandId);
+		if (getDeployment().features.readOnly) throw new Error("Read-only deployment");
 
-		// Validate and clean domains
-		const cleanedCompetitors = data.competitors.map((c) => {
-			const cleanedDomains = c.domains.map((d) => cleanAndValidateDomain(d));
-			const invalid = c.domains.filter((_, i) => !cleanedDomains[i]);
-			if (invalid.length > 0) {
-				throw new Error(`Invalid domain(s) for "${c.name}": ${invalid.join(", ")}`);
-			}
-			return {
-				name: c.name,
-				domains: cleanedDomains.filter(Boolean) as string[],
-				aliases: c.aliases,
-			};
-		});
-
-		return db.transaction(async (tx) => {
-			await tx.delete(competitors).where(eq(competitors.brandId, data.brandId));
-
-			if (cleanedCompetitors.length > 0) {
-				await tx.insert(competitors).values(
-					cleanedCompetitors.map((c) => ({
-						brandId: data.brandId,
-						name: c.name,
-						domains: c.domains,
-						aliases: c.aliases,
-					})),
-				);
-			}
-
-			return tx.query.competitors.findMany({
-				where: eq(competitors.brandId, data.brandId),
-			});
-		});
+		await saveMentionCompetitors(data.brandId, data.competitors, enqueueMentionRecount);
+		return db.query.competitors.findMany({ where: eq(competitors.brandId, data.brandId) });
 	});
 
 /**
@@ -393,27 +386,16 @@ export const addDomainToBrandFn = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireOrgAccess(session.user.id, data.brandId);
+		await requireOrgManageAccess(session.user.id, data.brandId);
+		if (getDeployment().features.readOnly) throw new Error("Read-only deployment");
 
-		const domain = cleanAndValidateDomain(data.domain);
-		if (!domain) throw new Error(`Invalid domain: ${data.domain}`);
-
-		const [result] = await db
-			.update(brands)
-			.set({
-				additionalDomains: sql`array_append(${brands.additionalDomains}, ${domain})`,
-				updatedAt: new Date(),
-			})
-			.where(and(eq(brands.id, data.brandId), sql`NOT (${domain} = ANY(${brands.additionalDomains}))`))
-			.returning();
-
-		if (result) return result;
-
-		const brand = await db.query.brands.findFirst({
-			where: eq(brands.id, data.brandId),
-		});
+		const brand = await db.query.brands.findFirst({ where: eq(brands.id, data.brandId) });
 		if (!brand) throw new Error("Brand not found");
-		return brand;
+		await registerMentionBrand(
+			{ brandId: data.brandId, name: brand.name, domain: data.domain, target: "own" },
+			enqueueMentionRecount,
+		);
+		return db.query.brands.findFirst({ where: eq(brands.id, data.brandId) });
 	});
 
 /**
@@ -429,25 +411,24 @@ export const addDomainToCompetitorFn = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireOrgAccess(session.user.id, data.brandId);
+		await requireOrgManageAccess(session.user.id, data.brandId);
+		if (getDeployment().features.readOnly) throw new Error("Read-only deployment");
 
 		const existing = await db.query.competitors.findFirst({
 			where: and(eq(competitors.id, data.competitorId), eq(competitors.brandId, data.brandId)),
 		});
 		if (!existing) throw new Error("Competitor not found");
-
-		const domain = cleanAndValidateDomain(data.domain);
-		if (!domain) throw new Error(`Invalid domain: ${data.domain}`);
-		if (existing.domains.includes(domain)) return existing;
-
-		const updatedDomains = [...existing.domains, domain];
-		const [result] = await db
-			.update(competitors)
-			.set({ domains: updatedDomains, updatedAt: new Date() })
-			.where(eq(competitors.id, data.competitorId))
-			.returning();
-
-		return result;
+		await registerMentionBrand(
+			{
+				brandId: data.brandId,
+				name: existing.name,
+				domain: data.domain,
+				target: "competitor",
+				competitorId: existing.id,
+			},
+			enqueueMentionRecount,
+		);
+		return db.query.competitors.findFirst({ where: eq(competitors.id, existing.id) });
 	});
 
 /**
@@ -463,30 +444,14 @@ export const createCompetitorFromDomainFn = createServerFn({ method: "POST" })
 	)
 	.handler(async ({ data }) => {
 		const session = await requireAuthSession();
-		await requireOrgAccess(session.user.id, data.brandId);
+		await requireOrgManageAccess(session.user.id, data.brandId);
+		if (getDeployment().features.readOnly) throw new Error("Read-only deployment");
 
-		const domain = cleanAndValidateDomain(data.domain);
-		if (!domain) throw new Error(`Invalid domain: ${data.domain}`);
-
-		const [currentCount] = await db
-			.select({ count: count() })
-			.from(competitors)
-			.where(eq(competitors.brandId, data.brandId));
-
-		if ((currentCount?.count || 0) >= MAX_COMPETITORS) {
-			throw new Error(`Cannot add competitor. Maximum of ${MAX_COMPETITORS} competitors reached.`);
-		}
-
-		const [result] = await db
-			.insert(competitors)
-			.values({
-				brandId: data.brandId,
-				name: data.name.trim(),
-				domains: [domain],
-			})
-			.returning();
-
-		return result;
+		const result = await registerMentionBrand(
+			{ brandId: data.brandId, name: data.name, domain: data.domain, target: "new" },
+			enqueueMentionRecount,
+		);
+		return db.query.competitors.findFirst({ where: eq(competitors.id, result.entityId) });
 	});
 
 /**
