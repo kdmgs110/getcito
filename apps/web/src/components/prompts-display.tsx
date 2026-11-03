@@ -1,26 +1,32 @@
-import { t } from "@/i18n";
-import { useMemo } from "react";
+import { IconEditCircle } from "@tabler/icons-react";
+import { Link, useSearch } from "@tanstack/react-router";
+import type { Brand, Competitor } from "@workspace/lib/db/schema";
+import { Button } from "@workspace/ui/components/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@workspace/ui/components/card";
 import { Separator } from "@workspace/ui/components/separator";
-import { Button } from "@workspace/ui/components/button";
+import { Skeleton } from "@workspace/ui/components/skeleton";
 import { Inbox } from "lucide-react";
-import { IconEditCircle } from "@tabler/icons-react";
-import { usePromptsSummary } from "@/hooks/use-prompts-summary";
+import { lazy, Suspense, useMemo } from "react";
+import { ALL_MODELS_VALUE, getAvailableModels } from "@/components/filter-bar";
+import { FilteredListShell } from "@/components/filtered-list-shell";
+import { PageHeader } from "@/components/page-header";
+import { PromptOrderDropdown } from "@/components/prompt-order-dropdown";
+import { VirtualizedPromptList } from "@/components/virtualized-prompt-list";
+import { VisibilityBarSection } from "@/components/visibility-bar-section";
+import { VisibilityViewDropdown } from "@/components/visibility-view-dropdown";
+import { ChartDataProvider } from "@/contexts/chart-data-context";
 import { useBatchChartData } from "@/hooks/use-batch-chart-data";
 import { useBrand, useCompetitors } from "@/hooks/use-brands";
 import { useListFilters } from "@/hooks/use-list-filters";
-import { Link, useSearch } from "@tanstack/react-router";
-import { VirtualizedPromptList } from "@/components/virtualized-prompt-list";
-import { ChartDataProvider } from "@/contexts/chart-data-context";
-import { Skeleton } from "@workspace/ui/components/skeleton";
-import { PageHeader } from "@/components/page-header";
-import { getAvailableModels, ALL_MODELS_VALUE } from "@/components/filter-bar";
-import { FilteredListShell } from "@/components/filtered-list-shell";
-import { PromptOrderDropdown } from "@/components/prompt-order-dropdown";
-import { VisibilityBarSection } from "@/components/visibility-bar-section";
-import { coercePromptOrder, orderPrompts } from "@/lib/prompt-order";
+import { usePromptsSummary } from "@/hooks/use-prompts-summary";
+import { t } from "@/i18n";
 import type { LookbackPeriod } from "@/lib/chart-utils";
-import type { Brand, Competitor } from "@workspace/lib/db/schema";
+import { coercePromptOrder, orderPrompts } from "@/lib/prompt-order";
+import { coerceVisibilityView } from "@/lib/visibility-view";
+
+const VisibilitySpreadsheet = lazy(() =>
+	import("@/components/visibility-spreadsheet").then((m) => ({ default: m.VisibilitySpreadsheet })),
+);
 
 interface PromptsDisplayProps {
 	pageTitle: string;
@@ -52,6 +58,7 @@ function PromptsContent({ brandId, editLink }: { brandId: string | undefined; ed
 	const { brand } = useBrand(brandId);
 	const filters = useListFilters();
 	const { model, lookback, tags, search } = filters;
+	const view = useSearch({ strict: false, select: (s) => coerceVisibilityView((s as { view?: unknown }).view) });
 	// `order` is this route's own search key (not a narrowing filter), so it
 	// rides outside `useListFilters` / `isFiltered`.
 	const order = useSearch({
@@ -104,6 +111,7 @@ function PromptsContent({ brandId, editLink }: { brandId: string | undefined; ed
 			showModelSelector
 			showResultCount
 			filterBarExtras={<PromptOrderDropdown />}
+			filterBarTrailingControls={<VisibilityViewDropdown />}
 			filterSectionExtras={<VisibilityBarSection brandId={brandId} />}
 			isLoading={isInitialLoad}
 			loadingState={<ContentLoadingSkeleton />}
@@ -135,17 +143,23 @@ function PromptsContent({ brandId, editLink }: { brandId: string | undefined; ed
 				</div>
 			}
 		>
-			<ChartSection
-				brandId={brandId}
-				lookback={lookback}
-				selectedModel={model}
-				modelParam={modelParam}
-				searchQuery={search}
-				selectedTags={tags}
-				sortedPrompts={sortedPrompts}
-				availableIndividualModels={availableIndividualModels}
-				brand={brand ?? null}
-			/>
+			{view === "spreadsheet" ? (
+				<Suspense fallback={<Skeleton className="h-96 w-full" />}>
+					<VisibilitySpreadsheet brandId={brandId ?? ""} prompts={sortedPrompts} lookback={lookback} />
+				</Suspense>
+			) : (
+				<ChartSection
+					brandId={brandId}
+					lookback={lookback}
+					selectedModel={model}
+					modelParam={modelParam}
+					searchQuery={search}
+					selectedTags={tags}
+					sortedPrompts={sortedPrompts}
+					availableIndividualModels={availableIndividualModels}
+					brand={brand ?? null}
+				/>
+			)}
 		</FilteredListShell>
 	);
 }
