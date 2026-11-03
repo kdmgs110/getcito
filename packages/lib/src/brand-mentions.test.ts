@@ -196,6 +196,188 @@ describe("analyzeBrandMentions", () => {
 		});
 	});
 
+	it("does not turn job headings, prices, evaluation labels or escaped list markers into brands", () => {
+		const text = [
+			"## 即日参画候補の案件",
+			"**\\. Rails受託システム開発**",
+			"1. Rails受託システム開発",
+			"### Rails受託システム開発メンバー",
+			"**受託システム開発 Railsエンジニア**",
+			"### 毎年11月3日時点で見つかった案件",
+			"**ファンクラブSNS向けバックエンド開発**",
+			"**〜60万円/月**",
+			"### 評価",
+			"**Rating**",
+			"**リモート**",
+			"**必要スキル**",
+			"**合同会社サンプル**",
+			"1. **サンプルエージェント**",
+			"2. Rails案件.com",
+			"3. Legacy Force",
+		].join("\n");
+		expect(analyzeBrandMentions(text, catalog).mentions.map((item) => [item.name, item.kind])).toEqual([
+			["サンプルエージェント", "unregistered"],
+			["Rails案件.com", "own"],
+			["Legacy Force", "competitor"],
+			["合同会社サンプル", "unregistered"],
+		]);
+	});
+
+	it("extracts base brands from recruitment links without counting citation domains or follow-up requirements", () => {
+		const text = [
+			"## 即日参画候補の案件",
+			"### 1\\. Rails受託システム開発",
+			"**50〜60万円/月**",
+			"- 勤務形態：リモート",
+			"- 技術：Rails",
+			"掲載元：Legacy Force・新着案件",
+			"[案件詳細・応募はこちら](https://jobs.example.com/item/123)",
+			"[FreelanceBoxの応募・募集一覧](https://freelancebox.example.com/jobs)",
+			"[TechDirectの案件詳細](https://techdirect.example.com/item/1)",
+			"[TechHeroの案件詳細](https://techhero.example.com/item/2)",
+			"[freelancebox.example.com](https://freelancebox.example.com/jobs)",
+			"[techdirect.example.com +1](https://techdirect.example.com/item/1)",
+			"[techhero.example.com](https://techhero.example.com/item/2)",
+			"## 追加で確認したい案件",
+			"1\\. Railsの実務経験",
+			"2\\. 希望勤務形態",
+			"3\\. 希望月額単価",
+			"4\\. 契約形態",
+			"**評価**",
+		].join("\n");
+		expect(analyzeBrandMentions(text, catalog).mentions.map((item) => [item.name, item.kind])).toEqual([
+			["Legacy Force", "competitor"],
+			["FreelanceBox", "unregistered"],
+			["TechDirect", "unregistered"],
+			["TechHero", "unregistered"],
+		]);
+	});
+
+	it("rejects descriptive headings, follow-up questions and skill or contract labels in realistic answers", () => {
+		const text = [
+			"## 案件を探す際におすすめのサイト",
+			"## 追加で確認したい案件",
+			"[TechDirect](https://techdirect.example.com)",
+			"**案件詳細・応募ページ**",
+			"### Rails以外に実務経験がある技術は何ですか？",
+			"**インフルエンサー管理システム**",
+			"**コアタイムなし**",
+			"- **開発環境・技術スタック**：Ruby on Rails、React",
+			"- **IT専門エージェント（Sample Agent、Example Techなど）**",
+			"### リモートワーク事情",
+			"**React併用Webサービス**",
+			"**大規模自社サービス**",
+			"### 週3日・柔軟な稼働に強いおすすめエージェント",
+			"**フロントエンド**",
+			"**非同期コミュニケーション**",
+			"**周辺技術のセット要件**",
+			"**希望ポジション**",
+			"**フリーランス・業務委託**",
+			"### 次のステップ",
+			"1. **サンプルエージェント**",
+			"2. **Example Tech**",
+		].join("\n");
+		expect(analyzeBrandMentions(text, catalog).mentions.map((item) => item.name)).toEqual([
+			"サンプルエージェント",
+			"Example Tech",
+			"TechDirect",
+		]);
+	});
+
+	it("normalizes recruiting links and duplicated bold link labels to one entity per brand", () => {
+		const text = [
+			"[TechDirectで求人詳細・応募](https://techdirect.example.com/jobs/1)",
+			"[ITプロパートナーズ・案件詳細](https://partner.example.com/jobs/2)",
+			"[Findy FreelanceのRails案件一覧](https://findy.example.com/rails)",
+			"[TechDirect](https://techdirect.example.com)",
+			"- **Freelance Hub[Freelance Hub](https://hub.example.com/jobs)**",
+			"- **サンプルエージェント[サンプルエージェント](https://agent.example.com/jobs)**",
+			"[FLEXYの案件紹介](https://flexy.example.com/jobs)",
+			"[ZAICOの求人詳細・応募](https://zaico.example.com/jobs)",
+			"[SOKUDANのRails求人](https://sokudan.example.com/jobs)",
+		].join("\n");
+		expect(analyzeBrandMentions(text, catalog).mentions.map((item) => item.name)).toEqual([
+			"TechDirect",
+			"ITプロパートナーズ",
+			"Findy Freelance",
+			"Freelance Hub",
+			"サンプルエージェント",
+			"FLEXY",
+			"ZAICO",
+			"SOKUDAN",
+		]);
+	});
+
+	it("keeps a directly linked job-title candidate with its observed destination and alias", () => {
+		const title = "Railsフルリモート開発案件";
+		const url = "https://jobs.example.com/projects/rails-remote?utm_source=answer";
+		const result = analyzeBrandMentions(`1. [${title}](${url})\n2. Rails案件.com`, catalog);
+		expect(result.mentions[0]).toMatchObject({
+			name: title,
+			kind: "unregistered",
+			rank: 1,
+			rankBasis: "explicit",
+			url,
+			domain: "jobs.example.com",
+			suggestedAliases: [title],
+		});
+	});
+
+	it("pairs escaped-numbered job titles with their own action links through a price subheading", () => {
+		const url = "https://jobs.example.com/project/101";
+		const text = [
+			"**1\\. Rails受託システム開発メンバー**",
+			"# 50〜60万円/月",
+			"- 勤務形態：フルリモート",
+			`[案件詳細・応募はこちら](${url})`,
+			`[jobs.example.com](${url})`,
+			"**2\\. Rails案件.com**",
+		].join("\n");
+		const result = analyzeBrandMentions(text, catalog);
+		expect(result.mentions[0]).toMatchObject({
+			name: "Rails受託システム開発メンバー",
+			url,
+			domain: "jobs.example.com",
+			suggestedAliases: ["Rails受託システム開発メンバー"],
+			rank: 1,
+			rankBasis: "explicit",
+		});
+		expect(result.mentions.map((item) => item.name)).toEqual(["Rails受託システム開発メンバー", "Rails案件.com"]);
+	});
+
+	it("does not borrow a URL from a following numbered item or different heading", () => {
+		for (const boundary of ["2\\. Rails案件.com", "## 別の候補", "- **Example Tech**", "- Example Tech：別の候補"]) {
+			const result = analyzeBrandMentions(
+				["1\\. Rails受託システム開発メンバー", boundary, "[案件詳細・応募はこちら](https://next.example.com/job)"].join(
+					"\n",
+				),
+				catalog,
+			);
+			expect(result.mentions.some((item) => item.name === "Rails受託システム開発メンバー")).toBe(false);
+		}
+	});
+
+	it("leaves ambiguous or missing sources empty rather than inferring a URL from a domain", () => {
+		for (const links of [
+			"[詳細](https://one.example.com/job) [応募](https://two.example.com/job)",
+			"source.example.com に掲載。",
+		]) {
+			const result = analyzeBrandMentions(`**サンプルエージェント**\n${links}`, catalog);
+			expect(result.mentions.find((item) => item.name === "サンプルエージェント")?.url).toBeUndefined();
+		}
+	});
+
+	it("keeps configured names and registered link domains even when their labels look generic", () => {
+		const result = analyzeBrandMentions("**評価**\n[月額60万円の開発案件](https://legacy.example.com/jobs)", {
+			own: { id: "own", name: "評価" },
+			competitors: catalog.competitors,
+		});
+		expect(result.mentions.map((item) => [item.name, item.kind])).toEqual([
+			["評価", "own"],
+			["Legacy Force", "competitor"],
+		]);
+	});
+
 	it("recognizes Japanese circled introduction numbers with original offsets", () => {
 		const text = "① Legacy Force\n② Rails案件.com";
 		const result = analyzeBrandMentions(text, catalog);

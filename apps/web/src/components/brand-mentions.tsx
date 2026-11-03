@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BrandMention, BrandMentionAnalysis } from "@workspace/lib/brand-mentions";
+import { safeEvidenceUrl } from "@workspace/lib/measurement";
 import { Button } from "@workspace/ui/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@workspace/ui/components/dialog";
 import { Input } from "@workspace/ui/components/input";
@@ -19,6 +20,57 @@ const kindStyles = {
 	unregistered: "bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
 };
 const actionStyle = "text-xs text-blue-600 underline-offset-2 hover:underline disabled:opacity-50 dark:text-blue-400";
+
+const aliasKey = (value: string) => value.normalize("NFKC").trim().toLowerCase();
+const genericAlias =
+	/^(?:こちら|詳細|詳細はこちら|詳しくはこちら|公式サイト|公式ページ|求人を見る|案件を見る|応募する|click here|details|learn more|read more|apply(?: now)?|view (?:job|details))$/i;
+
+/** Keep answer/anchor spellings independent of an editable canonical brand name. */
+export function suggestedMentionAliases(mention?: BrandMention): string[] {
+	if (!mention) return [];
+	return [
+		...new Map(
+			(mention.suggestedAliases ?? [mention.matchedText || mention.name])
+				.map((alias) => alias.trim())
+				.filter((alias) => alias && alias.length <= 200 && !genericAlias.test(alias) && !/^https?:\/\//i.test(alias))
+				.map((alias) => [aliasKey(alias), alias]),
+		).values(),
+	];
+}
+
+export function registrationAliases(value: string, name: string): string[] {
+	const primary = aliasKey(name);
+	return [
+		...new Map(
+			value
+				.split(/[,、\n]/)
+				.map((alias) => alias.trim())
+				.filter((alias) => alias && aliasKey(alias) !== primary && !genericAlias.test(alias))
+				.map((alias) => [aliasKey(alias), alias]),
+		).values(),
+	];
+}
+
+export function MentionSourceUrl({ url, compact = false }: { url?: string; compact?: boolean }) {
+	const safe = safeEvidenceUrl(url);
+	if (!safe) return null;
+	return (
+		<a
+			href={safe}
+			target="_blank"
+			rel="noopener noreferrer"
+			title={safe}
+			aria-label={`${mt("sourceUrl")}: ${safe}`}
+			className={cn(
+				actionStyle,
+				"inline-block min-w-0 truncate align-bottom",
+				compact ? "max-w-24 shrink" : "max-w-full",
+			)}
+		>
+			{safe}
+		</a>
+	);
+}
 
 export function mentionRankLabel(mention: Pick<BrandMention, "rank" | "rankBasis">) {
 	if (mention.rank === null) return mt("undetermined");
@@ -56,6 +108,7 @@ export function BrandMentionList({
 					) : (
 						<span className={cn("min-w-0", compact ? "truncate" : "break-words")}>{mention.name}</span>
 					)}
+					<MentionSourceUrl url={mention.url} compact={compact} />
 					<span className={cn("shrink-0 rounded px-1.5 text-[11px]", kindStyles[mention.kind])}>
 						{mt(mention.kind)}
 					</span>
@@ -165,6 +218,7 @@ export function BrandMentions({
 							<blockquote className="whitespace-pre-wrap break-words rounded-md border bg-muted/30 p-4 text-sm leading-relaxed">
 								{evidence.evidence}
 							</blockquote>
+							<MentionSourceUrl url={evidence.url} />
 						</>
 					)}
 				</DialogContent>
@@ -199,7 +253,7 @@ function RegisterMentionDialog({
 	const [target, setTarget] = useState("own");
 	const [name, setName] = useState(mention?.name ?? "");
 	const [domain, setDomain] = useState(mention?.domain ?? "");
-	const [aliases, setAliases] = useState("");
+	const [aliases, setAliases] = useState(() => suggestedMentionAliases(mention).join(", "));
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState(false);
 	const fieldId = useId();
@@ -216,10 +270,7 @@ function RegisterMentionDialog({
 					brandId,
 					name: name.trim(),
 					domain: domain.trim() || undefined,
-					aliases: aliases
-						.split(/[,、\n]/)
-						.map((alias) => alias.trim())
-						.filter(Boolean),
+					aliases: registrationAliases(aliases, name),
 					target: mode === "new" ? "new" : target === "own" ? "own" : "competitor",
 					competitorId: mode === "existing" && target !== "own" ? target : undefined,
 					sourceRunId: runId,
@@ -255,6 +306,7 @@ function RegisterMentionDialog({
 						<div className="rounded-md border bg-muted/30 p-3 text-sm">
 							<p className="mb-1 font-medium">{mt("evidenceTitle")}</p>
 							<p className="whitespace-pre-wrap break-words">{mention.evidence}</p>
+							<MentionSourceUrl url={mention.url} />
 						</div>
 					)}
 					<fieldset disabled={saving || unavailable} className="space-y-2">
@@ -326,6 +378,7 @@ function RegisterMentionDialog({
 								disabled={saving}
 								autoComplete="off"
 							/>
+							{mention?.domain && <p className="text-xs text-muted-foreground">{mt("domainFromAnswer")}</p>}
 						</div>
 						<div className="space-y-1.5">
 							<label htmlFor={`${fieldId}-aliases`} className="text-sm font-medium">

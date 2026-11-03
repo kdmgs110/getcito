@@ -10,7 +10,13 @@ vi.mock("@/server/brand-mentions", () => ({
 vi.mock("@/server/brand-mentions-read", () => ({ getPromptBrandMentionsFn: vi.fn() }));
 vi.mock("@/hooks/use-brands", () => ({ useBrand: vi.fn(), useCompetitors: vi.fn() }));
 
-import { BrandMentionList, mentionRankLabel } from "./brand-mentions";
+import {
+	BrandMentionList,
+	MentionSourceUrl,
+	mentionRankLabel,
+	registrationAliases,
+	suggestedMentionAliases,
+} from "./brand-mentions";
 
 const mention = (
 	name: string,
@@ -82,5 +88,44 @@ describe("brand mention list", () => {
 		);
 		expect(html).not.toContain("＋登録");
 		expect(html).not.toContain("を登録");
+	});
+	it("shows a safely linked source URL without changing the extracted brand or rank", () => {
+		const url = "https://jobs.example.com/projects/rails?ref=answer";
+		const html = renderToStaticMarkup(
+			<BrandMentionList mentions={[{ ...mention("Rails開発案件", "unregistered", 2), url }]} compact />,
+		);
+		expect(html).toContain(`href="${url}"`);
+		expect(html).toContain(`aria-label="出典URL: ${url}"`);
+		expect(html).toContain('rel="noopener noreferrer"');
+		expect(html).toContain("truncate");
+		expect(html).toContain("2位");
+		expect(html).toContain("Rails開発案件");
+		for (const unsafe of ["javascript:alert(1)", "data:text/html,unsafe", "https://user:pass@example.com"]) {
+			expect(renderToStaticMarkup(<MentionSourceUrl url={unsafe} />)).toBe("");
+		}
+	});
+	it("prefills grounded answer aliases while excluding generic action links and URLs", () => {
+		const candidate = mention("Rails開発案件", "unregistered", 1);
+		expect(suggestedMentionAliases(candidate)).toEqual(["Rails開発案件"]);
+		expect(
+			suggestedMentionAliases({
+				...candidate,
+				suggestedAliases: ["Rails開発案件", "Ｒａｉｌｓ開発案件", "応募する", "詳細はこちら", "https://example.com"],
+			}),
+		).toEqual(["Ｒａｉｌｓ開発案件"]);
+		expect(suggestedMentionAliases({ ...candidate, matchedText: "詳しくはこちら" })).toEqual([]);
+	});
+	it("retains an original answer spelling when the canonical name changes and deduplicates submitted aliases", () => {
+		const original = "Railsフルリモート開発案件";
+		const canonical = "Rails Jobs";
+		const prefill = suggestedMentionAliases({
+			...mention(original, "unregistered", 1),
+			suggestedAliases: [original],
+		}).join(", ");
+		expect(registrationAliases(prefill, canonical)).toEqual([original]);
+		expect(
+			registrationAliases(`${original}, ${canonical}, Ｒａｉｌｓ Ｊｏｂｓ、${original}\n応募する`, canonical),
+		).toEqual([original]);
+		expect(registrationAliases(prefill, original)).toEqual([]);
 	});
 });
