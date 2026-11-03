@@ -51,16 +51,21 @@ describe.skipIf(!testUrl)("visibility spreadsheet (PostgreSQL)", () => {
 		// Match the production columns used by this read endpoint. Creating only
 		// these tables lets the check run before application migrations in CI.
 		await client.query(`
-			CREATE TABLE brands (id text PRIMARY KEY, name text NOT NULL);
+			CREATE TABLE brands (id text PRIMARY KEY, name text NOT NULL, website text NOT NULL DEFAULT '', aliases text[] NOT NULL DEFAULT '{}', additional_domains text[] NOT NULL DEFAULT '{}');
+			CREATE TABLE brand_mention_recounts (brand_id text PRIMARY KEY, id uuid, completed_at timestamptz);
+			CREATE TABLE competitors (id uuid PRIMARY KEY, brand_id text NOT NULL, name text NOT NULL, domains text[] NOT NULL DEFAULT '{}', aliases text[] NOT NULL DEFAULT '{}', created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 			CREATE TABLE prompts (id uuid PRIMARY KEY, brand_id text NOT NULL, value text NOT NULL, tags text[] NOT NULL, enabled boolean NOT NULL);
 			CREATE TABLE prompt_runs (id uuid PRIMARY KEY, brand_id text NOT NULL, prompt_id uuid NOT NULL, model text NOT NULL,
 				provider text, created_at timestamptz NOT NULL, web_search_enabled boolean NOT NULL, brand_mentioned boolean NOT NULL,
-				competitors_mentioned text[] NOT NULL, web_queries text[] NOT NULL, raw_output json NOT NULL);
+				competitors_mentioned text[] NOT NULL, web_queries text[] NOT NULL, raw_output json NOT NULL, mention_analysis jsonb);
 			CREATE TABLE measurement_attempts (id uuid PRIMARY KEY, prompt_run_id uuid, brand_id text NOT NULL, prompt_id uuid NOT NULL,
 				model text NOT NULL, status text NOT NULL, created_at timestamptz NOT NULL, evidence jsonb);
 			CREATE TABLE citations (prompt_run_id uuid NOT NULL, brand_id text NOT NULL, url text NOT NULL, title text);
 		`);
-		await client.query("INSERT INTO brands VALUES ($1,'自社ブランド'),($2,'他社ブランド')", [brandId, foreignBrandId]);
+		await client.query("INSERT INTO brands(id,name) VALUES ($1,'自社ブランド'),($2,'他社ブランド')", [
+			brandId,
+			foreignBrandId,
+		]);
 		await client.query(
 			"INSERT INTO prompts VALUES ($1,$2,'Rails 案件を探して',ARRAY['フルリモート','高単価'],true),($3,$2,'未取得',ARRAY[]::text[],true),($4,$2,'無効',ARRAY[]::text[],false),($5,$6,'他社プロンプト',ARRAY[]::text[],true)",
 			[promptId, brandId, emptyPromptId, disabledPromptId, foreignPromptId, foreignBrandId],
@@ -97,7 +102,7 @@ describe.skipIf(!testUrl)("visibility spreadsheet (PostgreSQL)", () => {
 							],
 						};
 			await client.query(
-				"INSERT INTO prompt_runs VALUES($1,$2,$3,$4,$5,$6,$7,true,ARRAY['競合ブランド'],ARRAY['Rails 案件'],$8::json)",
+				"INSERT INTO prompt_runs(id,brand_id,prompt_id,model,provider,created_at,web_search_enabled,brand_mentioned,competitors_mentioned,web_queries,raw_output) VALUES($1,$2,$3,$4,$5,$6,$7,true,ARRAY['競合ブランド'],ARRAY['Rails 案件'],$8::json)",
 				[id, brandId, promptId, model, provider, options.createdAt, options.webSearch ?? true, JSON.stringify(raw)],
 			);
 			if (options.status)

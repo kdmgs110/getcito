@@ -10,7 +10,7 @@ export const VISIBILITY_COUNT = 26;
 export const VISIBILITY_TAG = "一覧テスト";
 export const VISIBILITY_FORMULA = '=E2E CSV, "引用"\n改行';
 export const VISIBILITY_ANSWER = 'E2E 一覧の回答です。CSVのカンマ, と "引用符"、\n改行を保持します。';
-export const VISIBILITY_FULL_ANSWER = `${VISIBILITY_ANSWER}\n${"回答の全文が長い場合も省略せずCSVへ出力します。".repeat(30)}\nE2E 全文の終端`;
+export const VISIBILITY_FULL_ANSWER = `${VISIBILITY_ANSWER}\nE2E 表示状況とE2E 比較ブランドをご紹介します。\n${"回答の全文が長い場合も省略せずCSVへ出力します。".repeat(30)}\nE2E 全文の終端`;
 export const VISIBILITY_AI_ANSWER = "E2E Google AIモードの回答です。ChatGPTとは別の結果を確認できます。";
 export const VISIBILITY_QUERY = "E2E Rails フルリモート 高単価";
 export const VISIBILITY_PAGE_A = "https://evidence.visibility.example.com/rails-a";

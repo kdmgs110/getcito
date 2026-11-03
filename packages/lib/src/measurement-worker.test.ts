@@ -53,7 +53,7 @@ vi.mock("drizzle-orm", async (importOriginal) => ({
 }));
 
 import { type ProcessPromptData, processPromptJob } from "../../../apps/worker/src/jobs/process-prompt";
-import { measurementAttempts, promptRuns } from "./db/schema";
+import { brands, measurementAttempts, promptRuns } from "./db/schema";
 
 type Attempt = {
 	id: string;
@@ -119,6 +119,8 @@ beforeEach(() => {
 		id: "brand-1",
 		name: "ブランド",
 		website: "https://example.com",
+		aliases: [],
+		additionalDomains: [],
 		enabled: true,
 		targetLanguage: "Japanese",
 		targetMarket: "Japan",
@@ -171,13 +173,44 @@ beforeEach(() => {
 		}),
 	}));
 	harness.transaction.mockImplementation(async (callback: (tx: unknown) => unknown) =>
-		callback({ insert: harness.insert, update: harness.update }),
+		callback({
+			insert: harness.insert,
+			update: harness.update,
+			execute: harness.execute,
+			select: () => ({
+				from: (table: unknown) => ({
+					where: () => (table === brands ? { limit: async () => [await harness.findBrand()] } : Promise.resolve([])),
+				}),
+			}),
+		}),
 	);
 });
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("bounded Web measurement jobs", () => {
+	it("uses brand definitions current when a delayed answer is saved", async () => {
+		harness.run.mockImplementation(async () => {
+			harness.findBrand.mockResolvedValue({
+				id: "brand-1",
+				name: "New Brand",
+				aliases: ["New Alias"],
+				website: "https://new.example",
+				additionalDomains: [],
+				enabled: true,
+			});
+			const answer = evidence();
+			if (!answer.measurement) throw new Error("Expected evidence");
+			answer.measurement.answerText = "1. New Alias";
+			answer.textContent = "1. New Alias";
+			return answer;
+		});
+		await processPromptJob([job({ targetKeys: ["chatgpt:dataforseo-scraper:online"] })]);
+		expect(answers[0]).toMatchObject({
+			brandMentioned: true,
+			mentionAnalysis: { mentions: [{ entityId: "brand-1", name: "New Brand", kind: "own", rank: 1 }] },
+		});
+	});
 	it("stores an absent Overview observation without inventing an answer or rescheduling the one-off", async () => {
 		harness.run.mockImplementation(async (model: string) =>
 			evidence(model === "google-ai-overview" ? "not_shown" : "shown"),

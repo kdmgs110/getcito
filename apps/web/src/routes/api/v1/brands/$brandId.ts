@@ -6,19 +6,24 @@
  *
  * Protected by API key authentication.
  */
+
 import { createFileRoute } from "@tanstack/react-router";
+import { startMentionRecount, withMentionTransaction } from "@workspace/lib/brand-mention-recount";
 import { db } from "@workspace/lib/db/db";
+import * as schema from "@workspace/lib/db/schema";
 import { brands } from "@workspace/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { ApiError, createApiHandler } from "@/lib/api/handler";
+import { enqueueMentionRecount } from "@/lib/mention-recount-client";
 import {
+	apiUpdateInputToInternal,
+	BrandNotFoundError,
+	buildBrandResult,
+	InvalidDomainsError,
 	updateBrand,
 	updateBrandBodySchema,
-	apiUpdateInputToInternal,
-	buildBrandResult,
-	BrandNotFoundError,
-	InvalidDomainsError,
 } from "@/server/onboarding-core";
-import { ApiError, createApiHandler } from "@/lib/api/handler";
 
 export const Route = createFileRoute("/api/v1/brands/$brandId")({
 	server: {
@@ -51,7 +56,14 @@ export const Route = createFileRoute("/api/v1/brands/$brandId")({
 				},
 				handle: async ({ params, body }) => {
 					const internal = apiUpdateInputToInternal(params.brandId, body);
-					return await updateBrand(internal);
+					const affectsMentions =
+						body.brandName !== undefined || body.domains !== undefined || body.aliases !== undefined;
+					if (!affectsMentions) return updateBrand(internal);
+					return withMentionTransaction(params.brandId, async (client) => {
+						const result = await updateBrand(internal, drizzle(client, { schema }));
+						await startMentionRecount(client, params.brandId, enqueueMentionRecount);
+						return result;
+					});
 				},
 			}),
 		},

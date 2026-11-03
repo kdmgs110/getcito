@@ -37,7 +37,9 @@
     "./analytics/server": "./src/analytics/server.ts",
     "./analytics/conversions-server": "./src/analytics/conversions-server.ts",
     "./measurement": "./src/measurement.ts",
-    "./page-evidence": "./src/page-evidence.ts"
+    "./page-evidence": "./src/page-evidence.ts",
+    "./brand-mentions": "./src/brand-mentions.ts",
+    "./brand-mention-recount": "./src/brand-mention-recount.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.84",

@@ -1,3 +1,4 @@
+import type { BrandMentionAnalysis } from "@workspace/lib/brand-mentions";
 import type { MeasurementEvidence } from "@workspace/lib/measurement";
 
 export const SPREADSHEET_BATCH_SIZE = 20;
@@ -24,6 +25,8 @@ export interface SpreadsheetAnswer {
 	answerText: string;
 	answerStatus: MeasurementEvidence["answerStatus"];
 	mentionedBrands: string[];
+	/** Older API fixtures may omit it; persisted answers are enriched on read. */
+	mentionAnalysis?: BrandMentionAnalysis | null;
 	webQueries: string[];
 	queryStatus: MeasurementEvidence["queryStatus"];
 	searchResultsStatus: "known" | "unknown";
@@ -45,4 +48,6 @@ export interface VisibilitySpreadsheetRow {
 export interface VisibilitySpreadsheetResponse {
 	rows: VisibilitySpreadsheetRow[];
 	asOf: string;
+	/** Changes when definitions or a published recount change, even for old acquisitions. */
+	mentionRevision?: string;
 }

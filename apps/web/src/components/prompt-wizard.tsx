@@ -336,7 +336,7 @@ export default function PromptWizard({ onComplete, autoStart = false }: PromptWi
 		setIsSaving(true);
 		try {
 			const competitorsPayload = data.competitors
-				.filter((c) => c.name.trim() && c.domains.some((d) => d.trim()))
+				.filter((c) => c.name.trim())
 				.map((c) => ({
 					name: c.name.trim(),
 					domains: c.domains.filter((d) => d.trim()),

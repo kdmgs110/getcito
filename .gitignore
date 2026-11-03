@@ -56,6 +56,7 @@ blob-report/
 # e2e generated config (created by `getcito init --dev --defaults`)
 e2e/.getcito/
 e2e/.auth/
+e2e/**/.auth/
 
 # vercel
 .vercel

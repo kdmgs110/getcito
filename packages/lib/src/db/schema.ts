@@ -13,6 +13,7 @@ import {
 	uuid,
 } from "drizzle-orm/pg-core";
 import type { AnalyticsMeasurementMode, TrafficCondition } from "../analytics/types";
+import type { BrandMentionAnalysis } from "../brand-mentions";
 import type { MeasurementEvidence } from "../measurement";
 import type { PromptRunRequestContext } from "../prompt-run-context";
 
@@ -222,6 +223,7 @@ export const promptRuns = pgTable(
 		webQueries: text("web_queries").array().notNull().default([]),
 		brandMentioned: boolean("brand_mentioned").notNull(),
 		competitorsMentioned: text("competitors_mentioned").array().notNull().default([]),
+		mentionAnalysis: jsonb("mention_analysis").$type<BrandMentionAnalysis>(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => ({
@@ -239,6 +241,40 @@ export const promptRuns = pgTable(
 		// sequentially scans the largest table in the schema.
 		brandIdIdx: index("prompt_runs_brand_id_idx").on(table.brandId),
 	}),
+).enableRLS();
+
+/** A replaceable generation per brand; raw answers are never rewritten by recounts. */
+export const brandMentionRecounts = pgTable("brand_mention_recounts", {
+	brandId: text("brand_id")
+		.primaryKey()
+		.references(() => brands.id, { onDelete: "cascade" }),
+	id: uuid("id").notNull().defaultRandom(),
+	status: text("status").$type<"pending" | "running" | "completed" | "failed">().notNull().default("pending"),
+	processed: integer("processed").notNull().default(0),
+	total: integer("total").notNull().default(0),
+	catalogHash: text("catalog_hash").notNull(),
+	error: text("error"),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	completedAt: timestamp("completed_at", { withTimezone: true }),
+}).enableRLS();
+
+/** Staged assessments are published in one transaction after every eligible run is covered. */
+export const brandMentionRecountRows = pgTable(
+	"brand_mention_recount_rows",
+	{
+		runId: uuid("run_id")
+			.primaryKey()
+			.references(() => promptRuns.id, { onDelete: "cascade" }),
+		brandId: text("brand_id")
+			.notNull()
+			.references(() => brands.id, { onDelete: "cascade" }),
+		jobId: uuid("job_id").notNull(),
+		analysis: jsonb("analysis").$type<BrandMentionAnalysis>().notNull(),
+		brandMentioned: boolean("brand_mentioned").notNull(),
+		competitorsMentioned: text("competitors_mentioned").array().notNull(),
+	},
+	(table) => ({ brandJobIdx: index("brand_mention_recount_rows_brand_job_idx").on(table.brandId, table.jobId) }),
 ).enableRLS();
 
 /** Submission receipts prevent retries from creating a second billable scrape. */

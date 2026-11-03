@@ -86,7 +86,7 @@ test.describe("Visibility spreadsheet", () => {
 		await expect(page.getByRole("region", { name: "スプレッドシート", exact: true })).toContainText("26件中20件を読み込み済み");
 		await expect(page.getByTestId(`spreadsheet-row-${visibilityPromptId(25)}`)).toHaveCount(0);
 		const [headers, ...rows] = await exportCsv(page);
-		expect(headers).toEqual(["プロンプト", "カテゴリー（タグ）", "最終実行日", "ChatGPTの回答", "言及されたブランド", "ウェブ検索クエリ", "ページ／ドメイン別の出現・引用", "AIモードの回答", "ChatGPT実行日", "AIモード実行日"]);
+		expect(headers).toEqual(["プロンプト", "カテゴリー（タグ）", "最終実行日", "ChatGPTの回答", "言及されたブランド", "ウェブ検索クエリ", "ページ／ドメイン別の出現・引用", "AIモードの回答", "ChatGPT実行日", "AIモード実行日", "AIモードの言及ブランド・順位"]);
 		expect(rows).toHaveLength(VISIBILITY_COUNT);
 		for (const row of rows) expect(row).toHaveLength(headers.length);
 		expect(rows.find((row) => row[0] === visibilityPromptValue(1))?.[3]).toBe(VISIBILITY_FULL_ANSWER);

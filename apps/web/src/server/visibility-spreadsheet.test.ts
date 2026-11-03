@@ -5,7 +5,16 @@ import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), access: vi.fn(), select: vi.fn(), latest: vi.fn(), brand: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+	auth: vi.fn(),
+	access: vi.fn(),
+	select: vi.fn(),
+	latest: vi.fn(),
+	brand: vi.fn(),
+	competitors: vi.fn(),
+	recount: vi.fn(),
+	transaction: vi.fn(),
+}));
 vi.mock("@tanstack/react-start", () => ({
 	createServerFn: () => ({
 		validator: (schema: { parse: (value: unknown) => unknown }) => ({
@@ -16,7 +25,7 @@ vi.mock("@tanstack/react-start", () => ({
 }));
 vi.mock("@/lib/auth/helpers", () => ({ requireAuthSession: mocks.auth, requireOrgAccess: mocks.access }));
 vi.mock("@workspace/lib/db/db", () => ({
-	db: { select: mocks.select, selectDistinctOn: mocks.latest, query: { brands: { findFirst: mocks.brand } } },
+	db: { transaction: mocks.transaction },
 }));
 
 import { buildSpreadsheetAnswer, getVisibilitySpreadsheetRowsFn, type SpreadsheetRun } from "./visibility-spreadsheet";
@@ -74,9 +83,21 @@ const sqlText = () => statements.map((statement) => new PgDialect().sqlToQuery(s
 beforeEach(() => {
 	vi.clearAllMocks();
 	statements.length = 0;
+	mocks.transaction.mockImplementation((fn) =>
+		fn({
+			select: mocks.select,
+			selectDistinctOn: mocks.latest,
+			query: {
+				brands: { findFirst: mocks.brand },
+				competitors: { findMany: mocks.competitors },
+				brandMentionRecounts: { findFirst: mocks.recount },
+			},
+		}),
+	);
 	mocks.auth.mockResolvedValue({ user: { id: "member" } });
 	mocks.access.mockResolvedValue(undefined);
 	mocks.brand.mockResolvedValue({ name: "Our Brand" });
+	mocks.competitors.mockResolvedValue([]);
 	mocks.select
 		.mockReturnValueOnce(selection([{ id: promptId, value: "Rails 案件", tags: ["フルリモート"] }]))
 		.mockReturnValueOnce(selection([]));

@@ -6,14 +6,18 @@
  *
  * Protected by API key authentication.
  */
+
 import { createFileRoute } from "@tanstack/react-router";
-import { db } from "@workspace/lib/db/db";
-import { competitors, brands } from "@workspace/lib/db/schema";
-import { eq, count, desc } from "drizzle-orm";
-import { z } from "zod";
+import { startMentionRecount, withMentionTransaction } from "@workspace/lib/brand-mention-recount";
 import { MAX_COMPETITORS } from "@workspace/lib/constants";
-import { dedupeDomains, dedupeAliases } from "@/lib/domain-categories";
+import { db } from "@workspace/lib/db/db";
+import { brands, competitors } from "@workspace/lib/db/schema";
+import { count, desc, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { z } from "zod";
 import { ApiError, createApiHandler } from "@/lib/api/handler";
+import { dedupeAliases, dedupeDomains } from "@/lib/domain-categories";
+import { enqueueMentionRecount } from "@/lib/mention-recount-client";
 
 const createCompetitorBody = z.object({
 	brandId: z.string().trim().min(1, "brandId is required"),
@@ -29,8 +33,8 @@ export const Route = createFileRoute("/api/v1/competitors/")({
 				handle: async ({ request }) => {
 					const { searchParams } = new URL(request.url);
 					const brandId = searchParams.get("brandId");
-					const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
-					const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "20")));
+					const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+					const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "20", 10)));
 					const offset = (page - 1) * limit;
 
 					const where = brandId ? eq(competitors.brandId, brandId) : undefined;
@@ -68,34 +72,38 @@ export const Route = createFileRoute("/api/v1/competitors/")({
 				handle: async ({ body }) => {
 					const { brandId, name, domains, aliases } = body;
 
-					const brandRow = await db.query.brands.findFirst({ where: eq(brands.id, brandId) });
-					if (!brandRow) {
-						throw new ApiError(400, "Validation Error", `Brand with ID '${brandId}' not found`);
-					}
+					return withMentionTransaction(brandId, async (client) => {
+						const tx = drizzle(client);
+						const brandRow = (await tx.select().from(brands).where(eq(brands.id, brandId)).limit(1))[0];
+						if (!brandRow) {
+							throw new ApiError(400, "Validation Error", `Brand with ID '${brandId}' not found`);
+						}
 
-					const [{ count: currentCount }] = await db
-						.select({ count: count() })
-						.from(competitors)
-						.where(eq(competitors.brandId, brandId));
-					if ((currentCount || 0) + 1 > MAX_COMPETITORS) {
-						throw new ApiError(
-							409,
-							"Conflict",
-							`Brand already has ${currentCount}/${MAX_COMPETITORS} competitors. Delete one before adding another.`,
-						);
-					}
+						const [{ count: currentCount }] = await tx
+							.select({ count: count() })
+							.from(competitors)
+							.where(eq(competitors.brandId, brandId));
+						if ((currentCount || 0) + 1 > MAX_COMPETITORS) {
+							throw new ApiError(
+								409,
+								"Conflict",
+								`Brand already has ${currentCount}/${MAX_COMPETITORS} competitors. Delete one before adding another.`,
+							);
+						}
 
-					const [inserted] = await db
-						.insert(competitors)
-						.values({
-							brandId,
-							name,
-							domains: dedupeDomains(domains ?? []),
-							aliases: dedupeAliases(aliases ?? []),
-						})
-						.returning();
+						const [inserted] = await tx
+							.insert(competitors)
+							.values({
+								brandId,
+								name,
+								domains: dedupeDomains(domains ?? []),
+								aliases: dedupeAliases(aliases ?? []),
+							})
+							.returning();
 
-					return inserted;
+						await startMentionRecount(client, brandId, enqueueMentionRecount);
+						return inserted;
+					});
 				},
 			}),
 		},

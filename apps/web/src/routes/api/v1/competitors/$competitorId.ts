@@ -7,13 +7,17 @@
  *
  * Protected by API key authentication.
  */
+
 import { createFileRoute } from "@tanstack/react-router";
+import { startMentionRecount, withMentionTransaction } from "@workspace/lib/brand-mention-recount";
 import { db } from "@workspace/lib/db/db";
 import { competitors } from "@workspace/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { z } from "zod";
-import { dedupeDomains, dedupeAliases } from "@/lib/domain-categories";
 import { ApiError, createApiHandler } from "@/lib/api/handler";
+import { dedupeAliases, dedupeDomains } from "@/lib/domain-categories";
+import { enqueueMentionRecount } from "@/lib/mention-recount-client";
 
 // z.guid(), not z.uuid(): matches the loose 8-4-4-4-12 hex check this API has
 // always used; z.uuid() enforces RFC version bits and rejects existing IDs.
@@ -63,28 +67,39 @@ export const Route = createFileRoute("/api/v1/competitors/$competitorId")({
 						update.aliases = dedupeAliases(body.aliases);
 					}
 
-					const [updated] = await db
-						.update(competitors)
-						.set(update)
-						.where(eq(competitors.id, competitorId))
-						.returning();
-					// The existence check above can race with a concurrent delete;
-					// the update's returning() is the source of truth.
-					if (!updated) {
-						throw new ApiError(404, "Not Found", `Competitor with ID '${competitorId}' not found`);
-					}
-					return updated;
+					return withMentionTransaction(existing.brandId, async (client) => {
+						const [updated] = await drizzle(client)
+							.update(competitors)
+							.set(update)
+							.where(and(eq(competitors.id, competitorId), eq(competitors.brandId, existing.brandId)))
+							.returning();
+						// The existence check above can race with a concurrent delete;
+						// the update's returning() is the source of truth.
+						if (!updated) {
+							throw new ApiError(404, "Not Found", `Competitor with ID '${competitorId}' not found`);
+						}
+						await startMentionRecount(client, existing.brandId, enqueueMentionRecount);
+						return updated;
+					});
 				},
 			}),
 
 			DELETE: createApiHandler({
 				params: competitorParams,
 				handle: async ({ params }) => {
-					const [deleted] = await db.delete(competitors).where(eq(competitors.id, params.competitorId)).returning();
-					if (!deleted) {
-						throw new ApiError(404, "Not Found", `Competitor with ID '${params.competitorId}' not found`);
-					}
-					return deleted;
+					const existing = await db.query.competitors.findFirst({ where: eq(competitors.id, params.competitorId) });
+					if (!existing) throw new ApiError(404, "Not Found", `Competitor with ID '${params.competitorId}' not found`);
+					return withMentionTransaction(existing.brandId, async (client) => {
+						const [deleted] = await drizzle(client)
+							.delete(competitors)
+							.where(and(eq(competitors.id, params.competitorId), eq(competitors.brandId, existing.brandId)))
+							.returning();
+						if (!deleted) {
+							throw new ApiError(404, "Not Found", `Competitor with ID '${params.competitorId}' not found`);
+						}
+						await startMentionRecount(client, existing.brandId, enqueueMentionRecount);
+						return deleted;
+					});
 				},
 			}),
 		},

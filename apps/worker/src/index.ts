@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/node";
+import { MENTION_RECOUNT_POLICY, MENTION_RECOUNT_QUEUE } from "@workspace/lib/brand-mention-recount";
 import { PROCESS_PROMPT_JOB_POLICY } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
 import { getProvider, parseScrapeTargets, validateScrapeTargets } from "@workspace/lib/providers";
@@ -41,6 +42,7 @@ async function main() {
 	// below has no effect on a database where the queue already exists: the old
 	// values silently persist and the change looks applied but isn't.
 	const queueOptions = [
+		{ name: MENTION_RECOUNT_QUEUE, ...MENTION_RECOUNT_POLICY },
 		// Shared with the web app and the maintenance job, which enqueue the same
 		// queue with per-job options that would otherwise override this.
 		{ name: "process-prompt", ...PROCESS_PROMPT_JOB_POLICY },

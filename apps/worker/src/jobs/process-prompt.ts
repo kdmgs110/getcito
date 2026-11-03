@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { normalizeActiveTargetKey } from "@workspace/config/scrape-targets";
+import { mentionLockKey } from "@workspace/lib/brand-mention-recount";
+import { analyzeBrandMentions, mentionFlags } from "@workspace/lib/brand-mentions";
 import { getDefaultDelayHours, PROCESS_PROMPT_JOB_POLICY, RUNS_PER_PROMPT } from "@workspace/lib/constants";
 import { db } from "@workspace/lib/db/db";
 import {
@@ -23,7 +25,7 @@ import {
 	withProviderCallTracking,
 } from "@workspace/lib/providers";
 import { failureBackoffHours } from "@workspace/lib/run-backoff";
-import { and, eq, lt, or } from "drizzle-orm";
+import { and, eq, lt, or, sql } from "drizzle-orm";
 import type { Job } from "pg-boss";
 import boss from "../boss";
 import { trackWorkerEvent } from "../telemetry";
@@ -111,50 +113,10 @@ async function getPromptContext(promptId: string): Promise<PromptContext | null>
 	};
 }
 
-function extractDomainFromUrl(urlOrDomain: string): string {
-	try {
-		const url = new URL(urlOrDomain.startsWith("http") ? urlOrDomain : `https://${urlOrDomain}`);
-		return url.hostname.replace(/^www\./, "").toLowerCase();
-	} catch {
-		return urlOrDomain.replace(/^www\./, "").toLowerCase();
-	}
-}
-
-function analyzeMentions(
-	content: string,
-	brand: Brand,
-	competitorsList: Competitor[],
-): {
-	brandMentioned: boolean;
-	competitorsMentioned: string[];
-} {
-	const contentLower = content.toLowerCase();
-
-	const brandNames = [brand.name, ...(brand.aliases || [])].map((n) => n.toLowerCase());
-	const brandDomains = [
-		extractDomainFromUrl(brand.website),
-		...(brand.additionalDomains || []).map(extractDomainFromUrl),
-	];
-	const brandMentioned =
-		brandNames.some((n) => contentLower.includes(n)) || brandDomains.some((d) => contentLower.includes(d));
-
-	const competitorsMentioned = competitorsList
-		.filter((competitor) => {
-			const names = [competitor.name, ...(competitor.aliases || [])].map((n) => n.toLowerCase());
-			const nameMatch = names.some((n) => contentLower.includes(n));
-			const domainMatch = (competitor.domains || []).some((d) => contentLower.includes(extractDomainFromUrl(d)));
-			return nameMatch || domainMatch;
-		})
-		.map((competitor) => competitor.name);
-
-	return { brandMentioned, competitorsMentioned };
-}
-
 async function runModelIteration({
 	promptId,
 	promptValue,
 	brand,
-	competitorsList,
 	config,
 	providerImpl,
 	runIndex,
@@ -166,7 +128,6 @@ async function runModelIteration({
 	promptId: string;
 	promptValue: string;
 	brand: Brand;
-	competitorsList: Competitor[];
 	config: ModelConfig;
 	providerImpl: Provider;
 	runIndex: number;
@@ -256,8 +217,6 @@ async function runModelIteration({
 
 		const safeTextContent = typeof textContent === "string" ? textContent : "";
 
-		const { brandMentioned, competitorsMentioned } = analyzeMentions(safeTextContent, brand, competitorsList);
-
 		const recordedVersion = modelVersion ?? config.version ?? config.provider;
 
 		const evidence: MeasurementEvidence = result.measurement ?? {
@@ -278,6 +237,22 @@ async function runModelIteration({
 			// A search with no Overview is a valid observation, not an answer. Keep
 			// it out of the pre-existing answer and mention-rate denominators.
 			if (evidence.answerStatus === "shown") {
+				// Registration/recount publication and new answers share one brand lock.
+				// Providers may take minutes: use definitions current at save time.
+				await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${mentionLockKey(brand.id)}, 0))`);
+				const freshBrand = (await tx.select().from(brands).where(eq(brands.id, brand.id)).limit(1))[0];
+				if (!freshBrand) throw new Error("Brand no longer exists");
+				const freshCompetitors = await tx.select().from(competitors).where(eq(competitors.brandId, brand.id));
+				const mentionAnalysis = analyzeBrandMentions(evidence.answerText, {
+					own: {
+						id: freshBrand.id,
+						name: freshBrand.name,
+						aliases: freshBrand.aliases,
+						domains: [freshBrand.website, ...(freshBrand.additionalDomains ?? [])],
+					},
+					competitors: freshCompetitors,
+				});
+				const { brandMentioned, competitorsMentioned } = mentionFlags(mentionAnalysis);
 				const [run] = await tx
 					.insert(promptRuns)
 					.values({
@@ -291,6 +266,7 @@ async function runModelIteration({
 						webQueries,
 						brandMentioned,
 						competitorsMentioned,
+						mentionAnalysis,
 						requestContext,
 					})
 					.returning({ id: promptRuns.id, createdAt: promptRuns.createdAt });
@@ -362,7 +338,7 @@ export async function processPromptJob(jobs: Job<ProcessPromptData>[]): Promise<
 			continue; // Job completes successfully - prompt was deleted, don't reschedule
 		}
 
-		const { prompt, brand, competitors: competitorsList } = context;
+		const { prompt, brand } = context;
 
 		// Read the cadence from the brand rather than from `job.data.cadenceHours`.
 		// A job re-embeds its own cadence when it schedules the next run, so the
@@ -399,7 +375,6 @@ export async function processPromptJob(jobs: Job<ProcessPromptData>[]): Promise<
 				promptId,
 				promptValue: stored.requestContext.prompt,
 				brand,
-				competitorsList,
 				config: {
 					model: "chatgpt",
 					provider: "dataforseo-scraper",
@@ -456,7 +431,6 @@ export async function processPromptJob(jobs: Job<ProcessPromptData>[]): Promise<
 						promptId,
 						promptValue: prompt.value,
 						brand,
-						competitorsList,
 						config,
 						providerImpl,
 						runIndex: i + 1,

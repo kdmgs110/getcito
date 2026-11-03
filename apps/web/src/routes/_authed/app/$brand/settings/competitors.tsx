@@ -1,24 +1,24 @@
-import { settingsError } from "@/i18n/settings-labels";
-import { t } from "@/i18n";
+import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, useRouteContext } from "@tanstack/react-router";
+import type { ClientConfig } from "@workspace/config/types";
+import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
+import { Button } from "@workspace/ui/components/button";
+import { AlertTriangle } from "lucide-react";
 /**
  * /app/$brand/settings/competitors - Competitor management page
  *
  * Form to manage competitor list with multiple domains and aliases per competitor.
  */
-import { useState, useEffect } from "react";
-import { createFileRoute, useRouteContext } from "@tanstack/react-router";
-import type { ClientConfig } from "@workspace/config/types";
-import { useQueryClient } from "@tanstack/react-query";
-import { getAppName, getBrandName, buildTitle } from "@/lib/route-head";
-import { Button } from "@workspace/ui/components/button";
+import { useEffect, useState } from "react";
+import { type CompetitorEntry, CompetitorsEditor } from "@/components/competitors-editor";
+import { WebLogo } from "@/components/web-logo";
 import { useBrand, useCompetitors } from "@/hooks/use-brands";
-import { updateCompetitors } from "@/server/brands";
 import { citationKeys } from "@/hooks/use-citations";
 import { dashboardKeys } from "@/hooks/use-dashboard-summary";
-import { AlertTriangle } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert";
-import { CompetitorsEditor, type CompetitorEntry } from "@/components/competitors-editor";
-import { WebLogo } from "@/components/web-logo";
+import { t } from "@/i18n";
+import { settingsError } from "@/i18n/settings-labels";
+import { buildTitle, getAppName, getBrandName } from "@/lib/route-head";
+import { updateCompetitors } from "@/server/brands";
 
 export const Route = createFileRoute("/_authed/app/$brand/settings/competitors")({
 	head: ({ matches, match }) => {
@@ -50,6 +50,7 @@ function CompetitorsSettingsPage() {
 			setCompetitors(
 				existingCompetitors.map((c) => ({
 					_key: crypto.randomUUID(),
+					id: c.id,
 					name: c.name,
 					domains: c.domains ?? [],
 					aliases: c.aliases || [],
@@ -89,8 +90,9 @@ function CompetitorsSettingsPage() {
 
 		try {
 			const validCompetitors = competitors
-				.filter((c) => c.name.trim() && c.domains.some((d) => d.trim()))
+				.filter((c) => c.name.trim())
 				.map((c) => ({
+					id: c.id,
 					name: c.name.trim(),
 					domains: c.domains.map((d) => d.trim()).filter(Boolean),
 					aliases: c.aliases.map((a) => a.trim()).filter(Boolean),

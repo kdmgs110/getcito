@@ -98,6 +98,11 @@ jobs:
         run: pnpm exec biome lint src/components/visibility-*.tsx src/components/prompts-display.tsx src/components/filtered-list-shell.tsx src/components/filter-bar.tsx src/components/history-button.tsx src/lib/visibility-*.ts src/hooks/use-visibility-spreadsheet.ts src/server/visibility-spreadsheet*.ts src/i18n/visibility-spreadsheet-labels.ts 'src/routes/_authed/app/$brand/visibility.tsx'
       - name: Lint measurement worker and shared contract
         run: pnpm exec biome lint packages/lib/src/measurement*.ts apps/worker/src/jobs/process-prompt.ts
+      - name: Lint brand mention analysis and recount
+        run: pnpm exec biome lint packages/lib/src/brand-mentions*.ts packages/lib/src/brand-mention-recount*.ts apps/worker/src/jobs/recount-brand-mentions.ts
+      - name: Lint brand mention UI and endpoints
+        working-directory: apps/web
+        run: pnpm exec biome lint src/components/brand-mentions* src/hooks/use-brand-mention-recount.ts src/i18n/brand-mentions-labels.ts src/lib/mention-recount-client.ts src/server/brand-mentions*.ts
       - run: pnpm build
       - run: node packages/lib/scripts/migrate.mjs
       - run: pnpm --filter e2e seed
@@ -112,7 +117,7 @@ jobs:
           cat /tmp/getcito-e2e.log
           exit 1
       - name: Traffic, conversion, brand, and prompt browser tests
-        run: pnpm --filter e2e exec playwright test tests/traffic.spec.ts tests/conversions.spec.ts tests/brands.spec.ts tests/prompts.spec.ts tests/measurements.spec.ts tests/visibility.spec.ts --workers=1
+        run: pnpm --filter e2e exec playwright test tests/traffic.spec.ts tests/conversions.spec.ts tests/brands.spec.ts tests/prompts.spec.ts tests/measurements.spec.ts tests/visibility.spec.ts tests/brand-mentions.spec.ts --workers=1
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
