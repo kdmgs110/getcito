@@ -133,6 +133,24 @@ export const ENV_REGISTRY: EnvVarSpec[] = [
 		description: "Absolute OAuth callback URL registered for the GA4 traffic integration.",
 	},
 	{
+		name: "GOOGLE_SEARCH_CONSOLE_CLIENT_ID",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Google OAuth web client ID for Search Console keyword analysis.",
+	},
+	{
+		name: "GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Google OAuth web client secret for Search Console keyword analysis.",
+	},
+	{
+		name: "GOOGLE_SEARCH_CONSOLE_REDIRECT_URI",
+		scope: "server",
+		requiredBy: "optional",
+		description: "Absolute OAuth callback URL registered for Search Console keyword analysis.",
+	},
+	{
 		name: "ANALYTICS_TOKEN_ENCRYPTION_KEY",
 		scope: "server",
 		requiredBy: "optional",

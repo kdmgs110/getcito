@@ -1,9 +1,4 @@
-import { t } from "@/i18n";
-
-import { useLocation } from "@tanstack/react-router";
-
-import { Separator } from "@workspace/ui/components/separator";
-import { SidebarTrigger } from "@workspace/ui/components/sidebar";
+import { Link, useLocation } from "@tanstack/react-router";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -12,12 +7,15 @@ import {
 	BreadcrumbPage,
 	BreadcrumbSeparator,
 } from "@workspace/ui/components/breadcrumb";
+import { Separator } from "@workspace/ui/components/separator";
+import { SidebarTrigger } from "@workspace/ui/components/sidebar";
 import { useBrand } from "@/hooks/use-brands";
-import { Link } from "@tanstack/react-router";
+import { t } from "@/i18n";
 
 /** Map of page segments to display names */
 const PAGE_NAMES: Record<string, string> = {
 	traffic: t("traffic.title"),
+	keywords: t("keywords.title"),
 	visibility: t("settings.visibility"),
 	"share-of-voice": t("settings.shareOfVoice"),
 	"query-fan-out": t("settings.queryFanOut"),

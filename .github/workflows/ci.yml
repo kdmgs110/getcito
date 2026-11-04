@@ -43,6 +43,9 @@ jobs:
       DATAFORSEO_PASSWORD: ci-placeholder
       DISABLE_TELEMETRY: "1"
       VITE_APP_LOCALE: ja-JP
+      GOOGLE_SEARCH_CONSOLE_CLIENT_ID: e2e-gsc-client
+      GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET: e2e-gsc-secret
+      GOOGLE_SEARCH_CONSOLE_REDIRECT_URI: http://localhost:3000/api/search-console/google/callback
       GOOGLE_ANALYTICS_CLIENT_ID: e2e-client
       GOOGLE_ANALYTICS_CLIENT_SECRET: e2e-secret
       GOOGLE_ANALYTICS_REDIRECT_URI: http://localhost:3000/api/analytics/google/callback
@@ -64,6 +67,11 @@ jobs:
       - name: Lint traffic analysis
         working-directory: apps/web
         run: pnpm exec biome lint src/components/traffic src/server/traffic*.ts src/routes/api/analytics 'src/routes/_authed/app/$brand/traffic.tsx' src/i18n/messages/traffic.ts
+      - name: Lint Search Console analysis
+        working-directory: apps/web
+        run: pnpm exec biome lint src/components/search-console src/server/search-console*.ts src/routes/api/search-console 'src/routes/_authed/app/$brand/keywords.tsx' src/i18n/messages/search-console.ts
+      - name: Lint shared Search Console contract
+        run: pnpm exec biome lint packages/lib/src/search-console
       - name: Lint conversion analysis
         working-directory: apps/web
         run: pnpm exec biome lint src/components/traffic/conversion* src/server/conversion*.ts src/i18n/messages/conversions.ts
@@ -116,8 +124,8 @@ jobs:
           done
           cat /tmp/getcito-e2e.log
           exit 1
-      - name: Traffic, conversion, brand, and prompt browser tests
-        run: pnpm --filter e2e exec playwright test tests/traffic.spec.ts tests/conversions.spec.ts tests/brands.spec.ts tests/prompts.spec.ts tests/measurements.spec.ts tests/visibility.spec.ts tests/brand-mentions.spec.ts --workers=1
+      - name: Traffic, Search Console, conversion, brand, and prompt browser tests
+        run: pnpm --filter e2e exec playwright test tests/traffic.spec.ts tests/search-console.spec.ts tests/conversions.spec.ts tests/brands.spec.ts tests/prompts.spec.ts tests/measurements.spec.ts tests/visibility.spec.ts tests/brand-mentions.spec.ts --workers=1
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

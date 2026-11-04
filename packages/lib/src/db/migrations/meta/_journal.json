@@ -155,6 +155,13 @@
       "when": 1793667600000,
       "tag": "0021_brand_mention_recounts",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793831945644,
+      "tag": "0022_search_console_keyword_analysis",
+      "breakpoints": true
     }
   ]
 }

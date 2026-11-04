@@ -44,6 +44,7 @@ import { Route as ApiV1ReportsReportIdRouteImport } from './routes/api/v1/report
 import { Route as ApiV1PromptsPromptIdRouteImport } from './routes/api/v1/prompts/$promptId'
 import { Route as ApiV1CompetitorsCompetitorIdRouteImport } from './routes/api/v1/competitors/$competitorId'
 import { Route as ApiV1BrandsBrandIdRouteImport } from './routes/api/v1/brands/$brandId'
+import { Route as ApiSearchConsoleGoogleCallbackRouteImport } from './routes/api/search-console/google/callback'
 import { Route as ApiAnalyticsGoogleCallbackRouteImport } from './routes/api/analytics/google/callback'
 import { Route as AuthedReportsRenderReportIdRouteImport } from './routes/_authed/reports/render/$reportId'
 import { Route as AuthedAppBrandVisibilityRouteImport } from './routes/_authed/app/$brand/visibility'
@@ -51,6 +52,7 @@ import { Route as AuthedAppBrandTrafficRouteImport } from './routes/_authed/app/
 import { Route as AuthedAppBrandShareOfVoiceRouteImport } from './routes/_authed/app/$brand/share-of-voice'
 import { Route as AuthedAppBrandQueryFanOutRouteImport } from './routes/_authed/app/$brand/query-fan-out'
 import { Route as AuthedAppBrandOpportunitiesRouteImport } from './routes/_authed/app/$brand/opportunities'
+import { Route as AuthedAppBrandKeywordsRouteImport } from './routes/_authed/app/$brand/keywords'
 import { Route as AuthedAppBrandCitationsRouteImport } from './routes/_authed/app/$brand/citations'
 import { Route as AuthedAppBrandSplatRouteImport } from './routes/_authed/app/$brand/$'
 import { Route as ApiPlausibleJsScriptIndexRouteImport } from './routes/api/plausible/js/script/index'
@@ -239,6 +241,12 @@ const ApiV1BrandsBrandIdRoute = ApiV1BrandsBrandIdRouteImport.update({
   path: '/api/v1/brands/$brandId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSearchConsoleGoogleCallbackRoute =
+  ApiSearchConsoleGoogleCallbackRouteImport.update({
+    id: '/api/search-console/google/callback',
+    path: '/api/search-console/google/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAnalyticsGoogleCallbackRoute =
   ApiAnalyticsGoogleCallbackRouteImport.update({
     id: '/api/analytics/google/callback',
@@ -280,6 +288,11 @@ const AuthedAppBrandOpportunitiesRoute =
     path: '/opportunities',
     getParentRoute: () => AuthedAppBrandRoute,
   } as any)
+const AuthedAppBrandKeywordsRoute = AuthedAppBrandKeywordsRouteImport.update({
+  id: '/keywords',
+  path: '/keywords',
+  getParentRoute: () => AuthedAppBrandRoute,
+} as any)
 const AuthedAppBrandCitationsRoute = AuthedAppBrandCitationsRouteImport.update({
   id: '/citations',
   path: '/citations',
@@ -376,6 +389,7 @@ export interface FileRoutesByFullPath {
   '/api/setup-status/': typeof ApiSetupStatusIndexRoute
   '/app/$brand/$': typeof AuthedAppBrandSplatRoute
   '/app/$brand/citations': typeof AuthedAppBrandCitationsRoute
+  '/app/$brand/keywords': typeof AuthedAppBrandKeywordsRoute
   '/app/$brand/opportunities': typeof AuthedAppBrandOpportunitiesRoute
   '/app/$brand/query-fan-out': typeof AuthedAppBrandQueryFanOutRoute
   '/app/$brand/share-of-voice': typeof AuthedAppBrandShareOfVoiceRoute
@@ -383,6 +397,7 @@ export interface FileRoutesByFullPath {
   '/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
   '/api/analytics/google/callback': typeof ApiAnalyticsGoogleCallbackRoute
+  '/api/search-console/google/callback': typeof ApiSearchConsoleGoogleCallbackRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -427,6 +442,7 @@ export interface FileRoutesByTo {
   '/api/setup-status': typeof ApiSetupStatusIndexRoute
   '/app/$brand/$': typeof AuthedAppBrandSplatRoute
   '/app/$brand/citations': typeof AuthedAppBrandCitationsRoute
+  '/app/$brand/keywords': typeof AuthedAppBrandKeywordsRoute
   '/app/$brand/opportunities': typeof AuthedAppBrandOpportunitiesRoute
   '/app/$brand/query-fan-out': typeof AuthedAppBrandQueryFanOutRoute
   '/app/$brand/share-of-voice': typeof AuthedAppBrandShareOfVoiceRoute
@@ -434,6 +450,7 @@ export interface FileRoutesByTo {
   '/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
   '/api/analytics/google/callback': typeof ApiAnalyticsGoogleCallbackRoute
+  '/api/search-console/google/callback': typeof ApiSearchConsoleGoogleCallbackRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -484,6 +501,7 @@ export interface FileRoutesById {
   '/api/setup-status/': typeof ApiSetupStatusIndexRoute
   '/_authed/app/$brand/$': typeof AuthedAppBrandSplatRoute
   '/_authed/app/$brand/citations': typeof AuthedAppBrandCitationsRoute
+  '/_authed/app/$brand/keywords': typeof AuthedAppBrandKeywordsRoute
   '/_authed/app/$brand/opportunities': typeof AuthedAppBrandOpportunitiesRoute
   '/_authed/app/$brand/query-fan-out': typeof AuthedAppBrandQueryFanOutRoute
   '/_authed/app/$brand/share-of-voice': typeof AuthedAppBrandShareOfVoiceRoute
@@ -491,6 +509,7 @@ export interface FileRoutesById {
   '/_authed/app/$brand/visibility': typeof AuthedAppBrandVisibilityRoute
   '/_authed/reports/render/$reportId': typeof AuthedReportsRenderReportIdRoute
   '/api/analytics/google/callback': typeof ApiAnalyticsGoogleCallbackRoute
+  '/api/search-console/google/callback': typeof ApiSearchConsoleGoogleCallbackRoute
   '/api/v1/brands/$brandId': typeof ApiV1BrandsBrandIdRoute
   '/api/v1/competitors/$competitorId': typeof ApiV1CompetitorsCompetitorIdRoute
   '/api/v1/prompts/$promptId': typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -541,6 +560,7 @@ export interface FileRouteTypes {
     | '/api/setup-status/'
     | '/app/$brand/$'
     | '/app/$brand/citations'
+    | '/app/$brand/keywords'
     | '/app/$brand/opportunities'
     | '/app/$brand/query-fan-out'
     | '/app/$brand/share-of-voice'
@@ -548,6 +568,7 @@ export interface FileRouteTypes {
     | '/app/$brand/visibility'
     | '/reports/render/$reportId'
     | '/api/analytics/google/callback'
+    | '/api/search-console/google/callback'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -592,6 +613,7 @@ export interface FileRouteTypes {
     | '/api/setup-status'
     | '/app/$brand/$'
     | '/app/$brand/citations'
+    | '/app/$brand/keywords'
     | '/app/$brand/opportunities'
     | '/app/$brand/query-fan-out'
     | '/app/$brand/share-of-voice'
@@ -599,6 +621,7 @@ export interface FileRouteTypes {
     | '/app/$brand/visibility'
     | '/reports/render/$reportId'
     | '/api/analytics/google/callback'
+    | '/api/search-console/google/callback'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -648,6 +671,7 @@ export interface FileRouteTypes {
     | '/api/setup-status/'
     | '/_authed/app/$brand/$'
     | '/_authed/app/$brand/citations'
+    | '/_authed/app/$brand/keywords'
     | '/_authed/app/$brand/opportunities'
     | '/_authed/app/$brand/query-fan-out'
     | '/_authed/app/$brand/share-of-voice'
@@ -655,6 +679,7 @@ export interface FileRouteTypes {
     | '/_authed/app/$brand/visibility'
     | '/_authed/reports/render/$reportId'
     | '/api/analytics/google/callback'
+    | '/api/search-console/google/callback'
     | '/api/v1/brands/$brandId'
     | '/api/v1/competitors/$competitorId'
     | '/api/v1/prompts/$promptId'
@@ -692,6 +717,7 @@ export interface RootRouteChildren {
   ApiOgIndexRoute: typeof ApiOgIndexRoute
   ApiSetupStatusIndexRoute: typeof ApiSetupStatusIndexRoute
   ApiAnalyticsGoogleCallbackRoute: typeof ApiAnalyticsGoogleCallbackRoute
+  ApiSearchConsoleGoogleCallbackRoute: typeof ApiSearchConsoleGoogleCallbackRoute
   ApiV1BrandsBrandIdRoute: typeof ApiV1BrandsBrandIdRoute
   ApiV1CompetitorsCompetitorIdRoute: typeof ApiV1CompetitorsCompetitorIdRoute
   ApiV1PromptsPromptIdRoute: typeof ApiV1PromptsPromptIdRouteWithChildren
@@ -953,6 +979,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1BrandsBrandIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/search-console/google/callback': {
+      id: '/api/search-console/google/callback'
+      path: '/api/search-console/google/callback'
+      fullPath: '/api/search-console/google/callback'
+      preLoaderRoute: typeof ApiSearchConsoleGoogleCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/analytics/google/callback': {
       id: '/api/analytics/google/callback'
       path: '/api/analytics/google/callback'
@@ -1000,6 +1033,13 @@ declare module '@tanstack/react-router' {
       path: '/opportunities'
       fullPath: '/app/$brand/opportunities'
       preLoaderRoute: typeof AuthedAppBrandOpportunitiesRouteImport
+      parentRoute: typeof AuthedAppBrandRoute
+    }
+    '/_authed/app/$brand/keywords': {
+      id: '/_authed/app/$brand/keywords'
+      path: '/keywords'
+      fullPath: '/app/$brand/keywords'
+      preLoaderRoute: typeof AuthedAppBrandKeywordsRouteImport
       parentRoute: typeof AuthedAppBrandRoute
     }
     '/_authed/app/$brand/citations': {
@@ -1112,6 +1152,7 @@ const AuthedAdminRouteWithChildren = AuthedAdminRoute._addFileChildren(
 interface AuthedAppBrandRouteChildren {
   AuthedAppBrandSplatRoute: typeof AuthedAppBrandSplatRoute
   AuthedAppBrandCitationsRoute: typeof AuthedAppBrandCitationsRoute
+  AuthedAppBrandKeywordsRoute: typeof AuthedAppBrandKeywordsRoute
   AuthedAppBrandOpportunitiesRoute: typeof AuthedAppBrandOpportunitiesRoute
   AuthedAppBrandQueryFanOutRoute: typeof AuthedAppBrandQueryFanOutRoute
   AuthedAppBrandShareOfVoiceRoute: typeof AuthedAppBrandShareOfVoiceRoute
@@ -1131,6 +1172,7 @@ interface AuthedAppBrandRouteChildren {
 const AuthedAppBrandRouteChildren: AuthedAppBrandRouteChildren = {
   AuthedAppBrandSplatRoute: AuthedAppBrandSplatRoute,
   AuthedAppBrandCitationsRoute: AuthedAppBrandCitationsRoute,
+  AuthedAppBrandKeywordsRoute: AuthedAppBrandKeywordsRoute,
   AuthedAppBrandOpportunitiesRoute: AuthedAppBrandOpportunitiesRoute,
   AuthedAppBrandQueryFanOutRoute: AuthedAppBrandQueryFanOutRoute,
   AuthedAppBrandShareOfVoiceRoute: AuthedAppBrandShareOfVoiceRoute,
@@ -1221,6 +1263,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOgIndexRoute: ApiOgIndexRoute,
   ApiSetupStatusIndexRoute: ApiSetupStatusIndexRoute,
   ApiAnalyticsGoogleCallbackRoute: ApiAnalyticsGoogleCallbackRoute,
+  ApiSearchConsoleGoogleCallbackRoute: ApiSearchConsoleGoogleCallbackRoute,
   ApiV1BrandsBrandIdRoute: ApiV1BrandsBrandIdRoute,
   ApiV1CompetitorsCompetitorIdRoute: ApiV1CompetitorsCompetitorIdRoute,
   ApiV1PromptsPromptIdRoute: ApiV1PromptsPromptIdRouteWithChildren,

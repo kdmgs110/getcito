@@ -68,6 +68,18 @@ export const environmentMessages = {
 		en: "Absolute OAuth callback URL registered for the GA4 traffic integration.",
 		ja: "GA4連携用にGoogleへ登録したOAuthコールバックの絶対URLです。",
 	},
+	GOOGLE_SEARCH_CONSOLE_CLIENT_ID: {
+		en: "Google OAuth web client ID for Search Console keyword analysis.",
+		ja: "Search Consoleの流入キーワード分析に使用するGoogle OAuthのWebクライアントIDです。",
+	},
+	GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET: {
+		en: "Google OAuth web client secret for Search Console keyword analysis.",
+		ja: "Search Console連携に使用するGoogle OAuthのWebクライアントシークレットです。",
+	},
+	GOOGLE_SEARCH_CONSOLE_REDIRECT_URI: {
+		en: "Absolute OAuth callback URL registered for Search Console keyword analysis.",
+		ja: "Search Console連携用にGoogleへ登録したOAuthコールバックの絶対URLです。",
+	},
 	ANALYTICS_TOKEN_ENCRYPTION_KEY: {
 		en: "32-byte encryption key for server-side GA4 refresh tokens (64 hexadecimal characters).",
 		ja: "GA4の更新トークンをサーバーで暗号化する32バイトの鍵です（16進数64文字）。",
