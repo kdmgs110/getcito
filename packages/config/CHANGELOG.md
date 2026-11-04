@@ -1,5 +1,14 @@
 # @workspace/config
 
+## 9.2.0
+
+### Patch Changes
+
+- 6c799c5: Use DataForSEO exclusively for ChatGPT Web and remove Bright Data acquisition settings. Preserve historical results while displaying search queries, search results, and citations from the unified source.
+- 936b291: Add GA4 traffic analysis with AI referral trends, page-level reports, and shared saved views.
+- bd252bf: Add password reset emails and a screen for choosing a new password.
+- 1543789: Search Consoleの流入キーワード分析を追加し、AI質問・4語以上の検索語・URLによる絞り込みと100件表示に対応しました。
+
 ## 9.1.0
 
 ### Minor Changes

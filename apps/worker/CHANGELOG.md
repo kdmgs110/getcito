@@ -1,5 +1,24 @@
 # @workspace/worker
 
+## 9.2.0
+
+### Patch Changes
+
+- 9377629: 回答内のブランドを順位と自社・競合・未登録の区分付きで表示し、CSVにも出力できるようにしました。回答からブランドを追加すると、保存済みの過去回答を再集計します。
+- 6c799c5: Use DataForSEO exclusively for ChatGPT Web and remove Bright Data acquisition settings. Preserve historical results while displaying search queries, search results, and citations from the unified source.
+- Updated dependencies [8fa5d3e]
+- Updated dependencies [27314a5]
+- Updated dependencies [9377629]
+- Updated dependencies [6c799c5]
+- Updated dependencies [936b291]
+- Updated dependencies [b24296f]
+- Updated dependencies [bd252bf]
+- Updated dependencies [40d1c53]
+- Updated dependencies [1543789]
+  - @workspace/lib@9.2.0
+  - @workspace/config@9.2.0
+  - @workspace/whitelabel@9.2.0
+
 ## 9.1.0
 
 ### Minor Changes

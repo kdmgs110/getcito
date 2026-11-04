@@ -1,5 +1,22 @@
 # @workspace/whitelabel
 
+## 9.2.0
+
+### Patch Changes
+
+- Updated dependencies [8fa5d3e]
+- Updated dependencies [27314a5]
+- Updated dependencies [9377629]
+- Updated dependencies [6c799c5]
+- Updated dependencies [936b291]
+- Updated dependencies [b24296f]
+- Updated dependencies [bd252bf]
+- Updated dependencies [40d1c53]
+- Updated dependencies [1543789]
+  - @workspace/lib@9.2.0
+  - @workspace/config@9.2.0
+  - @workspace/ui@9.2.0
+
 ## 9.1.0
 
 ### Patch Changes

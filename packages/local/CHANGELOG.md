@@ -1,5 +1,16 @@
 # @workspace/local
 
+## 9.2.0
+
+### Patch Changes
+
+- b24296f: Add searchable brand switching in local mode and preserve form inputs when brand creation fails. Create brands safely on retries, keep analytics separate, and start AI setup only when requested.
+- Updated dependencies [6c799c5]
+- Updated dependencies [936b291]
+- Updated dependencies [bd252bf]
+- Updated dependencies [1543789]
+  - @workspace/config@9.2.0
+
 ## 9.1.0
 
 - Versioned with the fixed workspace release group.

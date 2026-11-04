@@ -1,6 +1,6 @@
 {
   "name": "getcito",
-  "version": "9.1.0",
+  "version": "9.2.0",
   "private": true,
   "license": "MIT",
   "packageManager": "pnpm@11.10.0",

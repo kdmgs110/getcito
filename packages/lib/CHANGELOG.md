@@ -1,5 +1,27 @@
 # @workspace/lib
 
+## 9.2.0
+
+### Minor Changes
+
+- 8fa5d3e: Track AI-attributed conversions from existing GA4 key events, with goal settings, AI sessions and conversion rates, combined domain reports, page details, and saved conversion views.
+- 936b291: Add GA4 traffic analysis with AI referral trends, page-level reports, and shared saved views.
+- 40d1c53: 検索結果へのページ出現と最終回答の引用を、計測対象・言語・地域ごとに比較し、根拠となる回答へ移動できるようになりました。
+
+### Patch Changes
+
+- 27314a5: 言及ブランドの候補に回答内の参照URLを表示し、登録時にドメインと元の表記を初期入力するようにしました。
+- 9377629: 回答内のブランドを順位と自社・競合・未登録の区分付きで表示し、CSVにも出力できるようにしました。回答からブランドを追加すると、保存済みの過去回答を再集計します。
+- 6c799c5: Use DataForSEO exclusively for ChatGPT Web and remove Bright Data acquisition settings. Preserve historical results while displaying search queries, search results, and citations from the unified source.
+- b24296f: Add searchable brand switching in local mode and preserve form inputs when brand creation fails. Create brands safely on retries, keep analytics separate, and start AI setup only when requested.
+- bd252bf: Add password reset emails and a screen for choosing a new password.
+- 1543789: Search Consoleの流入キーワード分析を追加し、AI質問・4語以上の検索語・URLによる絞り込みと100件表示に対応しました。
+- Updated dependencies [6c799c5]
+- Updated dependencies [936b291]
+- Updated dependencies [bd252bf]
+- Updated dependencies [1543789]
+  - @workspace/config@9.2.0
+
 ## 9.1.0
 
 ### Minor Changes
