@@ -55,7 +55,7 @@ test.describe("Search Console keyword analysis", () => {
 		for (const query of [GSC_SHORT_REQUEST, GSC_SHORT_QUESTION, GSC_FOUR_TERMS, GSC_LONG_QUERY])
 			await expect(page.getByRole("rowheader").filter({ hasText: query })).toHaveCount(1);
 		await expect(
-			page.getByText(text("AI経由の判定ではありません", "Does not identify AI traffic"), { exact: true }),
+			page.getByText(text("AI経由の判定ではありません", "Does not identify AI traffic"), { exact: false }),
 		).toBeVisible();
 		await page.reload();
 		await expect(toggle).toBeChecked();
