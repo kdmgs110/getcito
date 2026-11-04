@@ -1,0 +1,47 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "getcito-cloudflare",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-30",
+	"workers_dev": false,
+	"preview_urls": false,
+	"send_metrics": false,
+	"upload_source_maps": false,
+	"limits": { "cpu_ms": 50 },
+	"observability": {
+		"enabled": true,
+		"redact_query_string": true,
+		"logs": { "enabled": true, "invocation_logs": false, "head_sampling_rate": 0.1 },
+		"traces": { "enabled": false }
+	},
+	"vars": {
+		"APP_URL": "https://replace-before-deploy.example",
+		"APP_NAME": "GetCito",
+		"CONTAINER_ENABLED": "true"
+	},
+	"triggers": { "crons": ["* * * * *"] },
+	"containers": [
+		{
+			"class_name": "GetCitoContainer",
+			"image": "./Dockerfile.generated",
+			"image_build_context": "../..",
+			"image_vars": {
+				"DEPLOYMENT_MODE": "local",
+				"VITE_DEPLOYMENT_MODE": "local",
+				"VITE_APP_URL": "https://replace-before-deploy.example",
+				"VITE_APP_LOCALE": "ja",
+				"VITE_APP_TIMEZONE": "Asia/Tokyo"
+			},
+			"instance_type": "basic",
+			"max_instances": 1,
+			"rollout_step_percentage": 100,
+			"rollout_active_grace_period": 45,
+			"observability": { "enabled": false },
+			"ssh": { "enabled": false }
+		}
+	],
+	"durable_objects": {
+		"bindings": [{ "name": "GETCITO_CONTAINER", "class_name": "GetCitoContainer" }]
+	},
+	"exports": { "GetCitoContainer": { "type": "durable-object", "storage": "sqlite" } }
+}

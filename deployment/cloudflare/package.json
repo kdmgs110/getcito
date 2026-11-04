@@ -1,0 +1,27 @@
+{
+	"name": "@getcito/cloudflare-adapter",
+	"private": true,
+	"type": "module",
+	"packageManager": "pnpm@11.10.0",
+	"engines": {
+		"node": "24.x"
+	},
+	"scripts": {
+		"check": "tsc --noEmit",
+		"test": "node --test src/*.test.ts supervisor.test.mjs",
+		"validate": "node scripts/validate-config.mjs",
+		"build": "pnpm validate && pnpm prepare:container && wrangler deploy --dry-run --outdir dist --containers-rollout=none",
+		"dev": "pnpm prepare:container && wrangler dev",
+		"deploy": "pnpm validate && pnpm prepare:container && wrangler deploy",
+		"prepare:container": "node scripts/prepare-container.mjs",
+		"lint": "biome check src scripts *.mjs package.json tsconfig.json wrangler.json biome.json"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "5.20261030.1",
+		"@types/node": "25.9.3",
+		"typescript": "6.0.3",
+		"wrangler": "4.156.0",
+		"ajv": "8.18.0",
+		"@biomejs/biome": "2.5.0"
+	}
+}
