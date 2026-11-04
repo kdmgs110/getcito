@@ -74,6 +74,9 @@ declare global {
 			readonly GOOGLE_ANALYTICS_CLIENT_ID?: string;
 			readonly GOOGLE_ANALYTICS_CLIENT_SECRET?: string;
 			readonly GOOGLE_ANALYTICS_REDIRECT_URI?: string;
+			readonly GOOGLE_SEARCH_CONSOLE_CLIENT_ID?: string;
+			readonly GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET?: string;
+			readonly GOOGLE_SEARCH_CONSOLE_REDIRECT_URI?: string;
 			readonly ANALYTICS_TOKEN_ENCRYPTION_KEY?: string;
 			readonly AUTH0_DOMAIN?: string;
 			readonly AUTH0_AUDIENCE?: string;

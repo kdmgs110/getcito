@@ -4,6 +4,7 @@ import { conversionMessages } from "./messages/conversions";
 import { coreMessages } from "./messages/core";
 import { dashboardMessages } from "./messages/dashboard";
 import { reportMessages } from "./messages/reports";
+import { searchConsoleMessages } from "./messages/search-console";
 import { settingsMessages } from "./messages/settings";
 import { trafficMessages } from "./messages/traffic";
 
@@ -15,6 +16,7 @@ export const messages = {
 	...reportMessages,
 	...trafficMessages,
 	...conversionMessages,
+	...searchConsoleMessages,
 };
 export const t = createTranslator(messages);
 export const UI_LOCALE = APP_LOCALE;

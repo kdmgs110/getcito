@@ -9,6 +9,7 @@ import {
 	IconListDetails,
 	IconListNumbers,
 	IconReport,
+	IconSearch,
 	IconSitemap,
 	IconSpeakerphone,
 	IconTable,
@@ -104,6 +105,11 @@ export function AppSidebar({
 			title: t("traffic.title"),
 			url: "/traffic",
 			icon: IconTimeline,
+		});
+		dashboardItems.splice(Math.min(4, dashboardItems.length), 0, {
+			title: t("keywords.title"),
+			url: "/keywords",
+			icon: IconSearch,
 		});
 
 		groups.push({

@@ -51,6 +51,55 @@ export const brands = pgTable("brands", {
 		.notNull(),
 }).enableRLS();
 
+/** Search Console has its own consent, secrets and cache, independent of GA4. */
+export const gscConnections = pgTable("gsc_connections", {
+	brandId: text("brand_id")
+		.primaryKey()
+		.references(() => brands.id, { onDelete: "cascade" }),
+	refreshTokenCiphertext: text("refresh_token_ciphertext").notNull(),
+	connectedBy: text("connected_by").notNull(),
+	propertyId: text("property_id"),
+	status: text("status").default("connected").notNull(),
+	revision: uuid("revision").defaultRandom().notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}).enableRLS();
+
+export const gscOAuthStates = pgTable(
+	"gsc_oauth_states",
+	{
+		stateHash: text("state_hash").primaryKey(),
+		brandId: text("brand_id")
+			.notNull()
+			.references(() => brands.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		sessionId: text("session_id").notNull(),
+		verifierCiphertext: text("verifier_ciphertext").notNull(),
+		consumedAt: timestamp("consumed_at", { withTimezone: true }),
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [index("gsc_oauth_states_expiry_idx").on(table.expiresAt)],
+).enableRLS();
+
+export const gscQueryCache = pgTable(
+	"gsc_query_cache",
+	{
+		cacheKey: text("cache_key").primaryKey(),
+		brandId: text("brand_id")
+			.notNull()
+			.references(() => brands.id, { onDelete: "cascade" }),
+		connectionRevision: uuid("connection_revision").notNull(),
+		payload: jsonb("payload").notNull(),
+		fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+		expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+	},
+	(table) => [
+		index("gsc_query_cache_brand_idx").on(table.brandId),
+		index("gsc_query_cache_expiry_idx").on(table.expiresAt),
+	],
+).enableRLS();
+
 /** One Google Analytics integration per brand. Credentials never leave the server. */
 export const ga4Connections = pgTable("ga4_connections", {
 	brandId: text("brand_id")
